@@ -1,0 +1,8 @@
+# EF Core's `dotnet ef migrations add` generates code that does not honor this repo's strict
+# analyzer/style configuration (block-scoped namespaces, CA rules on HasData array arguments, etc.),
+# and with AnalysisMode=All + TreatWarningsAsErrors, every migration would fail the build the first
+# time `dotnet build` runs after `dotnet ef migrations add`. This is generated code - don't analyze
+# it. Scope the override to this folder only; the rest of the codebase keeps full analysis.
+[*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
