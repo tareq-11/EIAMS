@@ -39,6 +39,7 @@ public sealed class OrganizationalUnit : Entity, IAuditableEntity
     {
         Name = name;
         UnitType = unitType;
+        Raise(new OrganizationalUnitUpdatedDomainEvent(Id));
     }
 
     public void SetStatus(Status status)

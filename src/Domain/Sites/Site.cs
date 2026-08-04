@@ -39,6 +39,7 @@ public sealed class Site : Entity, IAuditableEntity
     {
         Name = name;
         Location = location;
+        Raise(new SiteUpdatedDomainEvent(Id));
     }
 
     public void SetStatus(Status status)

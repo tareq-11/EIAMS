@@ -86,6 +86,325 @@ namespace Infrastructure.Migrations
                     b.ToTable("employees", "public");
                 });
 
+            modelBuilder.Entity("Domain.MaterialCategories.MaterialCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("MaterialDomainId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_domain_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("ParentCategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_category_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_material_categories");
+
+                    b.HasIndex("MaterialDomainId")
+                        .HasDatabaseName("ix_material_categories_material_domain_id");
+
+                    b.HasIndex("ParentCategoryId")
+                        .HasDatabaseName("ix_material_categories_parent_category_id");
+
+                    b.ToTable("material_categories", "public");
+                });
+
+            modelBuilder.Entity("Domain.MaterialDomains.MaterialDomain", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_material_domains");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_material_domains_code");
+
+                    b.ToTable("material_domains", "public");
+                });
+
+            modelBuilder.Entity("Domain.MaterialFamilies.MaterialFamily", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("BaseUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("base_unit_id");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_material_families");
+
+                    b.HasIndex("BaseUnitId")
+                        .HasDatabaseName("ix_material_families_base_unit_id");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("ix_material_families_category_id");
+
+                    b.ToTable("material_families", "public");
+                });
+
+            modelBuilder.Entity("Domain.MaterialUnitConversions.MaterialUnitConversion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<decimal>("Factor")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("factor");
+
+                    b.Property<Guid>("FromUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_unit_id");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_id");
+
+                    b.Property<Guid>("ToBaseUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_base_unit_id");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_material_unit_conversions");
+
+                    b.HasIndex("FromUnitId")
+                        .HasDatabaseName("ix_material_unit_conversions_from_unit_id");
+
+                    b.HasIndex("ToBaseUnitId")
+                        .HasDatabaseName("ix_material_unit_conversions_to_base_unit_id");
+
+                    b.HasIndex("MaterialId", "FromUnitId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_material_unit_conversions_material_id_from_unit_id");
+
+                    b.ToTable("material_unit_conversions", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_material_unit_conversions_positive_factor", "factor > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Materials.Material", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Attributes")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("attributes");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("family_id");
+
+                    b.Property<bool>("HasExpiry")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_expiry");
+
+                    b.Property<string>("MaterialKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("material_kind");
+
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("name_ar");
+
+                    b.Property<string>("NameEn")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("name_en");
+
+                    b.Property<bool>("RequiresAssetNumber")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_asset_number");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TrackingType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("tracking_type");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_materials");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_materials_code");
+
+                    b.HasIndex("FamilyId")
+                        .HasDatabaseName("ix_materials_family_id");
+
+                    b.ToTable("materials", "public");
+                });
+
             modelBuilder.Entity("Domain.OrganizationalUnits.OrganizationalUnit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -260,6 +579,36 @@ namespace Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000106"),
                             Code = "roles:manage",
                             Description = "Manage roles, role permissions, and user role scope grants."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000107"),
+                            Code = "units-of-measure:manage",
+                            Description = "Create and update units of measure."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000108"),
+                            Code = "material-domains:manage",
+                            Description = "Create, update, and change the status of material domains."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000109"),
+                            Code = "material-categories:manage",
+                            Description = "Create, update, and change the status of material categories."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000110"),
+                            Code = "material-families:manage",
+                            Description = "Create, update, and change the status of material families."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000111"),
+                            Code = "materials:manage",
+                            Description = "Create, update, and change the status of materials and their unit conversions."
                         });
                 });
 
@@ -377,6 +726,31 @@ namespace Infrastructure.Migrations
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000106")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000107")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000108")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000109")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000110")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000111")
                         });
                 });
 
@@ -443,6 +817,53 @@ namespace Infrastructure.Migrations
                     b.ToTable("sites", "public");
                 });
 
+            modelBuilder.Entity("Domain.UnitsOfMeasure.UnitOfMeasure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("symbol");
+
+                    b.Property<string>("UnitType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit_type");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_units_of_measure");
+
+                    b.ToTable("units_of_measure", "public");
+                });
+
             modelBuilder.Entity("Domain.UserRoleScopes.UserRoleScope", b =>
                 {
                     b.Property<Guid>("Id")
@@ -490,10 +911,20 @@ namespace Infrastructure.Migrations
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_user_role_scopes_role_id");
 
-                    b.HasIndex("UserId", "RoleId", "ScopeType", "ScopeId")
-                        .HasDatabaseName("ix_user_role_scopes_user_id_role_id_scope_type_scope_id");
+                    b.HasIndex("UserId", "RoleId", "ScopeType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_user_role_scopes_enterprise")
+                        .HasFilter("scope_id IS NULL");
 
-                    b.ToTable("user_role_scopes", "public");
+                    b.HasIndex("UserId", "RoleId", "ScopeType", "ScopeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_user_role_scopes_scoped")
+                        .HasFilter("scope_id IS NOT NULL");
+
+                    b.ToTable("user_role_scopes", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_user_role_scopes_scope_id", "(scope_type = 'Enterprise' AND scope_id IS NULL) OR (scope_type IN ('Site', 'Warehouse') AND scope_id IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Domain.Users.RefreshToken", b =>
@@ -589,6 +1020,7 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_users_email");
 
                     b.HasIndex("EmployeeId")
+                        .IsUnique()
                         .HasDatabaseName("ix_users_employee_id");
 
                     b.ToTable("users", "public");
@@ -602,6 +1034,73 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_employees_organizational_units_org_unit_id");
+                });
+
+            modelBuilder.Entity("Domain.MaterialCategories.MaterialCategory", b =>
+                {
+                    b.HasOne("Domain.MaterialDomains.MaterialDomain", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialDomainId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_categories_material_domains_material_domain_id");
+
+                    b.HasOne("Domain.MaterialCategories.MaterialCategory", null)
+                        .WithMany()
+                        .HasForeignKey("ParentCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_material_categories_material_categories_parent_category_id");
+                });
+
+            modelBuilder.Entity("Domain.MaterialFamilies.MaterialFamily", b =>
+                {
+                    b.HasOne("Domain.UnitsOfMeasure.UnitOfMeasure", null)
+                        .WithMany()
+                        .HasForeignKey("BaseUnitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_families_units_of_measure_base_unit_id");
+
+                    b.HasOne("Domain.MaterialCategories.MaterialCategory", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_families_material_categories_category_id");
+                });
+
+            modelBuilder.Entity("Domain.MaterialUnitConversions.MaterialUnitConversion", b =>
+                {
+                    b.HasOne("Domain.UnitsOfMeasure.UnitOfMeasure", null)
+                        .WithMany()
+                        .HasForeignKey("FromUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_unit_conversions_units_of_measure_from_unit_id");
+
+                    b.HasOne("Domain.Materials.Material", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_unit_conversions_materials_material_id");
+
+                    b.HasOne("Domain.UnitsOfMeasure.UnitOfMeasure", null)
+                        .WithMany()
+                        .HasForeignKey("ToBaseUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_material_unit_conversions_units_of_measure_to_base_unit_id");
+                });
+
+            modelBuilder.Entity("Domain.Materials.Material", b =>
+                {
+                    b.HasOne("Domain.MaterialFamilies.MaterialFamily", null)
+                        .WithMany()
+                        .HasForeignKey("FamilyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_materials_material_families_family_id");
                 });
 
             modelBuilder.Entity("Domain.OrganizationalUnits.OrganizationalUnit", b =>

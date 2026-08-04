@@ -1,10 +1,16 @@
 using Application.Abstractions.Data;
 using Domain.Employees;
+using Domain.MaterialCategories;
+using Domain.MaterialDomains;
+using Domain.MaterialFamilies;
+using Domain.Materials;
+using Domain.MaterialUnitConversions;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
+using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
 using Infrastructure.DomainEvents;
@@ -37,6 +43,18 @@ public sealed class ApplicationDbContext(
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRoleScope> UserRoleScopes { get; set; }
+
+    public DbSet<UnitOfMeasure> UnitsOfMeasure { get; set; }
+
+    public DbSet<MaterialDomain> MaterialDomains { get; set; }
+
+    public DbSet<MaterialCategory> MaterialCategories { get; set; }
+
+    public DbSet<MaterialFamily> MaterialFamilies { get; set; }
+
+    public DbSet<Material> Materials { get; set; }
+
+    public DbSet<MaterialUnitConversion> MaterialUnitConversions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,13 +91,14 @@ public sealed class ApplicationDbContext(
     private List<IDomainEvent> ExtractDomainEvents()
     {
         var domainEvents = ChangeTracker
-            .Entries<Entity>()
+            .Entries()
             .Select(entry => entry.Entity)
-            .SelectMany(entity =>
+            .OfType<IDomainEventSource>()
+            .SelectMany(source =>
             {
-                List<IDomainEvent> domainEvents = entity.DomainEvents;
+                List<IDomainEvent> domainEvents = source.DomainEvents;
 
-                entity.ClearDomainEvents();
+                source.ClearDomainEvents();
 
                 return domainEvents;
             })

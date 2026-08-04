@@ -10,4 +10,10 @@ public static class Tags
     public const string Roles = "Roles";
     public const string Permissions = "Permissions";
     public const string UserRoleScopes = "UserRoleScopes";
+    public const string UnitsOfMeasure = "UnitsOfMeasure";
+    public const string MaterialDomains = "MaterialDomains";
+    public const string MaterialCategories = "MaterialCategories";
+    public const string MaterialFamilies = "MaterialFamilies";
+    public const string Materials = "Materials";
+    public const string MaterialUnitConversions = "MaterialUnitConversions";
 }

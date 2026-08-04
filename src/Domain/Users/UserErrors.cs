@@ -20,6 +20,10 @@ public static class UserErrors
         "Users.EmailNotUnique",
         "The provided email is not unique");
 
+    public static readonly Error EmployeeAlreadyLinked = Error.Conflict(
+        "Users.EmployeeAlreadyLinked",
+        "The employee is already linked to another user account");
+
     public static readonly Error InvalidRefreshToken = Error.Problem(
         "Users.InvalidRefreshToken",
         "The provided refresh token is invalid or has expired");

@@ -34,6 +34,7 @@ public sealed class Organization : Entity, IAuditableEntity
     public void UpdateDetails(string name)
     {
         Name = name;
+        Raise(new OrganizationUpdatedDomainEvent(Id));
     }
 
     public void SetStatus(Status status)

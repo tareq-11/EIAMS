@@ -31,4 +31,29 @@ public static class PermissionCodes
     {
         public const string Manage = "roles:manage";
     }
+
+    public static class UnitsOfMeasure
+    {
+        public const string Manage = "units-of-measure:manage";
+    }
+
+    public static class MaterialDomains
+    {
+        public const string Manage = "material-domains:manage";
+    }
+
+    public static class MaterialCategories
+    {
+        public const string Manage = "material-categories:manage";
+    }
+
+    public static class MaterialFamilies
+    {
+        public const string Manage = "material-families:manage";
+    }
+
+    public static class Materials
+    {
+        public const string Manage = "materials:manage";
+    }
 }

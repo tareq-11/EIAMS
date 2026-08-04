@@ -20,8 +20,8 @@ internal sealed class SetSiteStatusCommandHandler(
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
             PermissionCodes.Sites.Manage,
-            ScopeType.Enterprise,
-            scopeId: null,
+            ScopeType.Site,
+            command.SiteId,
             cancellationToken);
 
         if (!authorized)

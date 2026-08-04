@@ -13,4 +13,9 @@ public static class WellKnownPermissions
     public static readonly Guid OrganizationalUnitsManageId = Guid.Parse("00000000-0000-0000-0000-000000000104");
     public static readonly Guid EmployeesManageId = Guid.Parse("00000000-0000-0000-0000-000000000105");
     public static readonly Guid RolesManageId = Guid.Parse("00000000-0000-0000-0000-000000000106");
+    public static readonly Guid UnitsOfMeasureManageId = Guid.Parse("00000000-0000-0000-0000-000000000107");
+    public static readonly Guid MaterialDomainsManageId = Guid.Parse("00000000-0000-0000-0000-000000000108");
+    public static readonly Guid MaterialCategoriesManageId = Guid.Parse("00000000-0000-0000-0000-000000000109");
+    public static readonly Guid MaterialFamiliesManageId = Guid.Parse("00000000-0000-0000-0000-000000000110");
+    public static readonly Guid MaterialsManageId = Guid.Parse("00000000-0000-0000-0000-000000000111");
 }

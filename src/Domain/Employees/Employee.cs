@@ -39,6 +39,7 @@ public sealed class Employee : Entity, IAuditableEntity
     {
         FullName = fullName;
         JobTitle = jobTitle;
+        Raise(new EmployeeUpdatedDomainEvent(Id));
     }
 
     public void SetStatus(Status status)

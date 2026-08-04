@@ -14,7 +14,20 @@ internal sealed class UserRoleScopeConfiguration : IEntityTypeConfiguration<User
 
         builder.Property(s => s.ScopeType).HasConversion<string>().HasMaxLength(20);
 
-        builder.HasIndex(s => new { s.UserId, s.RoleId, s.ScopeType, s.ScopeId });
+        builder.HasIndex(s => new { s.UserId, s.RoleId, s.ScopeType })
+            .HasDatabaseName("ux_user_role_scopes_enterprise")
+            .IsUnique()
+            .HasFilter("scope_id IS NULL");
+
+        builder.HasIndex(s => new { s.UserId, s.RoleId, s.ScopeType, s.ScopeId })
+            .HasDatabaseName("ux_user_role_scopes_scoped")
+            .IsUnique()
+            .HasFilter("scope_id IS NOT NULL");
+
+        builder.ToTable(tableBuilder => tableBuilder.HasCheckConstraint(
+            "ck_user_role_scopes_scope_id",
+            "(scope_type = 'Enterprise' AND scope_id IS NULL) OR " +
+            "(scope_type IN ('Site', 'Warehouse') AND scope_id IS NOT NULL)"));
 
         builder.HasOne<User>().WithMany().HasForeignKey(s => s.UserId);
 

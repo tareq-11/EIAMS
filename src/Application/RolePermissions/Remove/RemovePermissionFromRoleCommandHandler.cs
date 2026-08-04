@@ -39,6 +39,7 @@ internal sealed class RemovePermissionFromRoleCommandHandler(
             return Result.Failure(RolePermissionErrors.NotAssigned);
         }
 
+        rolePermission.MarkAsRemoved();
         context.RolePermissions.Remove(rolePermission);
 
         await context.SaveChangesAsync(cancellationToken);

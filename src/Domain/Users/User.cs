@@ -36,5 +36,7 @@ public sealed class User : Entity, IAuditableEntity
     public void LinkToEmployee(Guid employeeId)
     {
         EmployeeId = employeeId;
+
+        Raise(new UserLinkedToEmployeeDomainEvent(Id, employeeId));
     }
 }

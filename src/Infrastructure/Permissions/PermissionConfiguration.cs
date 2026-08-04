@@ -51,6 +51,36 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
                 Id = WellKnownPermissions.RolesManageId,
                 Code = PermissionCodes.Roles.Manage,
                 Description = (string?)"Manage roles, role permissions, and user role scope grants."
+            },
+            new
+            {
+                Id = WellKnownPermissions.UnitsOfMeasureManageId,
+                Code = PermissionCodes.UnitsOfMeasure.Manage,
+                Description = (string?)"Create and update units of measure."
+            },
+            new
+            {
+                Id = WellKnownPermissions.MaterialDomainsManageId,
+                Code = PermissionCodes.MaterialDomains.Manage,
+                Description = (string?)"Create, update, and change the status of material domains."
+            },
+            new
+            {
+                Id = WellKnownPermissions.MaterialCategoriesManageId,
+                Code = PermissionCodes.MaterialCategories.Manage,
+                Description = (string?)"Create, update, and change the status of material categories."
+            },
+            new
+            {
+                Id = WellKnownPermissions.MaterialFamiliesManageId,
+                Code = PermissionCodes.MaterialFamilies.Manage,
+                Description = (string?)"Create, update, and change the status of material families."
+            },
+            new
+            {
+                Id = WellKnownPermissions.MaterialsManageId,
+                Code = PermissionCodes.Materials.Manage,
+                Description = (string?)"Create, update, and change the status of materials and their unit conversions."
             });
     }
 }

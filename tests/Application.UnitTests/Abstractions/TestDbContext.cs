@@ -1,10 +1,16 @@
 using Application.Abstractions.Data;
 using Domain.Employees;
+using Domain.MaterialCategories;
+using Domain.MaterialDomains;
+using Domain.MaterialFamilies;
+using Domain.Materials;
+using Domain.MaterialUnitConversions;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
+using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
 using Microsoft.EntityFrameworkCore;
@@ -37,4 +43,34 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRoleScope> UserRoleScopes { get; set; }
+
+    public DbSet<UnitOfMeasure> UnitsOfMeasure { get; set; }
+
+    public DbSet<MaterialDomain> MaterialDomains { get; set; }
+
+    public DbSet<MaterialCategory> MaterialCategories { get; set; }
+
+    public DbSet<MaterialFamily> MaterialFamilies { get; set; }
+
+    public DbSet<Material> Materials { get; set; }
+
+    public DbSet<MaterialUnitConversion> MaterialUnitConversions { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<RolePermission>()
+            .HasKey(rolePermission => new { rolePermission.RoleId, rolePermission.PermissionId });
+
+        modelBuilder.Entity<User>()
+            .HasIndex(user => user.EmployeeId)
+            .IsUnique();
+
+        modelBuilder.Entity<UserRoleScope>()
+            .HasIndex(scope => new { scope.UserId, scope.RoleId, scope.ScopeType, scope.ScopeId })
+            .IsUnique();
+
+        modelBuilder.Entity<MaterialUnitConversion>()
+            .HasIndex(conversion => new { conversion.MaterialId, conversion.FromUnitId })
+            .IsUnique();
+    }
 }

@@ -32,5 +32,6 @@ public sealed class Role : Entity, IAuditableEntity
     {
         Name = name;
         Description = description;
+        Raise(new RoleUpdatedDomainEvent(Id));
     }
 }
