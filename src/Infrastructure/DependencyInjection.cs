@@ -2,11 +2,15 @@ using System.Text;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Numbering;
+using Application.Abstractions.Warehouses;
 using Infrastructure.Authentication;
 using Infrastructure.Authorization;
 using Infrastructure.Database;
 using Infrastructure.DomainEvents;
+using Infrastructure.Numbering;
 using Infrastructure.Time;
+using Infrastructure.Warehouses;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -24,17 +28,41 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration) =>
         services
-            .AddServices()
+            .AddServices(configuration)
             .AddDatabase(configuration)
             .AddHealthChecks(configuration)
             .AddAuthenticationInternal(configuration)
             .AddAuthorizationInternal();
 
-    private static IServiceCollection AddServices(this IServiceCollection services)
+    private static IServiceCollection AddServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
         services.AddTransient<IDomainEventsDispatcher, DomainEventsDispatcher>();
+
+        services.AddSingleton<IDatabaseExceptionClassifier, PostgresDatabaseExceptionClassifier>();
+
+        services.AddScoped<IReferenceNumberGenerator, ReferenceNumberGenerator>();
+
+        services.AddScoped<ICapabilityCheckService, CapabilityCheckService>();
+
+        services.AddOptions<NumberingOptions>()
+            .Bind(configuration.GetSection(NumberingOptions.SectionName))
+            .Validate(options => options.SequencePadding is > 0 and <= 12,
+                "Numbering:SequencePadding must be between 1 and 12.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Separator),
+                "Numbering:Separator is required.")
+            .Validate(options => options.MaxReferenceNumberLength is > 0 and <= 100,
+                "Numbering:MaxReferenceNumberLength must be between 1 and 100.")
+            .Validate(options => options.DocumentTypeCodes().All(code =>
+                    !string.IsNullOrWhiteSpace(code) &&
+                    !code.Contains(options.Separator, StringComparison.Ordinal)),
+                "Document type codes are required and must not contain Numbering:Separator.")
+            .Validate(options => options.DocumentTypeCodes()
+                    .Distinct(StringComparer.Ordinal)
+                    .Count() == Enum.GetValues<Domain.Common.DocumentType>().Length,
+                "Document type codes must be unique.")
+            .ValidateOnStart();
 
 #pragma warning disable EXTEXP0018 // HybridCache is released; the API is stable in .NET 10.
         services.AddHybridCache();

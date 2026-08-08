@@ -1,9 +1,44 @@
 ﻿using SharedKernel;
+using Web.Api.Infrastructure;
 
 namespace Web.Api.Extensions;
 
 public static class ResultExtensions
 {
+    public static IResult ToApiResponse(this Result result, HttpContext context)
+    {
+        return result.IsSuccess
+            ? ApiResults.Success(context)
+            : CustomResults.Problem(result, context);
+    }
+
+    public static IResult ToApiResponse<T>(this Result<T> result, HttpContext context)
+    {
+        return result.IsSuccess
+            ? ApiResults.Ok(context, result.Value)
+            : CustomResults.Problem(result, context);
+    }
+
+    public static IResult ToApiResponse(this Result<Guid> result, HttpContext context)
+    {
+        return result.IsSuccess
+            ? ApiResults.Ok(context, new ResourceIdResponse(result.Value))
+            : CustomResults.Problem(result, context);
+    }
+
+    public static IResult ToCreatedApiResponse(
+        this Result<Guid> result,
+        HttpContext context,
+        Func<Guid, string> locationFactory)
+    {
+        return result.IsSuccess
+            ? ApiResults.Created(
+                context,
+                locationFactory(result.Value),
+                new ResourceIdResponse(result.Value))
+            : CustomResults.Problem(result, context);
+    }
+
     public static TOut Match<TOut>(
         this Result result,
         Func<TOut> onSuccess,

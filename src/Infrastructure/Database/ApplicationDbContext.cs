@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -13,6 +14,10 @@ using Domain.Sites;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.WarehouseCapabilities;
+using Domain.WarehouseCapabilityOperations;
+using Domain.Warehouses;
+using Domain.WarehouseMaterialSettings;
 using Infrastructure.DomainEvents;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -55,6 +60,16 @@ public sealed class ApplicationDbContext(
     public DbSet<Material> Materials { get; set; }
 
     public DbSet<MaterialUnitConversion> MaterialUnitConversions { get; set; }
+
+    public DbSet<Warehouse> Warehouses { get; set; }
+
+    public DbSet<WarehouseCapability> WarehouseCapabilities { get; set; }
+
+    public DbSet<WarehouseCapabilityOperation> WarehouseCapabilityOperations { get; set; }
+
+    public DbSet<WarehouseMaterialSetting> WarehouseMaterialSettings { get; set; }
+
+    public DbSet<DocumentSequence> DocumentSequences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

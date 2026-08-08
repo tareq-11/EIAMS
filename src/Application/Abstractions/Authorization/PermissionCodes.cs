@@ -56,4 +56,19 @@ public static class PermissionCodes
     {
         public const string Manage = "materials:manage";
     }
+
+    public static class Warehouses
+    {
+        public const string Manage = "warehouses:manage";
+    }
+
+    public static class WarehouseCapabilities
+    {
+        public const string Manage = "warehouse-capabilities:manage";
+    }
+
+    public static class WarehouseMaterialSettings
+    {
+        public const string Manage = "warehouse-material-settings:manage";
+    }
 }

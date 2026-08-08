@@ -23,6 +23,64 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.DocumentSequences.DocumentSequence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("document_type");
+
+                    b.Property<int>("LastSequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_sequence");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id")
+                        .HasName("pk_document_sequences");
+
+                    b.HasIndex("SiteId", "DocumentType", "Year")
+                        .IsUnique()
+                        .HasDatabaseName("ix_document_sequences_site_id_document_type_year");
+
+                    b.ToTable("document_sequences", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_document_sequences_document_type_valid", "document_type IN ('Receiving', 'Issue', 'Transfer', 'Adjustment', 'Opening', 'Return')");
+
+                            t.HasCheckConstraint("ck_document_sequences_last_sequence_non_negative", "last_sequence >= 0");
+
+                            t.HasCheckConstraint("ck_document_sequences_year_valid", "year >= 2000");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Employees.Employee", b =>
                 {
                     b.Property<Guid>("Id")
@@ -609,6 +667,24 @@ namespace Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000111"),
                             Code = "materials:manage",
                             Description = "Create, update, and change the status of materials and their unit conversions."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000112"),
+                            Code = "warehouses:manage",
+                            Description = "Create, update, and change the status of warehouses."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000113"),
+                            Code = "warehouse-capabilities:manage",
+                            Description = "Grant, revoke, and configure the operations of warehouse capabilities."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000114"),
+                            Code = "warehouse-material-settings:manage",
+                            Description = "Create, update, and change the status of warehouse material settings."
                         });
                 });
 
@@ -751,6 +827,21 @@ namespace Infrastructure.Migrations
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000111")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000112")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000113")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000114")
                         });
                 });
 
@@ -1026,6 +1117,262 @@ namespace Infrastructure.Migrations
                     b.ToTable("users", "public");
                 });
 
+            modelBuilder.Entity("Domain.WarehouseCapabilities.WarehouseCapability", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("MaterialDomainId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_domain_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_warehouse_capabilities");
+
+                    b.HasIndex("MaterialDomainId")
+                        .HasDatabaseName("ix_warehouse_capabilities_material_domain_id");
+
+                    b.HasIndex("WarehouseId", "MaterialDomainId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouse_capabilities_warehouse_id_material_domain_id");
+
+                    b.ToTable("warehouse_capabilities", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_warehouse_capabilities_status_valid", "status IN ('Active', 'Inactive')");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.WarehouseCapabilityOperations.WarehouseCapabilityOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CapabilityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("capability_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("operation_type");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_warehouse_capability_operations");
+
+                    b.HasIndex("CapabilityId", "OperationType")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouse_capability_operations_capability_id_operation_type");
+
+                    b.ToTable("warehouse_capability_operations", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_warehouse_capability_operations_operation_type_valid", "operation_type IN ('Receiving', 'Issue', 'Transfer', 'Count', 'Return')");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.WarehouseMaterialSettings.WarehouseMaterialSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_id");
+
+                    b.Property<decimal>("MaxQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("max_quantity");
+
+                    b.Property<decimal>("MinQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("min_quantity");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_warehouse_material_settings");
+
+                    b.HasIndex("MaterialId")
+                        .HasDatabaseName("ix_warehouse_material_settings_material_id");
+
+                    b.HasIndex("WarehouseId", "MaterialId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouse_material_settings_warehouse_id_material_id");
+
+                    b.ToTable("warehouse_material_settings", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_warehouse_material_settings_max_non_negative", "max_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_warehouse_material_settings_min_le_max", "min_quantity <= max_quantity");
+
+                            t.HasCheckConstraint("ck_warehouse_material_settings_min_non_negative", "min_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_warehouse_material_settings_status_valid", "status IN ('Active', 'Inactive')");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Warehouses.Warehouse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("CanHoldStock")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_hold_stock");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("SiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("site_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("WarehouseType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("warehouse_type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_warehouses");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouses_code");
+
+                    b.HasIndex("SiteId")
+                        .HasDatabaseName("ix_warehouses_site_id");
+
+                    b.ToTable("warehouses", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_warehouses_row_version_positive", "row_version > 0");
+
+                            t.HasCheckConstraint("ck_warehouses_status_valid", "status IN ('Active', 'Inactive')");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.DocumentSequences.DocumentSequence", b =>
+                {
+                    b.HasOne("Domain.Sites.Site", null)
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_document_sequences_sites_site_id");
+                });
+
             modelBuilder.Entity("Domain.Employees.Employee", b =>
                 {
                     b.HasOne("Domain.OrganizationalUnits.OrganizationalUnit", null)
@@ -1181,6 +1528,60 @@ namespace Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("EmployeeId")
                         .HasConstraintName("fk_users_employees_employee_id");
+                });
+
+            modelBuilder.Entity("Domain.WarehouseCapabilities.WarehouseCapability", b =>
+                {
+                    b.HasOne("Domain.MaterialDomains.MaterialDomain", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialDomainId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouse_capabilities_material_domains_material_domain_id");
+
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouse_capabilities_warehouses_warehouse_id");
+                });
+
+            modelBuilder.Entity("Domain.WarehouseCapabilityOperations.WarehouseCapabilityOperation", b =>
+                {
+                    b.HasOne("Domain.WarehouseCapabilities.WarehouseCapability", null)
+                        .WithMany()
+                        .HasForeignKey("CapabilityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouse_capability_operations_warehouse_capabilities_capa");
+                });
+
+            modelBuilder.Entity("Domain.WarehouseMaterialSettings.WarehouseMaterialSetting", b =>
+                {
+                    b.HasOne("Domain.Materials.Material", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouse_material_settings_materials_material_id");
+
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouse_material_settings_warehouses_warehouse_id");
+                });
+
+            modelBuilder.Entity("Domain.Warehouses.Warehouse", b =>
+                {
+                    b.HasOne("Domain.Sites.Site", null)
+                        .WithMany()
+                        .HasForeignKey("SiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouses_sites_site_id");
                 });
 #pragma warning restore 612, 618
         }

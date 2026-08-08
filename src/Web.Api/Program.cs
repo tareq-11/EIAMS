@@ -1,4 +1,3 @@
-using System.Reflection;
 using Application;
 using HealthChecks.UI.Client;
 using Infrastructure;
@@ -6,6 +5,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using Web.Api;
 using Web.Api.Extensions;
+using Web.Api.Infrastructure;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -26,11 +26,7 @@ builder.Services.AddCorsPolicy(builder.Configuration);
 
 builder.Services.AddResponseCompression();
 
-builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
-
 WebApplication app = builder.Build();
-
-app.MapEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
@@ -50,6 +46,15 @@ app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
 
+app.UseStatusCodePages(async statusCodeContext =>
+{
+    IResult result = ApiResults.ErrorFromStatusCode(
+        statusCodeContext.HttpContext,
+        statusCodeContext.HttpContext.Response.StatusCode);
+
+    await result.ExecuteAsync(statusCodeContext.HttpContext);
+});
+
 app.UseCors(CorsExtensions.PolicyName);
 
 app.UseResponseCompression();
@@ -60,7 +65,6 @@ app.UseAuthorization();
 
 app.UseRateLimiter();
 
-// REMARK: If you want to use Controllers, you'll need this.
 app.MapControllers();
 
 await app.RunAsync();

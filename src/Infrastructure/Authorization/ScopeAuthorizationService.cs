@@ -26,23 +26,35 @@ internal sealed class ScopeAuthorizationService(IApplicationDbContext context) :
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        foreach (ScopeGrant grant in grants)
+        if (grants.Count == 0)
         {
-            if (grant.ScopeType == ScopeType.Enterprise)
+            return false;
+        }
+
+        if (grants.Any(grant => grant.ScopeType == ScopeType.Enterprise))
+        {
+            // Enterprise is org-wide - it satisfies every scoped request.
+            return true;
+        }
+
+        if (grants.Any(grant => grant.ScopeType == scopeType && grant.ScopeId == scopeId))
+        {
+            return true;
+        }
+
+        if (scopeType == ScopeType.Warehouse && scopeId is not null)
+        {
+            // A Site-scoped grant also covers every Warehouse within that site.
+            Guid? warehouseSiteId = await context.Warehouses
+                .Where(w => w.Id == scopeId)
+                .Select(w => (Guid?)w.SiteId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            if (warehouseSiteId is not null &&
+                grants.Any(grant => grant.ScopeType == ScopeType.Site && grant.ScopeId == warehouseSiteId))
             {
-                // Enterprise is org-wide - it satisfies every scoped request.
                 return true;
             }
-
-            if (grant.ScopeType == scopeType && grant.ScopeId == scopeId)
-            {
-                return true;
-            }
-
-            // NOTE: A Site-scoped grant should also cover every Warehouse within that site, but
-            // resolving a warehouse's owning site requires the Warehouse entity introduced in M2.
-            // Until then, Warehouse-scoped requests only succeed via an exact Warehouse-scoped or
-            // an Enterprise grant. Extend this branch once Warehouse.SiteId exists.
         }
 
         return false;

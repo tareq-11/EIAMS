@@ -41,9 +41,14 @@ internal sealed class GrantUserRoleScopeCommandHandler(
             return Result.Failure<Guid>(RoleErrors.NotFound(command.RoleId));
         }
 
-        // Warehouse-scoped target validation is added once the Warehouse entity exists (M2).
         if (command.ScopeType == ScopeType.Site &&
             !await context.Sites.AnyAsync(s => s.Id == command.ScopeId, cancellationToken))
+        {
+            return Result.Failure<Guid>(UserRoleScopeErrors.ScopeTargetNotFound(command.ScopeId!.Value));
+        }
+
+        if (command.ScopeType == ScopeType.Warehouse &&
+            !await context.Warehouses.AnyAsync(w => w.Id == command.ScopeId, cancellationToken))
         {
             return Result.Failure<Guid>(UserRoleScopeErrors.ScopeTargetNotFound(command.ScopeId!.Value));
         }

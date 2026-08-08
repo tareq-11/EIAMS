@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -13,6 +14,10 @@ using Domain.Sites;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.WarehouseCapabilities;
+using Domain.WarehouseCapabilityOperations;
+using Domain.Warehouses;
+using Domain.WarehouseMaterialSettings;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.UnitTests.Abstractions;
@@ -56,6 +61,16 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<MaterialUnitConversion> MaterialUnitConversions { get; set; }
 
+    public DbSet<Warehouse> Warehouses { get; set; }
+
+    public DbSet<WarehouseCapability> WarehouseCapabilities { get; set; }
+
+    public DbSet<WarehouseCapabilityOperation> WarehouseCapabilityOperations { get; set; }
+
+    public DbSet<WarehouseMaterialSetting> WarehouseMaterialSettings { get; set; }
+
+    public DbSet<DocumentSequence> DocumentSequences { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<RolePermission>()
@@ -71,6 +86,26 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
         modelBuilder.Entity<MaterialUnitConversion>()
             .HasIndex(conversion => new { conversion.MaterialId, conversion.FromUnitId })
+            .IsUnique();
+
+        modelBuilder.Entity<Warehouse>()
+            .HasIndex(warehouse => warehouse.Code)
+            .IsUnique();
+
+        modelBuilder.Entity<WarehouseCapability>()
+            .HasIndex(capability => new { capability.WarehouseId, capability.MaterialDomainId })
+            .IsUnique();
+
+        modelBuilder.Entity<WarehouseCapabilityOperation>()
+            .HasIndex(operation => new { operation.CapabilityId, operation.OperationType })
+            .IsUnique();
+
+        modelBuilder.Entity<WarehouseMaterialSetting>()
+            .HasIndex(setting => new { setting.WarehouseId, setting.MaterialId })
+            .IsUnique();
+
+        modelBuilder.Entity<DocumentSequence>()
+            .HasIndex(sequence => new { sequence.SiteId, sequence.DocumentType, sequence.Year })
             .IsUnique();
     }
 }

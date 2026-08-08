@@ -1,3 +1,4 @@
+using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -12,6 +13,10 @@ using Domain.Sites;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.WarehouseCapabilities;
+using Domain.WarehouseCapabilityOperations;
+using Domain.Warehouses;
+using Domain.WarehouseMaterialSettings;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Abstractions.Data;
@@ -34,6 +39,11 @@ public interface IApplicationDbContext
     DbSet<MaterialFamily> MaterialFamilies { get; }
     DbSet<Material> Materials { get; }
     DbSet<MaterialUnitConversion> MaterialUnitConversions { get; }
+    DbSet<Warehouse> Warehouses { get; }
+    DbSet<WarehouseCapability> WarehouseCapabilities { get; }
+    DbSet<WarehouseCapabilityOperation> WarehouseCapabilityOperations { get; }
+    DbSet<WarehouseMaterialSetting> WarehouseMaterialSettings { get; }
+    DbSet<DocumentSequence> DocumentSequences { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -81,6 +81,24 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
                 Id = WellKnownPermissions.MaterialsManageId,
                 Code = PermissionCodes.Materials.Manage,
                 Description = (string?)"Create, update, and change the status of materials and their unit conversions."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehousesManageId,
+                Code = PermissionCodes.Warehouses.Manage,
+                Description = (string?)"Create, update, and change the status of warehouses."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseCapabilitiesManageId,
+                Code = PermissionCodes.WarehouseCapabilities.Manage,
+                Description = (string?)"Grant, revoke, and configure the operations of warehouse capabilities."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseMaterialSettingsManageId,
+                Code = PermissionCodes.WarehouseMaterialSettings.Manage,
+                Description = (string?)"Create, update, and change the status of warehouse material settings."
             });
     }
 }

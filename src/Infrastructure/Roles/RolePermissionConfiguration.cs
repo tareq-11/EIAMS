@@ -28,6 +28,9 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.MaterialDomainsManageId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.MaterialCategoriesManageId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.MaterialFamiliesManageId },
-            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.MaterialsManageId });
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.MaterialsManageId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehousesManageId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseCapabilitiesManageId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseMaterialSettingsManageId });
     }
 }

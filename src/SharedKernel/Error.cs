@@ -8,11 +8,12 @@ public record Error
         "Null value was provided",
         ErrorType.Failure);
 
-    public Error(string code, string description, ErrorType type)
+    public Error(string code, string description, ErrorType type, object? details = null)
     {
         Code = code;
         Description = description;
         Type = type;
+        Details = details;
     }
 
     public string Code { get; }
@@ -21,18 +22,20 @@ public record Error
 
     public ErrorType Type { get; }
 
-    public static Error Failure(string code, string description) =>
-        new(code, description, ErrorType.Failure);
+    public object? Details { get; }
 
-    public static Error NotFound(string code, string description) =>
-        new(code, description, ErrorType.NotFound);
+    public static Error Failure(string code, string description, object? details = null) =>
+        new(code, description, ErrorType.Failure, details);
 
-    public static Error Problem(string code, string description) =>
-        new(code, description, ErrorType.Problem);
+    public static Error NotFound(string code, string description, object? details = null) =>
+        new(code, description, ErrorType.NotFound, details);
 
-    public static Error Conflict(string code, string description) =>
-        new(code, description, ErrorType.Conflict);
+    public static Error Problem(string code, string description, object? details = null) =>
+        new(code, description, ErrorType.Problem, details);
 
-    public static Error Forbidden(string code, string description) =>
-        new(code, description, ErrorType.Forbidden);
+    public static Error Conflict(string code, string description, object? details = null) =>
+        new(code, description, ErrorType.Conflict, details);
+
+    public static Error Forbidden(string code, string description, object? details = null) =>
+        new(code, description, ErrorType.Forbidden, details);
 }

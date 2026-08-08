@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Web.Api.Infrastructure;
 
@@ -13,16 +12,13 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
     {
         logger.LogError(exception, "Unhandled exception occurred");
 
-        var problemDetails = new ProblemDetails
-        {
-            Status = StatusCodes.Status500InternalServerError,
-            Type = "https://datatracker.ietf.org/doc/html/rfc7231#section-6.6.1",
-            Title = "Server failure"
-        };
+        IResult result = ApiResults.Error(
+            httpContext,
+            StatusCodes.Status500InternalServerError,
+            "SERVER_FAILURE",
+            "An unexpected server error occurred.");
 
-        httpContext.Response.StatusCode = problemDetails.Status.Value;
-
-        await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
+        await result.ExecuteAsync(httpContext);
 
         return true;
     }
