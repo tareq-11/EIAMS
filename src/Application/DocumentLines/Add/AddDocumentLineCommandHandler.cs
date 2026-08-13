@@ -1,4 +1,5 @@
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Assets;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
@@ -9,6 +10,7 @@ using Domain.Materials;
 using Domain.MaterialUnitConversions;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Application.DocumentLines.Add;
@@ -16,7 +18,8 @@ namespace Application.DocumentLines.Add;
 internal sealed class AddDocumentLineCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService)
+    IScopeAuthorizationService scopeAuthorizationService,
+    IOptions<AssetCreationOptions> assetCreationOptions)
     : ICommandHandler<AddDocumentLineCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(AddDocumentLineCommand command, CancellationToken cancellationToken)
@@ -72,6 +75,16 @@ internal sealed class AddDocumentLineCommandHandler(
 
         DocumentLineCatalogContext catalog = catalogResult.Value;
 
+        Result openingTypeResult = OpeningLineRules.Validate(
+            document.DocumentType,
+            document.Id,
+            command.OpeningType);
+
+        if (openingTypeResult.IsFailure)
+        {
+            return Result.Failure<Guid>(openingTypeResult.Error);
+        }
+
         Result<decimal> baseQuantityResult = BaseQuantityCalculator.Calculate(
             command.MaterialId,
             command.Quantity,
@@ -84,12 +97,44 @@ internal sealed class AddDocumentLineCommandHandler(
             return Result.Failure<Guid>(baseQuantityResult.Error);
         }
 
-        DocumentLineType lineType = catalog.Material.MaterialKind == MaterialKind.Asset
+        DocumentLineType lineType = catalog.Material.IsAssetTracked
             ? DocumentLineType.Asset
             : DocumentLineType.Normal;
 
+        var lineId = Guid.NewGuid();
+
+        Result assetQuantityResult = AssetLineRules.Validate(
+            lineId,
+            lineType,
+            baseQuantityResult.Value,
+            assetCreationOptions.Value.MaxAssetsPerLine);
+
+        if (assetQuantityResult.IsFailure)
+        {
+            return Result.Failure<Guid>(assetQuantityResult.Error);
+        }
+
+        int existingLineCount = await context.DocumentLines
+            .AsNoTracking()
+            .CountAsync(line => line.DocumentId == document.Id, cancellationToken);
+        decimal existingAssetQuantity = await context.DocumentLines
+            .AsNoTracking()
+            .Where(line => line.DocumentId == document.Id && line.LineType == DocumentLineType.Asset)
+            .SumAsync(line => line.BaseQuantity, cancellationToken);
+
+        Result documentLimitResult = DocumentAssetLimitRules.Validate(
+            document.Id,
+            existingLineCount + 1,
+            existingAssetQuantity + (lineType == DocumentLineType.Asset ? baseQuantityResult.Value : 0m),
+            assetCreationOptions.Value);
+
+        if (documentLimitResult.IsFailure)
+        {
+            return Result.Failure<Guid>(documentLimitResult.Error);
+        }
+
         Result<DocumentLine> lineResult = DocumentLine.Create(
-            Guid.NewGuid(),
+            lineId,
             command.DocumentId,
             command.MaterialId,
             lineType,
@@ -98,7 +143,8 @@ internal sealed class AddDocumentLineCommandHandler(
             baseQuantityResult.Value,
             command.UnitPrice,
             command.BatchNumber,
-            command.ExpiryDate);
+            command.ExpiryDate,
+            command.OpeningType);
 
         if (lineResult.IsFailure)
         {

@@ -15,6 +15,9 @@ public sealed class WarehouseDocumentDetailsResponse
     public Guid? ReversalOfDocumentId { get; init; }
     public Guid? ReversedByDocumentId { get; set; }
     public int RowVersion { get; init; }
+    public ReceivingInfoResponse? ReceivingInfo { get; set; }
+    public IssueToResponse? IssueTo { get; set; }
+    public TransferInfoResponse? TransferInfo { get; set; }
     public List<DocumentLineResponse> Lines { get; set; } = [];
     public List<DocumentAttachmentResponse> Attachments { get; set; } = [];
 }
@@ -31,6 +34,38 @@ public sealed class DocumentLineResponse
     public decimal? UnitPrice { get; init; }
     public string? BatchNumber { get; init; }
     public DateOnly? ExpiryDate { get; init; }
+    public string? OpeningType { get; init; }
+    public List<DocumentLineAssetResponse> Assets { get; set; } = [];
+}
+
+public sealed class ReceivingInfoResponse
+{
+    public string SupplierRef { get; init; }
+    public string? SupplierInvoiceRef { get; init; }
+    public string ReceivingType { get; init; }
+}
+
+public sealed class IssueToResponse
+{
+    public string RecipientType { get; init; }
+    public Guid RecipientId { get; init; }
+    public string IssueReason { get; init; }
+}
+
+public sealed class TransferInfoResponse
+{
+    public Guid DestinationWarehouseId { get; init; }
+    public string TransferReason { get; init; }
+}
+
+public sealed class DocumentLineAssetResponse
+{
+    public Guid Id { get; init; }
+    public Guid? WarehouseId { get; init; }
+    public string AssetNumber { get; init; }
+    public string? SerialNumber { get; init; }
+    public DateOnly AcquisitionDate { get; init; }
+    public DateOnly? WarrantyExpiry { get; init; }
 }
 
 public sealed class DocumentAttachmentResponse

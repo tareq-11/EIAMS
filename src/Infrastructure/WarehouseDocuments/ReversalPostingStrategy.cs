@@ -14,7 +14,9 @@ namespace Infrastructure.WarehouseDocuments;
 /// carries an immutable SourceLineId, so movement linkage never depends on timestamps or random
 /// identifier ordering.
 /// </summary>
-internal sealed class ReversalPostingStrategy(IApplicationDbContext dbContext) : IReversalPostingStrategy
+internal sealed class ReversalPostingStrategy(
+    IApplicationDbContext dbContext,
+    IEnumerable<IDocumentReversalSideEffectStrategy> sideEffectStrategies) : IReversalPostingStrategy
 {
     public async Task<Result<PostingPlan>> PrepareAsync(
         DocumentPostingContext context,
@@ -73,23 +75,83 @@ internal sealed class ReversalPostingStrategy(IApplicationDbContext dbContext) :
         source.BaseQuantity == reversal.BaseQuantity &&
         source.UnitPrice == reversal.UnitPrice &&
         source.BatchNumber == reversal.BatchNumber &&
-        source.ExpiryDate == reversal.ExpiryDate;
+        source.ExpiryDate == reversal.ExpiryDate &&
+        source.OpeningType == reversal.OpeningType;
+
+    public async Task<Result> ValidateSideEffectsAsync(
+        DocumentPostingContext context,
+        CancellationToken cancellationToken)
+    {
+        Result<ReversalSideEffectContext> sideEffectContextResult =
+            await ResolveSideEffectContextAsync(context, cancellationToken);
+
+        if (sideEffectContextResult.IsFailure)
+        {
+            return Result.Failure(sideEffectContextResult.Error);
+        }
+
+        ReversalSideEffectContext sideEffectContext = sideEffectContextResult.Value;
+
+        return sideEffectContext.Strategy is null
+            ? Result.Success()
+            : await sideEffectContext.Strategy.ValidateAsync(
+                sideEffectContext.SourceDocument,
+                context.Document,
+                cancellationToken);
+    }
 
     public async Task<Result> ApplySideEffectsAsync(
         DocumentPostingContext context,
         PostingPlan plan,
         CancellationToken cancellationToken)
     {
-        Guid sourceDocumentId = context.Document.ReversalOfDocumentId!.Value;
+        Result<ReversalSideEffectContext> sideEffectContextResult =
+            await ResolveSideEffectContextAsync(context, cancellationToken);
 
+        if (sideEffectContextResult.IsFailure)
+        {
+            return Result.Failure(sideEffectContextResult.Error);
+        }
+
+        ReversalSideEffectContext sideEffectContext = sideEffectContextResult.Value;
+
+        if (sideEffectContext.Strategy is not null)
+        {
+            Result sideEffectResult = await sideEffectContext.Strategy.ApplyAsync(
+                sideEffectContext.SourceDocument,
+                context.Document,
+                cancellationToken);
+
+            if (sideEffectResult.IsFailure)
+            {
+                return sideEffectResult;
+            }
+        }
+
+        return sideEffectContext.SourceDocument.MarkReversed();
+    }
+
+    private async Task<Result<ReversalSideEffectContext>> ResolveSideEffectContextAsync(
+        DocumentPostingContext context,
+        CancellationToken cancellationToken)
+    {
+        Guid sourceDocumentId = context.Document.ReversalOfDocumentId!.Value;
         WarehouseDocument? sourceDocument = await dbContext.WarehouseDocuments
-            .SingleOrDefaultAsync(d => d.Id == sourceDocumentId, cancellationToken);
+            .SingleOrDefaultAsync(document => document.Id == sourceDocumentId, cancellationToken);
 
         if (sourceDocument is null)
         {
-            return Result.Failure(WarehouseDocumentErrors.NotFound(sourceDocumentId));
+            return Result.Failure<ReversalSideEffectContext>(
+                WarehouseDocumentErrors.NotFound(sourceDocumentId));
         }
 
-        return sourceDocument.MarkReversed();
+        IDocumentReversalSideEffectStrategy? strategy = sideEffectStrategies
+            .SingleOrDefault(candidate => candidate.DocumentTypes.Contains(sourceDocument.DocumentType));
+
+        return new ReversalSideEffectContext(sourceDocument, strategy);
     }
+
+    private sealed record ReversalSideEffectContext(
+        WarehouseDocument SourceDocument,
+        IDocumentReversalSideEffectStrategy? Strategy);
 }

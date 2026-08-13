@@ -1,9 +1,11 @@
 using Application.Abstractions.Data;
+using Domain.Assets;
 using Domain.DocumentAttachments;
 using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.InventoryBalances;
+using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
@@ -13,8 +15,10 @@ using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
+using Domain.ReceivingInfos;
 using Domain.Sites;
 using Domain.StockMovements;
+using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
@@ -86,6 +90,14 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<InventoryBalance> InventoryBalances { get; set; }
 
+    public DbSet<Asset> Assets { get; set; }
+
+    public DbSet<ReceivingInfo> ReceivingInfos { get; set; }
+
+    public DbSet<IssueTo> IssueTos { get; set; }
+
+    public DbSet<TransferInfo> TransferInfos { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<RolePermission>()
@@ -134,5 +146,18 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         modelBuilder.Entity<InventoryBalance>()
             .HasIndex(balance => new { balance.WarehouseId, balance.MaterialId })
             .IsUnique();
+
+        modelBuilder.Entity<Asset>()
+            .HasIndex(asset => asset.AssetNumber)
+            .IsUnique();
+
+        modelBuilder.Entity<ReceivingInfo>()
+            .HasKey(info => info.Id);
+
+        modelBuilder.Entity<IssueTo>()
+            .HasKey(issueTo => issueTo.Id);
+
+        modelBuilder.Entity<TransferInfo>()
+            .HasKey(transferInfo => transferInfo.Id);
     }
 }

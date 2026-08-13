@@ -60,6 +60,38 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
             .Select(d => (Guid?)d.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
+        document.ReceivingInfo = await context.ReceivingInfos
+            .AsNoTracking()
+            .Where(info => info.Id == query.DocumentId)
+            .Select(info => new ReceivingInfoResponse
+            {
+                SupplierRef = info.SupplierRef,
+                SupplierInvoiceRef = info.SupplierInvoiceRef,
+                ReceivingType = info.ReceivingType.ToString()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        document.IssueTo = await context.IssueTos
+            .AsNoTracking()
+            .Where(info => info.Id == query.DocumentId)
+            .Select(info => new IssueToResponse
+            {
+                RecipientType = info.RecipientType.ToString(),
+                RecipientId = info.RecipientId,
+                IssueReason = info.IssueReason
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        document.TransferInfo = await context.TransferInfos
+            .AsNoTracking()
+            .Where(info => info.Id == query.DocumentId)
+            .Select(info => new TransferInfoResponse
+            {
+                DestinationWarehouseId = info.DestinationWarehouseId,
+                TransferReason = info.TransferReason
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
         document.Lines = await context.DocumentLines
             .Where(l => l.DocumentId == query.DocumentId)
             .Select(l => new DocumentLineResponse
@@ -73,9 +105,42 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
                 BaseQuantity = l.BaseQuantity,
                 UnitPrice = l.UnitPrice,
                 BatchNumber = l.BatchNumber,
-                ExpiryDate = l.ExpiryDate
+                ExpiryDate = l.ExpiryDate,
+                OpeningType = l.OpeningType == null ? null : l.OpeningType.ToString()
             })
             .ToListAsync(cancellationToken);
+
+        Guid[] lineIds = document.Lines.Select(line => line.Id).ToArray();
+
+        var assets = await context.Assets
+            .AsNoTracking()
+            .Where(asset => asset.ReceiptLineId != null && lineIds.Contains(asset.ReceiptLineId.Value))
+            .Select(asset => new
+            {
+                LineId = asset.ReceiptLineId!.Value,
+                Asset = new DocumentLineAssetResponse
+                {
+                    Id = asset.Id,
+                    WarehouseId = asset.WarehouseId,
+                    AssetNumber = asset.AssetNumber,
+                    SerialNumber = asset.SerialNumber,
+                    AcquisitionDate = asset.AcquisitionDate,
+                    WarrantyExpiry = asset.WarrantyExpiry
+                }
+            })
+            .ToListAsync(cancellationToken);
+
+        var assetsByLineId = assets
+            .GroupBy(item => item.LineId)
+            .ToDictionary(group => group.Key, group => group.Select(item => item.Asset).ToList());
+
+        foreach (DocumentLineResponse line in document.Lines)
+        {
+            if (assetsByLineId.TryGetValue(line.Id, out List<DocumentLineAssetResponse>? lineAssets))
+            {
+                line.Assets = lineAssets;
+            }
+        }
 
         document.Attachments = await context.DocumentAttachments
             .Where(a => a.DocumentId == query.DocumentId)

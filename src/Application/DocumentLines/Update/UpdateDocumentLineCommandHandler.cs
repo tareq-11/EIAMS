@@ -1,4 +1,5 @@
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Assets;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
@@ -9,6 +10,7 @@ using Domain.Materials;
 using Domain.MaterialUnitConversions;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Application.DocumentLines.Update;
@@ -16,7 +18,8 @@ namespace Application.DocumentLines.Update;
 internal sealed class UpdateDocumentLineCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService)
+    IScopeAuthorizationService scopeAuthorizationService,
+    IOptions<AssetCreationOptions> assetCreationOptions)
     : ICommandHandler<UpdateDocumentLineCommand>
 {
     public async Task<Result> Handle(UpdateDocumentLineCommand command, CancellationToken cancellationToken)
@@ -81,6 +84,16 @@ internal sealed class UpdateDocumentLineCommandHandler(
 
         DocumentLineCatalogContext catalog = catalogResult.Value;
 
+        Result openingTypeResult = OpeningLineRules.Validate(
+            document.DocumentType,
+            document.Id,
+            command.OpeningType);
+
+        if (openingTypeResult.IsFailure)
+        {
+            return openingTypeResult;
+        }
+
         Result<decimal> baseQuantityResult = BaseQuantityCalculator.Calculate(
             line.MaterialId,
             command.Quantity,
@@ -93,9 +106,42 @@ internal sealed class UpdateDocumentLineCommandHandler(
             return Result.Failure(baseQuantityResult.Error);
         }
 
-        DocumentLineType expectedLineType = catalog.Material.MaterialKind == MaterialKind.Asset
+        DocumentLineType expectedLineType = catalog.Material.IsAssetTracked
             ? DocumentLineType.Asset
             : DocumentLineType.Normal;
+
+        Result assetQuantityResult = AssetLineRules.Validate(
+            line.Id,
+            expectedLineType,
+            baseQuantityResult.Value,
+            assetCreationOptions.Value.MaxAssetsPerLine);
+
+        if (assetQuantityResult.IsFailure)
+        {
+            return assetQuantityResult;
+        }
+
+        int lineCount = await context.DocumentLines
+            .AsNoTracking()
+            .CountAsync(documentLine => documentLine.DocumentId == document.Id, cancellationToken);
+        decimal otherAssetQuantity = await context.DocumentLines
+            .AsNoTracking()
+            .Where(documentLine =>
+                documentLine.DocumentId == document.Id &&
+                documentLine.Id != line.Id &&
+                documentLine.LineType == DocumentLineType.Asset)
+            .SumAsync(documentLine => documentLine.BaseQuantity, cancellationToken);
+
+        Result documentLimitResult = DocumentAssetLimitRules.Validate(
+            document.Id,
+            lineCount,
+            otherAssetQuantity + (expectedLineType == DocumentLineType.Asset ? baseQuantityResult.Value : 0m),
+            assetCreationOptions.Value);
+
+        if (documentLimitResult.IsFailure)
+        {
+            return documentLimitResult;
+        }
 
         bool hasChanges = line.LineType != expectedLineType ||
             line.Quantity != command.Quantity ||
@@ -103,7 +149,8 @@ internal sealed class UpdateDocumentLineCommandHandler(
             line.BaseQuantity != baseQuantityResult.Value ||
             line.UnitPrice != command.UnitPrice ||
             line.BatchNumber != command.BatchNumber ||
-            line.ExpiryDate != command.ExpiryDate;
+            line.ExpiryDate != command.ExpiryDate ||
+            line.OpeningType != command.OpeningType;
 
         if (!hasChanges)
         {
@@ -117,7 +164,8 @@ internal sealed class UpdateDocumentLineCommandHandler(
             baseQuantityResult.Value,
             command.UnitPrice,
             command.BatchNumber,
-            command.ExpiryDate);
+            command.ExpiryDate,
+            command.OpeningType);
 
         if (updateResult.IsFailure)
         {

@@ -64,6 +64,41 @@ public static class DocumentLineErrors
         "DocumentLines.UnitPricePrecisionInvalid",
         "UnitPrice must fit within decimal(18,2).");
 
+    public static Error OpeningTypeRequired(Guid documentId) => Error.Problem(
+        "DocumentLines.OpeningTypeRequired",
+        "OpeningType is required for every Opening document line.",
+        new { document_id = documentId });
+
+    public static Error OpeningTypeNotAllowed(Guid documentId) => Error.Problem(
+        "DocumentLines.OpeningTypeNotAllowed",
+        "OpeningType can only be supplied for an Opening document line.",
+        new { document_id = documentId });
+
+    public static Error OpeningTypeInvalid(Guid documentId, OpeningType openingType) => Error.Problem(
+        "DocumentLines.OpeningTypeInvalid",
+        "OpeningType must be a known value.",
+        new { document_id = documentId, opening_type = (int)openingType });
+
+    public static Error AssetQuantityMustBeWhole(Guid lineId, decimal baseQuantity) => Error.Problem(
+        "DocumentLines.AssetQuantityMustBeWhole",
+        "An asset-tracked line must contain a whole number of base units.",
+        new { line_id = lineId, base_quantity = baseQuantity });
+
+    public static Error AssetQuantityLimitExceeded(Guid lineId, decimal baseQuantity, int maximum) => Error.Problem(
+        "DocumentLines.AssetQuantityLimitExceeded",
+        $"An asset-tracked line cannot create more than {maximum} assets.",
+        new { line_id = lineId, base_quantity = baseQuantity, maximum });
+
+    public static Error AssetDocumentLimitExceeded(Guid documentId, decimal totalAssets, int maximum) => Error.Problem(
+        "DocumentLines.AssetDocumentLimitExceeded",
+        $"A document cannot create more than {maximum} assets.",
+        new { document_id = documentId, total_assets = totalAssets, maximum });
+
+    public static Error LinesLimitExceeded(Guid documentId, int lineCount, int maximum) => Error.Problem(
+        "DocumentLines.LinesLimitExceeded",
+        $"A document cannot contain more than {maximum} lines.",
+        new { document_id = documentId, line_count = lineCount, maximum });
+
     public static Error BaseQuantityMismatch(
         Guid documentId,
         Guid lineId,

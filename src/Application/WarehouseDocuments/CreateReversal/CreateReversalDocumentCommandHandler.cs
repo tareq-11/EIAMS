@@ -97,6 +97,7 @@ internal sealed class CreateReversalDocumentCommandHandler(
                 sourceLine.UnitPrice,
                 sourceLine.BatchNumber,
                 sourceLine.ExpiryDate,
+                sourceLine.OpeningType,
                 sourceLine.Id);
 
             if (lineResult.IsFailure)

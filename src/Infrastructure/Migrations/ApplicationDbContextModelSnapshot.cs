@@ -23,6 +23,78 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Assets.Asset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("AcquisitionDate")
+                        .HasColumnType("date")
+                        .HasColumnName("acquisition_date");
+
+                    b.Property<string>("AssetNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("asset_number");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_id");
+
+                    b.Property<Guid?>("ReceiptLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("receipt_line_id");
+
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("SerialNumber")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("serial_number");
+
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.Property<DateOnly?>("WarrantyExpiry")
+                        .HasColumnType("date")
+                        .HasColumnName("warranty_expiry");
+
+                    b.HasKey("Id")
+                        .HasName("pk_assets");
+
+                    b.HasIndex("AssetNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_assets_asset_number");
+
+                    b.HasIndex("MaterialId")
+                        .HasDatabaseName("ix_assets_material_id");
+
+                    b.HasIndex("ReceiptLineId")
+                        .HasDatabaseName("ix_assets_receipt_line_id");
+
+                    b.HasIndex("ReceiptLineId", "MaterialId")
+                        .HasDatabaseName("ix_assets_receipt_line_id_material_id");
+
+                    b.HasIndex("WarehouseId", "MaterialId")
+                        .HasDatabaseName("ix_assets_warehouse_id_material_id");
+
+                    b.ToTable("assets", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_assets_asset_number_not_blank", "length(btrim(asset_number)) > 0");
+
+                            t.HasCheckConstraint("ck_assets_row_version_positive", "row_version > 0");
+
+                            t.HasCheckConstraint("ck_assets_warranty_after_acquisition", "warranty_expiry IS NULL OR warranty_expiry >= acquisition_date");
+                        });
+                });
+
             modelBuilder.Entity("Domain.DocumentAttachments.DocumentAttachment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -158,6 +230,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("material_id");
 
+                    b.Property<string>("OpeningType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("opening_type");
+
                     b.Property<decimal>("Quantity")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)")
@@ -187,6 +264,9 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_document_lines");
 
+                    b.HasAlternateKey("Id", "MaterialId")
+                        .HasName("ak_document_lines_id_material_id");
+
                     b.HasAlternateKey("Id", "DocumentId", "MaterialId")
                         .HasName("ak_document_lines_id_document_id_material_id");
 
@@ -212,6 +292,8 @@ namespace Infrastructure.Migrations
                             t.HasCheckConstraint("ck_document_lines_base_quantity_positive", "base_quantity > 0");
 
                             t.HasCheckConstraint("ck_document_lines_line_type_valid", "line_type IN ('Normal', 'Asset')");
+
+                            t.HasCheckConstraint("ck_document_lines_opening_type_valid", "opening_type IS NULL OR opening_type IN ('Initial', 'Correction')");
 
                             t.HasCheckConstraint("ck_document_lines_quantity_positive", "quantity > 0");
 
@@ -400,6 +482,58 @@ namespace Infrastructure.Migrations
                             t.HasCheckConstraint("ck_inventory_balances_quantity_non_negative", "quantity >= 0");
 
                             t.HasCheckConstraint("ck_inventory_balances_row_version_positive", "row_version > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.IssueTos.IssueTo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("IssueReason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("issue_reason");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recipient_id");
+
+                    b.Property<string>("RecipientType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("recipient_type");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_issue_to");
+
+                    b.HasIndex("RecipientType", "RecipientId")
+                        .HasDatabaseName("ix_issue_to_recipient_type_recipient_id");
+
+                    b.ToTable("issue_to", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_issue_to_issue_reason_not_blank", "length(btrim(issue_reason)) > 0");
+
+                            t.HasCheckConstraint("ck_issue_to_recipient_type_valid", "recipient_type IN ('Employee', 'OrganizationalUnit', 'Site', 'External')");
                         });
                 });
 
@@ -989,6 +1123,56 @@ namespace Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Domain.ReceivingInfos.ReceivingInfo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("ReceivingType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("receiving_type");
+
+                    b.Property<string>("SupplierInvoiceRef")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("supplier_invoice_ref");
+
+                    b.Property<string>("SupplierRef")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("supplier_ref");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_receiving_info");
+
+                    b.ToTable("receiving_info", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_receiving_info_receiving_type_valid", "receiving_type IN ('Supplier', 'Transfer', 'Return')");
+
+                            t.HasCheckConstraint("ck_receiving_info_supplier_ref_not_blank", "length(btrim(supplier_ref)) > 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Roles.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1353,6 +1537,50 @@ namespace Infrastructure.Migrations
                             t.HasCheckConstraint("ck_stock_movements_movement_type_valid", "movement_type IN ('Receipt', 'Issue', 'TransferIn', 'TransferOut', 'AdjustmentIn', 'AdjustmentOut', 'Opening')");
 
                             t.HasCheckConstraint("ck_stock_movements_quantity_delta_not_zero", "quantity_delta <> 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.TransferInfos.TransferInfo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("DestinationWarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("destination_warehouse_id");
+
+                    b.Property<string>("TransferReason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("transfer_reason");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_transfer_info");
+
+                    b.HasIndex("DestinationWarehouseId")
+                        .HasDatabaseName("ix_transfer_info_destination_warehouse_id");
+
+                    b.ToTable("transfer_info", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_transfer_info_transfer_reason_not_blank", "length(btrim(transfer_reason)) > 0");
                         });
                 });
 
@@ -1970,6 +2198,29 @@ namespace Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Domain.Assets.Asset", b =>
+                {
+                    b.HasOne("Domain.Materials.Material", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_assets_materials_material_id");
+
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_assets_warehouses_warehouse_id");
+
+                    b.HasOne("Domain.DocumentLines.DocumentLine", null)
+                        .WithMany()
+                        .HasForeignKey("ReceiptLineId", "MaterialId")
+                        .HasPrincipalKey("Id", "MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_assets_document_lines_receipt_line_id_material_id");
+                });
+
             modelBuilder.Entity("Domain.DocumentAttachments.DocumentAttachment", b =>
                 {
                     b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
@@ -2051,6 +2302,16 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_inventory_balances_warehouses_warehouse_id");
+                });
+
+            modelBuilder.Entity("Domain.IssueTos.IssueTo", b =>
+                {
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithOne()
+                        .HasForeignKey("Domain.IssueTos.IssueTo", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_issue_to_warehouse_documents_document_id");
                 });
 
             modelBuilder.Entity("Domain.MaterialCategories.MaterialCategory", b =>
@@ -2136,6 +2397,16 @@ namespace Infrastructure.Migrations
                         .HasConstraintName("fk_organizational_units_sites_site_id");
                 });
 
+            modelBuilder.Entity("Domain.ReceivingInfos.ReceivingInfo", b =>
+                {
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithOne()
+                        .HasForeignKey("Domain.ReceivingInfos.ReceivingInfo", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_receiving_info_warehouse_documents_document_id");
+                });
+
             modelBuilder.Entity("Domain.Roles.RolePermission", b =>
                 {
                     b.HasOne("Domain.Permissions.Permission", null)
@@ -2200,6 +2471,23 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_stock_movements_document_lines_line_id_document_id_material");
+                });
+
+            modelBuilder.Entity("Domain.TransferInfos.TransferInfo", b =>
+                {
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("DestinationWarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_transfer_info_warehouses_destination_warehouse_id");
+
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithOne()
+                        .HasForeignKey("Domain.TransferInfos.TransferInfo", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_transfer_info_warehouse_documents_document_id");
                 });
 
             modelBuilder.Entity("Domain.UserRoleScopes.UserRoleScope", b =>

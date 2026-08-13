@@ -40,7 +40,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
             "users/login",
-            new { email, password = "WrongPassword1" });
+            new { email, password = "WrongPassword1!" });
 
         // Assert
         response.IsSuccessStatusCode.ShouldBeFalse();
@@ -61,9 +61,12 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.EnsureSuccessStatusCode();
-        AccessTokens? rotated = await response.Content.ReadFromJsonAsync<AccessTokens>();
-        rotated!.AccessToken.ShouldNotBeNullOrWhiteSpace();
-        rotated.RefreshToken.ShouldNotBe(tokens.RefreshToken);
+        ApiEnvelope<AccessTokens>? body =
+            await response.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
+        body.ShouldNotBeNull();
+        body.Success.ShouldBeTrue();
+        body.Data.AccessToken.ShouldNotBeNullOrWhiteSpace();
+        body.Data.RefreshToken.ShouldNotBe(tokens.RefreshToken);
     }
 
     [Fact]

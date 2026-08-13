@@ -1,12 +1,15 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Assets;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Posting;
+using Application.DocumentLines;
 using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.DocumentLines;
 using Domain.Warehouses;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Infrastructure.WarehouseDocuments;
@@ -17,8 +20,10 @@ internal sealed class DocumentPostingCoordinator(
     IDocumentLock documentLock,
     IInventoryLedgerWriter ledgerWriter,
     IEnumerable<IDocumentPostingStrategy> strategies,
+    IEnumerable<IDocumentSubmissionValidator> submissionValidators,
     IReversalPostingStrategy reversalPostingStrategy,
-    IDateTimeProvider dateTimeProvider) : IDocumentPostingCoordinator
+    IDateTimeProvider dateTimeProvider,
+    IOptions<AssetCreationOptions> assetCreationOptions) : IDocumentPostingCoordinator
 {
     public Task<Result<Guid>> PostAsync(
         Guid documentId,
@@ -94,6 +99,18 @@ internal sealed class DocumentPostingCoordinator(
             .ThenBy(l => l.Id)
             .ToListAsync(cancellationToken);
 
+        Result linesValidationResult = await DocumentLineSubmissionValidator.ValidateAsync(
+            context,
+            document,
+            assetCreationOptions.Value,
+            submissionValidators,
+            cancellationToken);
+
+        if (linesValidationResult.IsFailure)
+        {
+            return Result.Failure<Guid>(linesValidationResult.Error);
+        }
+
         DateTime postedAtUtc = dateTimeProvider.UtcNow;
         var postingContext = new DocumentPostingContext(document, warehouse, lines, postedBy, postedAtUtc);
 
@@ -125,6 +142,18 @@ internal sealed class DocumentPostingCoordinator(
         }
 
         PostingPlan plan = planResult.Value;
+
+        if (isReversal)
+        {
+            Result sideEffectsValidationResult = await reversalPostingStrategy.ValidateSideEffectsAsync(
+                postingContext,
+                cancellationToken);
+
+            if (sideEffectsValidationResult.IsFailure)
+            {
+                return Result.Failure<Guid>(sideEffectsValidationResult.Error);
+            }
+        }
 
         Result ledgerResult = await ledgerWriter.AppendAsync(plan.Movements, postedBy, postedAtUtc, cancellationToken);
 

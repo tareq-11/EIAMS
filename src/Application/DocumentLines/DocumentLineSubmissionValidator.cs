@@ -1,4 +1,6 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Assets;
+using Application.Abstractions.Posting;
 using Domain.Common;
 using Domain.DocumentLines;
 using Domain.MaterialCategories;
@@ -12,11 +14,13 @@ using SharedKernel;
 
 namespace Application.DocumentLines;
 
-internal static class DocumentLineSubmissionValidator
+public static class DocumentLineSubmissionValidator
 {
     public static async Task<Result> ValidateAsync(
         IApplicationDbContext context,
         WarehouseDocument document,
+        AssetCreationOptions assetCreationOptions,
+        IEnumerable<IDocumentSubmissionValidator> typeValidators,
         CancellationToken cancellationToken)
     {
         List<DocumentLine> lines = await context.DocumentLines
@@ -29,20 +33,53 @@ internal static class DocumentLineSubmissionValidator
             return Result.Failure(WarehouseDocumentErrors.LinesRequired(document.Id));
         }
 
-        return document.ReversalOfDocumentId is null
-            ? await ValidateOperationalLinesAsync(context, document.Id, lines, cancellationToken)
-            : await ValidateReversalLinesAsync(
+        if (document.ReversalOfDocumentId is not null)
+        {
+            return await ValidateReversalLinesAsync(
                 context,
                 document.Id,
                 document.ReversalOfDocumentId.Value,
                 lines,
                 cancellationToken);
+        }
+
+
+        Result documentLimitResult = DocumentAssetLimitRules.Validate(
+            document.Id,
+            lines.Count,
+            lines.Where(line => line.LineType == DocumentLineType.Asset).Sum(line => line.BaseQuantity),
+            assetCreationOptions);
+
+        if (documentLimitResult.IsFailure)
+        {
+            return documentLimitResult;
+        }
+
+        Result operationalResult = await ValidateOperationalLinesAsync(
+            context,
+            document,
+            lines,
+            assetCreationOptions.MaxAssetsPerLine,
+            cancellationToken);
+
+        if (operationalResult.IsFailure)
+        {
+            return operationalResult;
+        }
+
+        IDocumentSubmissionValidator? typeValidator = typeValidators
+            .SingleOrDefault(validator => validator.DocumentType == document.DocumentType);
+
+        return typeValidator is null
+            ? Result.Success()
+            : await typeValidator.ValidateAsync(document, lines, cancellationToken);
     }
 
     private static async Task<Result> ValidateOperationalLinesAsync(
         IApplicationDbContext context,
-        Guid documentId,
+        WarehouseDocument document,
         List<DocumentLine> lines,
+        int maxAssetsPerLine,
         CancellationToken cancellationToken)
     {
         Guid[] materialIds = lines.Select(line => line.MaterialId).Distinct().ToArray();
@@ -187,23 +224,44 @@ internal static class DocumentLineSubmissionValidator
             if (line.BaseQuantity != baseQuantityResult.Value)
             {
                 return Result.Failure(DocumentLineErrors.BaseQuantityMismatch(
-                    documentId,
+                    document.Id,
                     line.Id,
                     line.BaseQuantity,
                     baseQuantityResult.Value));
             }
 
-            DocumentLineType expectedLineType = material.MaterialKind == MaterialKind.Asset
+            DocumentLineType expectedLineType = material.IsAssetTracked
                 ? DocumentLineType.Asset
                 : DocumentLineType.Normal;
 
             if (line.LineType != expectedLineType)
             {
                 return Result.Failure(DocumentLineErrors.LineTypeMismatch(
-                    documentId,
+                    document.Id,
                     line.Id,
                     line.LineType,
                     expectedLineType));
+            }
+
+            Result openingTypeResult = OpeningLineRules.Validate(
+                document.DocumentType,
+                document.Id,
+                line.OpeningType);
+
+            if (openingTypeResult.IsFailure)
+            {
+                return openingTypeResult;
+            }
+
+            Result assetQuantityResult = AssetLineRules.Validate(
+                line.Id,
+                line.LineType,
+                line.BaseQuantity,
+                maxAssetsPerLine);
+
+            if (assetQuantityResult.IsFailure)
+            {
+                return assetQuantityResult;
             }
         }
 
@@ -251,5 +309,6 @@ internal static class DocumentLineSubmissionValidator
         source.BaseQuantity == reversal.BaseQuantity &&
         source.UnitPrice == reversal.UnitPrice &&
         source.BatchNumber == reversal.BatchNumber &&
-        source.ExpiryDate == reversal.ExpiryDate;
+        source.ExpiryDate == reversal.ExpiryDate &&
+        source.OpeningType == reversal.OpeningType;
 }

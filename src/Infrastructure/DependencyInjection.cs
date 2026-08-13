@@ -1,18 +1,22 @@
 using System.Text;
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Assets;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Numbering;
 using Application.Abstractions.Posting;
+using Application.Abstractions.Recipients;
 using Application.Abstractions.Storage;
 using Application.Abstractions.Warehouses;
 using Infrastructure.Authentication;
+using Infrastructure.Assets;
 using Infrastructure.Authorization;
 using Infrastructure.Database;
 using Infrastructure.DomainEvents;
 using Infrastructure.Ledger;
 using Infrastructure.Numbering;
+using Infrastructure.Recipients;
 using Infrastructure.Storage;
 using Infrastructure.Time;
 using Infrastructure.Warehouses;
@@ -58,9 +62,31 @@ public static class DependencyInjection
 
         services.AddScoped<IInventoryLedgerWriter, InventoryLedgerWriter>();
 
+        services.AddScoped<IInventoryKeyLock, PostgresInventoryKeyLock>();
+
         services.AddScoped<IDocumentPostingCoordinator, DocumentPostingCoordinator>();
 
+        services.AddScoped<IDocumentPostingScopeResolver, DocumentPostingScopeResolver>();
+
+        services.AddScoped<IActivePartyLookup, ActivePartyLookup>();
+
         services.AddScoped<IReversalPostingStrategy, ReversalPostingStrategy>();
+
+        services.AddScoped<IDocumentPostingStrategy, ReceivingPostingStrategy>();
+
+        services.AddScoped<IDocumentPostingStrategy, OpeningPostingStrategy>();
+
+        services.AddScoped<IDocumentPostingStrategy, IssuePostingStrategy>();
+
+        services.AddScoped<IDocumentPostingStrategy, TransferPostingStrategy>();
+
+        services.AddScoped<IDocumentReversalSideEffectStrategy, AssetCreationReversalSideEffectStrategy>();
+
+        services.AddSingleton<IAssetNumberGenerator, AssetNumberGenerator>();
+
+        services.AddScoped<IReceivedAssetFactory, ReceivedAssetFactory>();
+
+        services.AddScoped<IAssetUsageChecker, AssetUsageChecker>();
 
         services.AddScoped<IFileStorage, LocalFileStorage>();
 
@@ -72,6 +98,18 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(LocalFileStorageOptions.SectionName))
             .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath),
                 "AttachmentStorage:Local:RootPath is required.")
+            .ValidateOnStart();
+
+        services.AddOptions<AssetCreationOptions>()
+            .Bind(configuration.GetSection(AssetCreationOptions.SectionName))
+            .Validate(options => options.MaxAssetsPerLine is > 0 and <= 100_000,
+                "AssetCreation:MaxAssetsPerLine must be between 1 and 100000.")
+            .Validate(options =>
+                    options.MaxAssetsPerDocument >= options.MaxAssetsPerLine &&
+                    options.MaxAssetsPerDocument <= 1_000_000,
+                "AssetCreation:MaxAssetsPerDocument must be at least MaxAssetsPerLine and no more than 1000000.")
+            .Validate(options => options.MaxLinesPerDocument is > 0 and <= 10_000,
+                "AssetCreation:MaxLinesPerDocument must be between 1 and 10000.")
             .ValidateOnStart();
 
         services.AddOptions<AttachmentStorageOptions>()

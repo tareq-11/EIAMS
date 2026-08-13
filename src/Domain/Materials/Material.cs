@@ -21,6 +21,12 @@ public sealed class Material : Entity, IAuditableEntity
     public string? Attributes { get; private set; }
     public MaterialStatus Status { get; private set; }
 
+    /// <summary>
+    /// True when each received base unit must become an individually numbered Asset. Both fields
+    /// are authoritative according to PRD 6.1/12.2; callers must not inspect MaterialKind alone.
+    /// </summary>
+    public bool IsAssetTracked => MaterialKind == MaterialKind.Asset || RequiresAssetNumber;
+
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
     public Guid? CreatedBy { get; set; }

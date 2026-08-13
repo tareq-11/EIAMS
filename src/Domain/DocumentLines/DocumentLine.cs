@@ -28,6 +28,7 @@ public sealed class DocumentLine : Entity, IAuditableEntity
     public decimal? UnitPrice { get; private set; }
     public string? BatchNumber { get; private set; }
     public DateOnly? ExpiryDate { get; private set; }
+    public OpeningType? OpeningType { get; private set; }
 
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
@@ -45,6 +46,7 @@ public sealed class DocumentLine : Entity, IAuditableEntity
         decimal? unitPrice,
         string? batchNumber,
         DateOnly? expiryDate,
+        OpeningType? openingType = null,
         Guid? sourceLineId = null)
     {
         Result validation = Validate(quantity, baseQuantity, unitPrice);
@@ -66,7 +68,8 @@ public sealed class DocumentLine : Entity, IAuditableEntity
             BaseQuantity = baseQuantity,
             UnitPrice = unitPrice,
             BatchNumber = batchNumber,
-            ExpiryDate = expiryDate
+            ExpiryDate = expiryDate,
+            OpeningType = openingType
         };
 
         line.Raise(new DocumentLineAddedDomainEvent(line.Id, documentId, materialId));
@@ -81,7 +84,8 @@ public sealed class DocumentLine : Entity, IAuditableEntity
         decimal baseQuantity,
         decimal? unitPrice,
         string? batchNumber,
-        DateOnly? expiryDate)
+        DateOnly? expiryDate,
+        OpeningType? openingType)
     {
         Result validation = Validate(quantity, baseQuantity, unitPrice);
 
@@ -97,6 +101,7 @@ public sealed class DocumentLine : Entity, IAuditableEntity
         UnitPrice = unitPrice;
         BatchNumber = batchNumber;
         ExpiryDate = expiryDate;
+        OpeningType = openingType;
 
         Raise(new DocumentLineUpdatedDomainEvent(Id, DocumentId));
 

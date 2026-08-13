@@ -21,7 +21,11 @@ internal sealed class DocumentLineConfiguration : IEntityTypeConfiguration<Docum
 
         builder.HasAlternateKey(l => new { l.Id, l.DocumentId, l.MaterialId });
 
+        builder.HasAlternateKey(l => new { l.Id, l.MaterialId });
+
         builder.Property(l => l.LineType).HasConversion<string>().HasMaxLength(20);
+
+        builder.Property(l => l.OpeningType).HasConversion<string>().HasMaxLength(20);
 
         builder.Property(l => l.Quantity).HasPrecision(18, 3);
 
@@ -37,6 +41,9 @@ internal sealed class DocumentLineConfiguration : IEntityTypeConfiguration<Docum
             tableBuilder.HasCheckConstraint("ck_document_lines_base_quantity_positive", "base_quantity > 0");
             tableBuilder.HasCheckConstraint("ck_document_lines_unit_price_non_negative", "unit_price >= 0");
             tableBuilder.HasCheckConstraint("ck_document_lines_line_type_valid", "line_type IN ('Normal', 'Asset')");
+            tableBuilder.HasCheckConstraint(
+                "ck_document_lines_opening_type_valid",
+                "opening_type IS NULL OR opening_type IN ('Initial', 'Correction')");
         });
 
         builder.HasOne<WarehouseDocument>().WithMany()

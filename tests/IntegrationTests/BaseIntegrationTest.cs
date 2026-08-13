@@ -15,6 +15,10 @@ public abstract class BaseIntegrationTest
 
     protected sealed record AccessTokens(string AccessToken, string RefreshToken);
 
+    protected sealed record ApiEnvelope<T>(bool Success, T Data);
+
+    private sealed record ResourceId(Guid Id);
+
     protected static string UniqueEmail() => $"test-{Guid.NewGuid():N}@example.com";
 
     protected async Task<Guid> RegisterUserAsync(string email)
@@ -24,25 +28,35 @@ public abstract class BaseIntegrationTest
             email,
             firstName = "Test",
             lastName = "User",
-            password = "Password123"
+            password = "Password123!"
         };
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/register", request);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<Guid>();
+        ApiEnvelope<ResourceId>? body =
+            await response.Content.ReadFromJsonAsync<ApiEnvelope<ResourceId>>();
+
+        body.ShouldNotBeNull();
+        body.Success.ShouldBeTrue();
+
+        return body.Data.Id;
     }
 
     protected async Task<AccessTokens> LoginAsync(string email)
     {
-        var request = new { email, password = "Password123" };
+        var request = new { email, password = "Password123!" };
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login", request);
         response.EnsureSuccessStatusCode();
 
-        AccessTokens? tokens = await response.Content.ReadFromJsonAsync<AccessTokens>();
+        ApiEnvelope<AccessTokens>? body =
+            await response.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
 
-        return tokens!;
+        body.ShouldNotBeNull();
+        body.Success.ShouldBeTrue();
+
+        return body.Data;
     }
 
     protected async Task<(Guid UserId, AccessTokens Tokens)> RegisterAndLoginAsync()

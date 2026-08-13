@@ -1,6 +1,7 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.DocumentLines.Add;
+using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -20,6 +21,7 @@ public sealed class AddDocumentLineController(ICommandHandler<AddDocumentLineCom
         decimal? UnitPrice,
         string? BatchNumber,
         DateOnly? ExpiryDate,
+        OpeningType? OpeningType,
         [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPost]
@@ -40,6 +42,7 @@ public sealed class AddDocumentLineController(ICommandHandler<AddDocumentLineCom
             request.UnitPrice,
             request.BatchNumber,
             request.ExpiryDate,
+            request.OpeningType,
             request.ExpectedRowVersion);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);

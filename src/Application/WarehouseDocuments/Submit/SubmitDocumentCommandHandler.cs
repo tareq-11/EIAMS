@@ -1,11 +1,14 @@
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Assets;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Posting;
 using Application.DocumentLines;
 using Domain.Common;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Application.WarehouseDocuments.Submit;
@@ -13,7 +16,9 @@ namespace Application.WarehouseDocuments.Submit;
 internal sealed class SubmitDocumentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService)
+    IScopeAuthorizationService scopeAuthorizationService,
+    IOptions<AssetCreationOptions> assetCreationOptions,
+    IEnumerable<IDocumentSubmissionValidator> typeValidators)
     : ICommandHandler<SubmitDocumentCommand>
 {
     public async Task<Result> Handle(SubmitDocumentCommand command, CancellationToken cancellationToken)
@@ -49,6 +54,8 @@ internal sealed class SubmitDocumentCommandHandler(
         Result lineValidationResult = await DocumentLineSubmissionValidator.ValidateAsync(
             context,
             document,
+            assetCreationOptions.Value,
+            typeValidators,
             cancellationToken);
 
         if (lineValidationResult.IsFailure)

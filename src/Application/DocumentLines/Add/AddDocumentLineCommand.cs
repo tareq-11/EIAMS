@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Domain.Common;
 
 namespace Application.DocumentLines.Add;
 
@@ -10,4 +11,5 @@ public sealed record AddDocumentLineCommand(
     decimal? UnitPrice,
     string? BatchNumber,
     DateOnly? ExpiryDate,
+    OpeningType? OpeningType,
     int ExpectedRowVersion) : ICommand<Guid>;

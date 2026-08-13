@@ -14,6 +14,7 @@ internal sealed class PostDocumentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
+    IDocumentPostingScopeResolver postingScopeResolver,
     IDocumentPostingCoordinator postingCoordinator)
     : ICommandHandler<PostDocumentCommand>
 {
@@ -40,20 +41,47 @@ internal sealed class PostDocumentCommandHandler(
             return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
+        Result<IReadOnlyCollection<Guid>> scopeResult = await postingScopeResolver.ResolveAsync(
+            document,
+            cancellationToken);
+
+        if (scopeResult.IsFailure)
+        {
+            return Result.Failure(scopeResult.Error);
+        }
+
+        foreach (Guid warehouseId in scopeResult.Value.Where(id => id != document.WarehouseId))
+        {
+            bool canReviewDestination = await scopeAuthorizationService.HasPermissionInScopeAsync(
+                userContext.UserId,
+                PermissionCodes.WarehouseDocuments.Review,
+                ScopeType.Warehouse,
+                warehouseId,
+                cancellationToken);
+
+            if (!canReviewDestination)
+            {
+                return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            }
+        }
+
         // A reversal document requires review (the routine post action) plus reverse (specific
         // authorization to negate already-posted movements) - M3-PLAN.md §4.6.
         if (document.ReversalOfDocumentId is not null)
         {
-            bool hasReverse = await scopeAuthorizationService.HasPermissionInScopeAsync(
-                userContext.UserId,
-                PermissionCodes.WarehouseDocuments.Reverse,
-                ScopeType.Warehouse,
-                document.WarehouseId,
-                cancellationToken);
-
-            if (!hasReverse)
+            foreach (Guid warehouseId in scopeResult.Value)
             {
-                return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+                bool hasReverse = await scopeAuthorizationService.HasPermissionInScopeAsync(
+                    userContext.UserId,
+                    PermissionCodes.WarehouseDocuments.Reverse,
+                    ScopeType.Warehouse,
+                    warehouseId,
+                    cancellationToken);
+
+                if (!hasReverse)
+                {
+                    return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+                }
             }
         }
 

@@ -13,6 +13,10 @@ public interface IReversalPostingStrategy
 {
     Task<Result<PostingPlan>> PrepareAsync(DocumentPostingContext context, CancellationToken cancellationToken);
 
+    Task<Result> ValidateSideEffectsAsync(
+        DocumentPostingContext context,
+        CancellationToken cancellationToken);
+
     Task<Result> ApplySideEffectsAsync(
         DocumentPostingContext context,
         PostingPlan plan,

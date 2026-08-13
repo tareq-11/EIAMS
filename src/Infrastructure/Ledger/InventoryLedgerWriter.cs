@@ -10,10 +10,13 @@ namespace Infrastructure.Ledger;
 
 internal sealed class InventoryLedgerWriter(
     ApplicationDbContext dbContext,
-    IDatabaseExceptionClassifier databaseExceptionClassifier) : IInventoryLedgerWriter
+    IDatabaseExceptionClassifier databaseExceptionClassifier,
+    IInventoryKeyLock inventoryKeyLock) : IInventoryLedgerWriter
 {
     private const string UniqueMovementConstraint =
         "ix_stock_movements_document_id_line_id_movement_type";
+    private const string InitialOpeningConstraint =
+        "ix_stock_movements_initial_opening_once";
 
     public async Task<Result> AppendAsync(
         IReadOnlyCollection<MovementDraft> movements,
@@ -57,14 +60,16 @@ internal sealed class InventoryLedgerWriter(
             .ThenBy(k => k.MaterialId)
             .ToList();
 
-        foreach ((Guid warehouseId, Guid materialId) in keys)
-        {
-            await AcquireBalanceCreationLockAsync(warehouseId, materialId, cancellationToken);
-        }
+        await inventoryKeyLock.AcquireAsync(keys, cancellationToken);
 
         foreach ((Guid warehouseId, Guid materialId) in keys)
         {
-            await EnsureBalanceRowExistsAsync(warehouseId, materialId, postedAtUtc, cancellationToken);
+            await EnsureBalanceRowExistsAsync(
+                warehouseId,
+                materialId,
+                postedBy,
+                postedAtUtc,
+                cancellationToken);
         }
 
         var lockedBalances = new Dictionary<(Guid, Guid), InventoryBalance>();
@@ -73,6 +78,22 @@ internal sealed class InventoryLedgerWriter(
         {
             lockedBalances[(warehouseId, materialId)] =
                 await LockBalanceAsync(warehouseId, materialId, cancellationToken);
+        }
+
+        foreach (IGrouping<(Guid WarehouseId, Guid MaterialId), MovementDraft> movementGroup in movements
+                     .GroupBy(movement => (movement.WarehouseId, movement.MaterialId)))
+        {
+            decimal netDelta = movementGroup.Sum(movement => movement.QuantityDelta);
+            InventoryBalance balance = lockedBalances[movementGroup.Key];
+
+            if (netDelta < 0 && balance.Quantity + netDelta < 0)
+            {
+                return Result.Failure(InventoryBalanceErrors.InsufficientQuantity(
+                    movementGroup.Key.WarehouseId,
+                    movementGroup.Key.MaterialId,
+                    balance.Quantity,
+                    -netDelta));
+            }
         }
 
         foreach (MovementDraft draft in movements)
@@ -105,6 +126,18 @@ internal sealed class InventoryLedgerWriter(
         }
         catch (DbUpdateException exception) when (databaseExceptionClassifier.IsUniqueConstraintViolation(
             exception,
+            InitialOpeningConstraint))
+        {
+            MovementDraft openingMovement = movements.First(movement =>
+                movement.MovementType == Domain.Common.MovementType.Opening &&
+                movement.QuantityDelta > 0);
+
+            return Result.Failure(Domain.WarehouseDocuments.OpeningDocumentErrors.AlreadyInitialized(
+                openingMovement.WarehouseId,
+                openingMovement.MaterialId));
+        }
+        catch (DbUpdateException exception) when (databaseExceptionClassifier.IsUniqueConstraintViolation(
+            exception,
             UniqueMovementConstraint))
         {
             return Result.Failure(StockMovementErrors.DuplicatePosting(
@@ -133,35 +166,20 @@ internal sealed class InventoryLedgerWriter(
     private async Task EnsureBalanceRowExistsAsync(
         Guid warehouseId,
         Guid materialId,
+        Guid postedBy,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
-        bool exists = await dbContext.InventoryBalances.AnyAsync(
-            balance => balance.WarehouseId == warehouseId && balance.MaterialId == materialId,
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+              INSERT INTO public.inventory_balances
+                  (id, warehouse_id, material_id, quantity, last_updated_utc, row_version, created_at_utc, created_by)
+              VALUES
+                  ({Guid.NewGuid()}, {warehouseId}, {materialId}, {0m}, {nowUtc}, {1}, {nowUtc}, {postedBy})
+              ON CONFLICT (warehouse_id, material_id) DO NOTHING
+              """,
             cancellationToken);
-
-        if (exists)
-        {
-            return;
-        }
-
-        var balance = InventoryBalance.CreateZero(
-            Guid.NewGuid(),
-            warehouseId,
-            materialId,
-            nowUtc);
-
-        dbContext.InventoryBalances.Add(balance);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
-
-    private Task<int> AcquireBalanceCreationLockAsync(
-        Guid warehouseId,
-        Guid materialId,
-        CancellationToken cancellationToken) =>
-        dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({warehouseId + ":" + materialId}, 0))",
-            cancellationToken);
 
     private async Task<InventoryBalance> LockBalanceAsync(
         Guid warehouseId,

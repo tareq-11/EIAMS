@@ -1,6 +1,7 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.DocumentLines.Update;
+using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -19,6 +20,7 @@ public sealed class UpdateDocumentLineController(ICommandHandler<UpdateDocumentL
         decimal? UnitPrice,
         string? BatchNumber,
         DateOnly? ExpiryDate,
+        OpeningType? OpeningType,
         [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPut("{lineId:guid}")]
@@ -43,6 +45,7 @@ public sealed class UpdateDocumentLineController(ICommandHandler<UpdateDocumentL
             request.UnitPrice,
             request.BatchNumber,
             request.ExpiryDate,
+            request.OpeningType,
             request.ExpectedRowVersion);
 
         Result result = await handler.Handle(command, cancellationToken);

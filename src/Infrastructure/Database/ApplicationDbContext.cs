@@ -1,9 +1,11 @@
 using Application.Abstractions.Data;
 using Domain.DocumentAttachments;
+using Domain.Assets;
 using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.InventoryBalances;
+using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
@@ -13,8 +15,10 @@ using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
+using Domain.ReceivingInfos;
 using Domain.Sites;
 using Domain.StockMovements;
+using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
@@ -85,6 +89,14 @@ public sealed class ApplicationDbContext(
     public DbSet<StockMovement> StockMovements { get; set; }
 
     public DbSet<InventoryBalance> InventoryBalances { get; set; }
+
+    public DbSet<Asset> Assets { get; set; }
+
+    public DbSet<ReceivingInfo> ReceivingInfos { get; set; }
+
+    public DbSet<IssueTo> IssueTos { get; set; }
+
+    public DbSet<TransferInfo> TransferInfos { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

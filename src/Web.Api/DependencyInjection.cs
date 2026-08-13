@@ -1,4 +1,5 @@
-﻿using Application.Abstractions.Storage;
+﻿using System.Text.Json.Serialization;
+using Application.Abstractions.Storage;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Web.Api.Infrastructure;
@@ -31,6 +32,11 @@ public static class DependencyInjection
 
         services
             .AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.Converters.Add(
+                    new JsonStringEnumConverter(allowIntegerValues: false));
+            })
             .ConfigureApiBehaviorOptions(options =>
             {
                 options.InvalidModelStateResponseFactory = ApiProblemDetails.CreateValidationResponse;
