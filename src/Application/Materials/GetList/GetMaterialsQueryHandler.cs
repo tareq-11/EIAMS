@@ -1,16 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.Materials.GetList;
 
 internal sealed class GetMaterialsQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetMaterialsQuery, List<MaterialResponse>>
+    : IQueryHandler<GetMaterialsQuery, PagedResult<MaterialResponse>>
 {
-    public async Task<Result<List<MaterialResponse>>> Handle(GetMaterialsQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PagedResult<MaterialResponse>>> Handle(
+        GetMaterialsQuery query,
+        CancellationToken cancellationToken)
     {
-        List<MaterialResponse> materials = await (
+        PagedResult<MaterialResponse> materials = await (
                 from m in context.Materials
                 where query.FamilyId == null || m.FamilyId == query.FamilyId
                 where query.Status == null || m.Status == query.Status
@@ -37,7 +39,9 @@ internal sealed class GetMaterialsQueryHandler(IApplicationDbContext context)
                     BaseUnitId = unit.Id,
                     BaseUnitSymbol = unit.Symbol
                 })
-            .ToListAsync(cancellationToken);
+            .OrderBy(m => m.Code)
+            .ThenBy(m => m.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return materials;
     }

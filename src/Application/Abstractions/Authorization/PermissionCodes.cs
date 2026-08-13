@@ -71,4 +71,15 @@ public static class PermissionCodes
     {
         public const string Manage = "warehouse-material-settings:manage";
     }
+
+    public static class WarehouseDocuments
+    {
+        public const string View = "warehouse-documents:view";
+        public const string Create = "warehouse-documents:create";
+        public const string Edit = "warehouse-documents:edit";
+        public const string Submit = "warehouse-documents:submit";
+        public const string Cancel = "warehouse-documents:cancel";
+        public const string Review = "warehouse-documents:review";
+        public const string Reverse = "warehouse-documents:reverse";
+    }
 }

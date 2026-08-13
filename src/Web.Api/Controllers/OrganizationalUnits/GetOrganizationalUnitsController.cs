@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.OrganizationalUnits.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -12,20 +13,28 @@ namespace Web.Api.Controllers.OrganizationalUnits;
 [Route("organizational-units")]
 [Tags(Tags.OrganizationalUnits)]
 public sealed class GetOrganizationalUnitsController(
-    IQueryHandler<GetOrganizationalUnitsQuery, List<OrganizationalUnitResponse>> handler) : ControllerBase
+    IQueryHandler<GetOrganizationalUnitsQuery, PagedResult<OrganizationalUnitResponse>> handler) : ControllerBase
 {
     [HttpGet]
     [Authorize]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationalUnitResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid? siteId,
         Guid? parentId,
         Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {
-        var query = new GetOrganizationalUnitsQuery(siteId, parentId, status);
+        var query = new GetOrganizationalUnitsQuery(
+            siteId,
+            parentId,
+            status,
+            pagination.Page,
+            pagination.PageSize);
 
-        Result<List<OrganizationalUnitResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<OrganizationalUnitResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

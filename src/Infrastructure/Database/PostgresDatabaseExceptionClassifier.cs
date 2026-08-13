@@ -14,4 +14,14 @@ internal sealed class PostgresDatabaseExceptionClassifier : IDatabaseExceptionCl
                 SqlState: PostgresErrorCodes.UniqueViolation
             }
         };
+
+    public bool IsUniqueConstraintViolation(Exception exception, string constraintName) =>
+        exception is DbUpdateException
+        {
+            InnerException: PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: var actualConstraintName
+            }
+        } && string.Equals(actualConstraintName, constraintName, StringComparison.Ordinal);
 }

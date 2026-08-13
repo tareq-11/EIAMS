@@ -1,4 +1,5 @@
-﻿using SharedKernel;
+﻿using Application.Abstractions.Pagination;
+using SharedKernel;
 using Web.Api.Infrastructure;
 
 namespace Web.Api.Extensions;
@@ -17,6 +18,23 @@ public static class ResultExtensions
         return result.IsSuccess
             ? ApiResults.Ok(context, result.Value)
             : CustomResults.Problem(result, context);
+    }
+
+    public static IResult ToPaginatedApiResponse<T>(
+        this Result<PagedResult<T>> result,
+        HttpContext context)
+    {
+        if (result.IsFailure)
+        {
+            return CustomResults.Problem(result, context);
+        }
+
+        PagedResult<T> page = result.Value;
+
+        return ApiResults.Ok(
+            context,
+            page.Items,
+            new ApiPagination(page.Page, page.PageSize, page.TotalItems, page.TotalPages));
     }
 
     public static IResult ToApiResponse(this Result<Guid> result, HttpContext context)

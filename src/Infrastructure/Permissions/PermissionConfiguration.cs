@@ -99,6 +99,48 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
                 Id = WellKnownPermissions.WarehouseMaterialSettingsManageId,
                 Code = PermissionCodes.WarehouseMaterialSettings.Manage,
                 Description = (string?)"Create, update, and change the status of warehouse material settings."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsViewId,
+                Code = PermissionCodes.WarehouseDocuments.View,
+                Description = (string?)"View warehouse documents, lines, attachments, and the ledger."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsCreateId,
+                Code = PermissionCodes.WarehouseDocuments.Create,
+                Description = (string?)"Create warehouse documents."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsEditId,
+                Code = PermissionCodes.WarehouseDocuments.Edit,
+                Description = (string?)"Edit a Draft warehouse document: lines, paper reference, and attachments."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsSubmitId,
+                Code = PermissionCodes.WarehouseDocuments.Submit,
+                Description = (string?)"Submit a Draft warehouse document for review."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsCancelId,
+                Code = PermissionCodes.WarehouseDocuments.Cancel,
+                Description = (string?)"Cancel a warehouse document before it is posted."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsReviewId,
+                Code = PermissionCodes.WarehouseDocuments.Review,
+                Description = (string?)"Post or reject a submitted warehouse document."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehouseDocumentsReverseId,
+                Code = PermissionCodes.WarehouseDocuments.Reverse,
+                Description = (string?)"Authorize posting a reversal of a posted warehouse document."
             });
     }
 }

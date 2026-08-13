@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Domain.Common;
 using Domain.WarehouseCapabilities;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,9 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService)
-    : IQueryHandler<GetWarehouseCapabilityOperationsQuery, List<WarehouseCapabilityOperationResponse>>
+    : IQueryHandler<GetWarehouseCapabilityOperationsQuery, PagedResult<WarehouseCapabilityOperationResponse>>
 {
-    public async Task<Result<List<WarehouseCapabilityOperationResponse>>> Handle(
+    public async Task<Result<PagedResult<WarehouseCapabilityOperationResponse>>> Handle(
         GetWarehouseCapabilityOperationsQuery query,
         CancellationToken cancellationToken)
     {
@@ -24,7 +25,7 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
 
         if (capability is null)
         {
-            return Result.Failure<List<WarehouseCapabilityOperationResponse>>(
+            return Result.Failure<PagedResult<WarehouseCapabilityOperationResponse>>(
                 WarehouseCapabilityErrors.NotFound(query.CapabilityId));
         }
 
@@ -37,10 +38,11 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
 
         if (!authorized)
         {
-            return Result.Failure<List<WarehouseCapabilityOperationResponse>>(WarehouseCapabilityErrors.Forbidden);
+            return Result.Failure<PagedResult<WarehouseCapabilityOperationResponse>>(
+                WarehouseCapabilityErrors.Forbidden);
         }
 
-        List<WarehouseCapabilityOperationResponse> operations = await context.WarehouseCapabilityOperations
+        PagedResult<WarehouseCapabilityOperationResponse> operations = await context.WarehouseCapabilityOperations
             .Where(o => o.CapabilityId == query.CapabilityId)
             .Select(o => new WarehouseCapabilityOperationResponse
             {
@@ -48,7 +50,9 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
                 CapabilityId = o.CapabilityId,
                 OperationType = o.OperationType.ToString()
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(o => o.OperationType)
+            .ThenBy(o => o.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return operations;
     }

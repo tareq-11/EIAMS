@@ -1,0 +1,36 @@
+using Application.Abstractions.Authorization;
+using Application.Abstractions.Messaging;
+using Application.DocumentLines.Remove;
+using Microsoft.AspNetCore.Mvc;
+using SharedKernel;
+using Web.Api.Infrastructure;
+
+namespace Web.Api.Controllers.DocumentLines;
+
+[ApiController]
+[Route("warehouse-documents/{documentId:guid}/lines")]
+[Tags(Tags.WarehouseDocuments)]
+public sealed class RemoveDocumentLineController(ICommandHandler<RemoveDocumentLineCommand> handler)
+    : ControllerBase
+{
+    [HttpDelete("{lineId:guid}")]
+    [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    public async Task<IResult> Handle(
+        Guid documentId,
+        Guid lineId,
+        [FromQuery] int expectedRowVersion,
+        CancellationToken cancellationToken)
+    {
+        var command = new RemoveDocumentLineCommand(documentId, lineId, expectedRowVersion);
+
+        Result result = await handler.Handle(command, cancellationToken);
+
+        return result.ToApiResponse(HttpContext);
+    }
+}

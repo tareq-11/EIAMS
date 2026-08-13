@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.Warehouses.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -11,21 +12,25 @@ namespace Web.Api.Controllers.Warehouses;
 [ApiController]
 [Route("warehouses")]
 [Tags(Tags.Warehouses)]
-public sealed class GetWarehousesController(IQueryHandler<GetWarehousesQuery, List<WarehouseResponse>> handler)
+public sealed class GetWarehousesController(IQueryHandler<GetWarehousesQuery, PagedResult<WarehouseResponse>> handler)
     : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    [ProducesResponseType<ApiResponse<List<WarehouseResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
-    public async Task<IResult> Handle(Guid? siteId, Status? status, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(
+        Guid? siteId,
+        Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetWarehousesQuery(siteId, status);
+        var query = new GetWarehousesQuery(siteId, status, pagination.Page, pagination.PageSize);
 
-        Result<List<WarehouseResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<WarehouseResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

@@ -15,8 +15,10 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
 
         builder.HasOne<Permission>().WithMany().HasForeignKey(rp => rp.PermissionId);
 
-        // The Administrator role gets every permission that exists today; WH_KEEPER/WH_MGR are
-        // seeded with none - their grants arrive with the document workflow they gate (M3+).
+        // The Administrator role gets every permission that exists today. WH_KEEPER/WH_MGR were
+        // seeded with none through M2 - their grants arrive here with the document workflow they
+        // gate (D-WF-01): WH_KEEPER creates/edits/submits/cancels, WH_MGR reviews (posts/rejects)
+        // and authorizes reversal; both can view.
         builder.HasData(
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.UsersAccessId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.OrganizationsManageId },
@@ -31,6 +33,21 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.MaterialsManageId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehousesManageId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseCapabilitiesManageId },
-            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseMaterialSettingsManageId });
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseMaterialSettingsManageId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsViewId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsCreateId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsEditId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsSubmitId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsCancelId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsReviewId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsReverseId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsViewId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsCreateId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsEditId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsSubmitId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsCancelId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsViewId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsReviewId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsReverseId });
     }
 }

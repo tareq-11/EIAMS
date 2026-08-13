@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.Roles.GetList;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,16 +11,21 @@ namespace Web.Api.Controllers.Roles;
 [ApiController]
 [Route("roles")]
 [Tags(Tags.Roles)]
-public sealed class GetRolesController(IQueryHandler<GetRolesQuery, List<RoleResponse>> handler) : ControllerBase
+public sealed class GetRolesController(IQueryHandler<GetRolesQuery, PagedResult<RoleResponse>> handler)
+    : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<RoleResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetRolesQuery();
+        var query = new GetRolesQuery(pagination.Page, pagination.PageSize);
 
-        Result<List<RoleResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<RoleResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

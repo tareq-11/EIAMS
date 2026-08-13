@@ -1,6 +1,9 @@
 using Application.Abstractions.Data;
+using Domain.DocumentAttachments;
+using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
+using Domain.InventoryBalances;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
@@ -11,12 +14,14 @@ using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
+using Domain.StockMovements;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
 using Domain.Warehouses;
+using Domain.WarehouseDocuments;
 using Domain.WarehouseMaterialSettings;
 using Infrastructure.DomainEvents;
 using Microsoft.EntityFrameworkCore;
@@ -70,6 +75,16 @@ public sealed class ApplicationDbContext(
     public DbSet<WarehouseMaterialSetting> WarehouseMaterialSettings { get; set; }
 
     public DbSet<DocumentSequence> DocumentSequences { get; set; }
+
+    public DbSet<WarehouseDocument> WarehouseDocuments { get; set; }
+
+    public DbSet<DocumentLine> DocumentLines { get; set; }
+
+    public DbSet<DocumentAttachment> DocumentAttachments { get; set; }
+
+    public DbSet<StockMovement> StockMovements { get; set; }
+
+    public DbSet<InventoryBalance> InventoryBalances { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

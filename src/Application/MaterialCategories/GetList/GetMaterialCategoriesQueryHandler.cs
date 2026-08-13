@@ -1,18 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.MaterialCategories.GetList;
 
 internal sealed class GetMaterialCategoriesQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetMaterialCategoriesQuery, List<MaterialCategoryResponse>>
+    : IQueryHandler<GetMaterialCategoriesQuery, PagedResult<MaterialCategoryResponse>>
 {
-    public async Task<Result<List<MaterialCategoryResponse>>> Handle(
+    public async Task<Result<PagedResult<MaterialCategoryResponse>>> Handle(
         GetMaterialCategoriesQuery query,
         CancellationToken cancellationToken)
     {
-        List<MaterialCategoryResponse> categories = await context.MaterialCategories
+        PagedResult<MaterialCategoryResponse> categories = await context.MaterialCategories
             .Where(c => query.MaterialDomainId == null || c.MaterialDomainId == query.MaterialDomainId)
             .Where(c => !query.RootOnly || c.ParentCategoryId == null)
             .Where(c => query.RootOnly || query.ParentCategoryId == null || c.ParentCategoryId == query.ParentCategoryId)
@@ -26,7 +26,9 @@ internal sealed class GetMaterialCategoriesQueryHandler(IApplicationDbContext co
                 Code = c.Code,
                 Status = c.Status.ToString()
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(c => c.Name)
+            .ThenBy(c => c.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return categories;
     }

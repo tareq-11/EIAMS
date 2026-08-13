@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.MaterialCategories.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -12,21 +13,30 @@ namespace Web.Api.Controllers.MaterialCategories;
 [Route("material-categories")]
 [Tags(Tags.MaterialCategories)]
 public sealed class GetMaterialCategoriesController(
-    IQueryHandler<GetMaterialCategoriesQuery, List<MaterialCategoryResponse>> handler) : ControllerBase
+    IQueryHandler<GetMaterialCategoriesQuery, PagedResult<MaterialCategoryResponse>> handler) : ControllerBase
 {
     [HttpGet]
     [Authorize]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialCategoryResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid? materialDomainId,
         Guid? parentCategoryId,
         bool rootOnly,
         Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {
-        var query = new GetMaterialCategoriesQuery(materialDomainId, parentCategoryId, rootOnly, status);
+        var query = new GetMaterialCategoriesQuery(
+            materialDomainId,
+            parentCategoryId,
+            rootOnly,
+            status,
+            pagination.Page,
+            pagination.PageSize);
 
-        Result<List<MaterialCategoryResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<MaterialCategoryResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.MaterialFamilies.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -12,16 +13,22 @@ namespace Web.Api.Controllers.MaterialFamilies;
 [Route("material-families")]
 [Tags(Tags.MaterialFamilies)]
 public sealed class GetMaterialFamiliesController(
-    IQueryHandler<GetMaterialFamiliesQuery, List<MaterialFamilyResponse>> handler) : ControllerBase
+    IQueryHandler<GetMaterialFamiliesQuery, PagedResult<MaterialFamilyResponse>> handler) : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(Guid? categoryId, Status? status, CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialFamilyResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        Guid? categoryId,
+        Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetMaterialFamiliesQuery(categoryId, status);
+        var query = new GetMaterialFamiliesQuery(categoryId, status, pagination.Page, pagination.PageSize);
 
-        Result<List<MaterialFamilyResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<MaterialFamilyResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

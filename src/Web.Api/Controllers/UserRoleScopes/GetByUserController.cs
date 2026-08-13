@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.UserRoleScopes.GetByUser;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,17 +11,23 @@ namespace Web.Api.Controllers.UserRoleScopes;
 [ApiController]
 [Route("users/{userId:guid}/role-scopes")]
 [Tags(Tags.UserRoleScopes)]
-public sealed class GetByUserController(IQueryHandler<GetUserRoleScopesQuery, List<UserRoleScopeResponse>> handler)
+public sealed class GetByUserController(
+    IQueryHandler<GetUserRoleScopesQuery, PagedResult<UserRoleScopeResponse>> handler)
     : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(Guid userId, CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<UserRoleScopeResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        Guid userId,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetUserRoleScopesQuery(userId);
+        var query = new GetUserRoleScopesQuery(userId, pagination.Page, pagination.PageSize);
 
-        Result<List<UserRoleScopeResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<UserRoleScopeResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

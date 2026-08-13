@@ -39,6 +39,7 @@ internal static class ApiResults
             StatusCodes.Status404NotFound => ("RESOURCE_NOT_FOUND", "The requested resource or API route was not found."),
             StatusCodes.Status405MethodNotAllowed => ("METHOD_NOT_ALLOWED", "The HTTP method used is not allowed for this API route."),
             StatusCodes.Status409Conflict => ("RESOURCE_CONFLICT", "The request conflicts with the current state of the resource."),
+            StatusCodes.Status413PayloadTooLarge => ("REQUEST_BODY_TOO_LARGE", "The request body exceeds the configured maximum size."),
             StatusCodes.Status415UnsupportedMediaType => ("UNSUPPORTED_MEDIA_TYPE", "The request body uses an unsupported content type."),
             StatusCodes.Status422UnprocessableEntity => ("UNPROCESSABLE_ENTITY", "The request values could not be processed."),
             StatusCodes.Status429TooManyRequests => ("RATE_LIMIT_EXCEEDED", "Too many requests were sent. Wait before trying again."),

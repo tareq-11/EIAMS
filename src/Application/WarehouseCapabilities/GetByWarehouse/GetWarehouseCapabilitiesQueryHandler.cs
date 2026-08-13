@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Domain.Common;
 using Domain.WarehouseCapabilities;
 using Domain.Warehouses;
@@ -14,15 +15,16 @@ internal sealed class GetWarehouseCapabilitiesQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService)
-    : IQueryHandler<GetWarehouseCapabilitiesQuery, List<WarehouseCapabilityResponse>>
+    : IQueryHandler<GetWarehouseCapabilitiesQuery, PagedResult<WarehouseCapabilityResponse>>
 {
-    public async Task<Result<List<WarehouseCapabilityResponse>>> Handle(
+    public async Task<Result<PagedResult<WarehouseCapabilityResponse>>> Handle(
         GetWarehouseCapabilitiesQuery query,
         CancellationToken cancellationToken)
     {
         if (!await context.Warehouses.AnyAsync(w => w.Id == query.WarehouseId, cancellationToken))
         {
-            return Result.Failure<List<WarehouseCapabilityResponse>>(WarehouseErrors.NotFound(query.WarehouseId));
+            return Result.Failure<PagedResult<WarehouseCapabilityResponse>>(
+                WarehouseErrors.NotFound(query.WarehouseId));
         }
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
@@ -34,10 +36,10 @@ internal sealed class GetWarehouseCapabilitiesQueryHandler(
 
         if (!authorized)
         {
-            return Result.Failure<List<WarehouseCapabilityResponse>>(WarehouseCapabilityErrors.Forbidden);
+            return Result.Failure<PagedResult<WarehouseCapabilityResponse>>(WarehouseCapabilityErrors.Forbidden);
         }
 
-        List<WarehouseCapabilityResponse> capabilities = await (
+        PagedResult<WarehouseCapabilityResponse> capabilities = await (
                 from capability in context.WarehouseCapabilities
                 where capability.WarehouseId == query.WarehouseId
                 join materialDomain in context.MaterialDomains
@@ -51,7 +53,9 @@ internal sealed class GetWarehouseCapabilitiesQueryHandler(
                     MaterialDomainName = materialDomain.Name,
                     Status = capability.Status.ToString()
                 })
-            .ToListAsync(cancellationToken);
+            .OrderBy(c => c.MaterialDomainCode)
+            .ThenBy(c => c.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return capabilities;
     }

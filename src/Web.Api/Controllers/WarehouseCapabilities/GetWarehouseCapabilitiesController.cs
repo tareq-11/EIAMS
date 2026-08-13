@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.WarehouseCapabilities.GetByWarehouse;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,21 +12,25 @@ namespace Web.Api.Controllers.WarehouseCapabilities;
 [Route("warehouses")]
 [Tags(Tags.WarehouseCapabilities)]
 public sealed class GetWarehouseCapabilitiesController(
-    IQueryHandler<GetWarehouseCapabilitiesQuery, List<WarehouseCapabilityResponse>> handler) : ControllerBase
+    IQueryHandler<GetWarehouseCapabilitiesQuery, PagedResult<WarehouseCapabilityResponse>> handler)
+    : ControllerBase
 {
     [HttpGet("{warehouseId:guid}/capabilities")]
     [Authorize]
-    [ProducesResponseType<ApiResponse<List<WarehouseCapabilityResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
-    public async Task<IResult> Handle(Guid warehouseId, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(
+        Guid warehouseId,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetWarehouseCapabilitiesQuery(warehouseId);
+        var query = new GetWarehouseCapabilitiesQuery(warehouseId, pagination.Page, pagination.PageSize);
 
-        Result<List<WarehouseCapabilityResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<WarehouseCapabilityResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

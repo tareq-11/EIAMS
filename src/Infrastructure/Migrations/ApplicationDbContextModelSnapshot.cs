@@ -23,6 +23,202 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.DocumentAttachments.DocumentAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AttachmentType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("attachment_type");
+
+                    b.Property<string>("Checksum")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("checksum");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<string>("OriginalFilename")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("original_filename");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at_utc");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_document_attachments");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_document_attachments_storage_key");
+
+                    b.HasIndex("UploadedBy")
+                        .HasDatabaseName("ix_document_attachments_uploaded_by");
+
+                    b.HasIndex("DocumentId", "AttachmentType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_document_attachments_signed_original")
+                        .HasFilter("attachment_type = 'SignedOriginal'");
+
+                    b.ToTable("document_attachments", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_document_attachments_attachment_type_valid", "attachment_type IN ('SignedOriginal', 'Supporting')");
+
+                            t.HasCheckConstraint("ck_document_attachments_file_size_positive", "file_size > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.DocumentLines.DocumentLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BaseQuantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("base_quantity");
+
+                    b.Property<string>("BatchNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("batch_number");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<DateOnly?>("ExpiryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("expiry_date");
+
+                    b.Property<string>("LineType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("line_type");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid?>("SourceLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_line_id");
+
+                    b.Property<Guid?>("UnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("unit_id");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_document_lines");
+
+                    b.HasAlternateKey("Id", "DocumentId", "MaterialId")
+                        .HasName("ak_document_lines_id_document_id_material_id");
+
+                    b.HasIndex("DocumentId")
+                        .HasDatabaseName("ix_document_lines_document_id");
+
+                    b.HasIndex("MaterialId")
+                        .HasDatabaseName("ix_document_lines_material_id");
+
+                    b.HasIndex("SourceLineId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_document_lines_source_line_id")
+                        .HasFilter("source_line_id IS NOT NULL");
+
+                    b.HasIndex("UnitId")
+                        .HasDatabaseName("ix_document_lines_unit_id");
+
+                    b.HasIndex("DocumentId", "MaterialId")
+                        .HasDatabaseName("ix_document_lines_document_id_material_id");
+
+                    b.ToTable("document_lines", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_document_lines_base_quantity_positive", "base_quantity > 0");
+
+                            t.HasCheckConstraint("ck_document_lines_line_type_valid", "line_type IN ('Normal', 'Asset')");
+
+                            t.HasCheckConstraint("ck_document_lines_quantity_positive", "quantity > 0");
+
+                            t.HasCheckConstraint("ck_document_lines_unit_price_non_negative", "unit_price >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.DocumentSequences.DocumentSequence", b =>
                 {
                     b.Property<Guid>("Id")
@@ -142,6 +338,69 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_employees_org_unit_id");
 
                     b.ToTable("employees", "public");
+                });
+
+            modelBuilder.Entity("Domain.InventoryBalances.InventoryBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("LastUpdatedUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_updated_utc");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_id");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_inventory_balances");
+
+                    b.HasIndex("MaterialId")
+                        .HasDatabaseName("ix_inventory_balances_material_id");
+
+                    b.HasIndex("WarehouseId", "MaterialId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_inventory_balances_warehouse_id_material_id");
+
+                    b.ToTable("inventory_balances", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_inventory_balances_quantity_non_negative", "quantity >= 0");
+
+                            t.HasCheckConstraint("ck_inventory_balances_row_version_positive", "row_version > 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.MaterialCategories.MaterialCategory", b =>
@@ -685,6 +944,48 @@ namespace Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000114"),
                             Code = "warehouse-material-settings:manage",
                             Description = "Create, update, and change the status of warehouse material settings."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000115"),
+                            Code = "warehouse-documents:view",
+                            Description = "View warehouse documents, lines, attachments, and the ledger."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000116"),
+                            Code = "warehouse-documents:create",
+                            Description = "Create warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000117"),
+                            Code = "warehouse-documents:edit",
+                            Description = "Edit a Draft warehouse document: lines, paper reference, and attachments."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000118"),
+                            Code = "warehouse-documents:submit",
+                            Description = "Submit a Draft warehouse document for review."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000119"),
+                            Code = "warehouse-documents:cancel",
+                            Description = "Cancel a warehouse document before it is posted."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000120"),
+                            Code = "warehouse-documents:review",
+                            Description = "Post or reject a submitted warehouse document."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000121"),
+                            Code = "warehouse-documents:reverse",
+                            Description = "Authorize posting a reversal of a posted warehouse document."
                         });
                 });
 
@@ -842,6 +1143,81 @@ namespace Infrastructure.Migrations
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000114")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000116")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000117")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000118")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000119")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000120")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000121")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000116")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000117")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000118")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000119")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000120")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000121")
                         });
                 });
 
@@ -906,6 +1282,78 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_sites_organization_id");
 
                     b.ToTable("sites", "public");
+                });
+
+            modelBuilder.Entity("Domain.StockMovements.StockMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_id");
+
+                    b.Property<Guid>("LineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("line_id");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("material_id");
+
+                    b.Property<string>("MovementType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("movement_type");
+
+                    b.Property<DateTime>("PostedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at_utc");
+
+                    b.Property<Guid>("PostedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("posted_by");
+
+                    b.Property<decimal>("QuantityDelta")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)")
+                        .HasColumnName("quantity_delta");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_stock_movements");
+
+                    b.HasIndex("DocumentId")
+                        .HasDatabaseName("ix_stock_movements_document_id");
+
+                    b.HasIndex("MaterialId")
+                        .HasDatabaseName("ix_stock_movements_material_id");
+
+                    b.HasIndex("PostedBy")
+                        .HasDatabaseName("ix_stock_movements_posted_by");
+
+                    b.HasIndex("WarehouseId", "MaterialId")
+                        .HasDatabaseName("ix_stock_movements_warehouse_id_material_id");
+
+                    b.HasIndex("DocumentId", "LineId", "MovementType")
+                        .IsUnique()
+                        .HasDatabaseName("ix_stock_movements_document_id_line_id_movement_type");
+
+                    b.HasIndex("LineId", "DocumentId", "MaterialId")
+                        .HasDatabaseName("ix_stock_movements_line_id_document_id_material_id");
+
+                    b.ToTable("stock_movements", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_stock_movements_movement_type_valid", "movement_type IN ('Receipt', 'Issue', 'TransferIn', 'TransferOut', 'AdjustmentIn', 'AdjustmentOut', 'Opening')");
+
+                            t.HasCheckConstraint("ck_stock_movements_quantity_delta_not_zero", "quantity_delta <> 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.UnitsOfMeasure.UnitOfMeasure", b =>
@@ -1216,6 +1664,119 @@ namespace Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Domain.WarehouseDocuments.WarehouseDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DocumentStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("document_status");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("document_type");
+
+                    b.Property<string>("PaperDocumentNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("paper_document_number");
+
+                    b.Property<int?>("PaperDocumentYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("paper_document_year");
+
+                    b.Property<DateTime?>("PostedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at_utc");
+
+                    b.Property<Guid?>("PostedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("posted_by");
+
+                    b.Property<Guid?>("ReversalOfDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reversal_of_document_id");
+
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid?>("SignedCopyAttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("signed_copy_attachment_id");
+
+                    b.Property<string>("SystemReferenceNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("system_reference_number");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_warehouse_documents");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_warehouse_documents_created_by");
+
+                    b.HasIndex("PostedBy")
+                        .HasDatabaseName("ix_warehouse_documents_posted_by");
+
+                    b.HasIndex("ReversalOfDocumentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouse_documents_reversal_of_document_id")
+                        .HasFilter("reversal_of_document_id IS NOT NULL");
+
+                    b.HasIndex("SignedCopyAttachmentId")
+                        .HasDatabaseName("ix_warehouse_documents_signed_copy_attachment_id");
+
+                    b.HasIndex("SystemReferenceNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouse_documents_system_reference_number");
+
+                    b.HasIndex("WarehouseId")
+                        .HasDatabaseName("ix_warehouse_documents_warehouse_id");
+
+                    b.ToTable("warehouse_documents", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_warehouse_documents_document_status_valid", "document_status IN ('Draft', 'Submitted', 'Posted', 'Reversed', 'Cancelled', 'Rejected')");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_document_type_valid", "document_type IN ('Receiving', 'Issue', 'Transfer', 'Adjustment', 'Opening', 'Return')");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_paper_document_year_valid", "paper_document_year IS NULL OR paper_document_year BETWEEN 1900 AND 9999");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_posted_metadata", "(document_status IN ('Posted', 'Reversed') AND posted_by IS NOT NULL AND posted_at_utc IS NOT NULL AND signed_copy_attachment_id IS NOT NULL) OR (document_status NOT IN ('Posted', 'Reversed') AND posted_by IS NULL AND posted_at_utc IS NULL)");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_row_version_positive", "row_version > 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.WarehouseMaterialSettings.WarehouseMaterialSetting", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1363,6 +1924,98 @@ namespace Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Infrastructure.Storage.PendingFileDeletion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at_utc");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("storage_key");
+
+                    b.HasKey("Id")
+                        .HasName("pk_pending_file_deletion");
+
+                    b.HasIndex("NextAttemptAtUtc")
+                        .HasDatabaseName("ix_pending_file_deletion_next_attempt_at_utc");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_pending_file_deletion_storage_key");
+
+                    b.ToTable("pending_file_deletion", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_pending_file_deletions_attempt_count_non_negative", "attempt_count >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.DocumentAttachments.DocumentAttachment", b =>
+                {
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_document_attachments_warehouse_documents_document_id");
+
+                    b.HasOne("Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_document_attachments_users_uploaded_by");
+                });
+
+            modelBuilder.Entity("Domain.DocumentLines.DocumentLine", b =>
+                {
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_document_lines_warehouse_documents_document_id");
+
+                    b.HasOne("Domain.Materials.Material", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_document_lines_materials_material_id");
+
+                    b.HasOne("Domain.DocumentLines.DocumentLine", null)
+                        .WithMany()
+                        .HasForeignKey("SourceLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_document_lines_document_lines_source_line_id");
+
+                    b.HasOne("Domain.UnitsOfMeasure.UnitOfMeasure", null)
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_document_lines_units_of_measure_unit_id");
+                });
+
             modelBuilder.Entity("Domain.DocumentSequences.DocumentSequence", b =>
                 {
                     b.HasOne("Domain.Sites.Site", null)
@@ -1381,6 +2034,23 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_employees_organizational_units_org_unit_id");
+                });
+
+            modelBuilder.Entity("Domain.InventoryBalances.InventoryBalance", b =>
+                {
+                    b.HasOne("Domain.Materials.Material", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_balances_materials_material_id");
+
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_inventory_balances_warehouses_warehouse_id");
                 });
 
             modelBuilder.Entity("Domain.MaterialCategories.MaterialCategory", b =>
@@ -1493,6 +2163,45 @@ namespace Infrastructure.Migrations
                         .HasConstraintName("fk_sites_organizations_organization_id");
                 });
 
+            modelBuilder.Entity("Domain.StockMovements.StockMovement", b =>
+                {
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_warehouse_documents_document_id");
+
+                    b.HasOne("Domain.Materials.Material", null)
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_materials_material_id");
+
+                    b.HasOne("Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("PostedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_users_posted_by");
+
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_warehouses_warehouse_id");
+
+                    b.HasOne("Domain.DocumentLines.DocumentLine", null)
+                        .WithMany()
+                        .HasForeignKey("LineId", "DocumentId", "MaterialId")
+                        .HasPrincipalKey("Id", "DocumentId", "MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_stock_movements_document_lines_line_id_document_id_material");
+                });
+
             modelBuilder.Entity("Domain.UserRoleScopes.UserRoleScope", b =>
                 {
                     b.HasOne("Domain.Roles.Role", null)
@@ -1555,6 +2264,40 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_warehouse_capability_operations_warehouse_capabilities_capa");
+                });
+
+            modelBuilder.Entity("Domain.WarehouseDocuments.WarehouseDocument", b =>
+                {
+                    b.HasOne("Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_warehouse_documents_users_created_by");
+
+                    b.HasOne("Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("PostedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_warehouse_documents_users_posted_by");
+
+                    b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
+                        .WithMany()
+                        .HasForeignKey("ReversalOfDocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_warehouse_documents_warehouse_documents_reversal_of_documen");
+
+                    b.HasOne("Domain.DocumentAttachments.DocumentAttachment", null)
+                        .WithMany()
+                        .HasForeignKey("SignedCopyAttachmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_warehouse_documents_document_attachments_signed_copy_attach");
+
+                    b.HasOne("Domain.Warehouses.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_warehouse_documents_warehouses_warehouse_id");
                 });
 
             modelBuilder.Entity("Domain.WarehouseMaterialSettings.WarehouseMaterialSetting", b =>

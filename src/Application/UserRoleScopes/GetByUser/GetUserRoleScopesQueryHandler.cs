@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Domain.Common;
 using Domain.UserRoleScopes;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,9 @@ internal sealed class GetUserRoleScopesQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService)
-    : IQueryHandler<GetUserRoleScopesQuery, List<UserRoleScopeResponse>>
+    : IQueryHandler<GetUserRoleScopesQuery, PagedResult<UserRoleScopeResponse>>
 {
-    public async Task<Result<List<UserRoleScopeResponse>>> Handle(
+    public async Task<Result<PagedResult<UserRoleScopeResponse>>> Handle(
         GetUserRoleScopesQuery query,
         CancellationToken cancellationToken)
     {
@@ -30,11 +31,11 @@ internal sealed class GetUserRoleScopesQueryHandler(
 
             if (!authorized)
             {
-                return Result.Failure<List<UserRoleScopeResponse>>(UserRoleScopeErrors.Forbidden);
+                return Result.Failure<PagedResult<UserRoleScopeResponse>>(UserRoleScopeErrors.Forbidden);
             }
         }
 
-        List<UserRoleScopeResponse> scopes = await (
+        PagedResult<UserRoleScopeResponse> scopes = await (
                 from userRoleScope in context.UserRoleScopes
                 where userRoleScope.UserId == query.UserId
                 join role in context.Roles on userRoleScope.RoleId equals role.Id
@@ -46,7 +47,9 @@ internal sealed class GetUserRoleScopesQueryHandler(
                     ScopeType = userRoleScope.ScopeType.ToString(),
                     ScopeId = userRoleScope.ScopeId
                 })
-            .ToListAsync(cancellationToken);
+            .OrderBy(s => s.RoleName)
+            .ThenBy(s => s.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return scopes;
     }

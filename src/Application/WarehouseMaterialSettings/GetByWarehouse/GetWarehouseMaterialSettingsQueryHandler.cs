@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Domain.Common;
 using Domain.Warehouses;
 using Domain.WarehouseMaterialSettings;
@@ -14,15 +15,16 @@ internal sealed class GetWarehouseMaterialSettingsQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService)
-    : IQueryHandler<GetWarehouseMaterialSettingsQuery, List<WarehouseMaterialSettingResponse>>
+    : IQueryHandler<GetWarehouseMaterialSettingsQuery, PagedResult<WarehouseMaterialSettingResponse>>
 {
-    public async Task<Result<List<WarehouseMaterialSettingResponse>>> Handle(
+    public async Task<Result<PagedResult<WarehouseMaterialSettingResponse>>> Handle(
         GetWarehouseMaterialSettingsQuery query,
         CancellationToken cancellationToken)
     {
         if (!await context.Warehouses.AnyAsync(w => w.Id == query.WarehouseId, cancellationToken))
         {
-            return Result.Failure<List<WarehouseMaterialSettingResponse>>(WarehouseErrors.NotFound(query.WarehouseId));
+            return Result.Failure<PagedResult<WarehouseMaterialSettingResponse>>(
+                WarehouseErrors.NotFound(query.WarehouseId));
         }
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
@@ -34,10 +36,11 @@ internal sealed class GetWarehouseMaterialSettingsQueryHandler(
 
         if (!authorized)
         {
-            return Result.Failure<List<WarehouseMaterialSettingResponse>>(WarehouseMaterialSettingErrors.Forbidden);
+            return Result.Failure<PagedResult<WarehouseMaterialSettingResponse>>(
+                WarehouseMaterialSettingErrors.Forbidden);
         }
 
-        List<WarehouseMaterialSettingResponse> settings = await (
+        PagedResult<WarehouseMaterialSettingResponse> settings = await (
                 from setting in context.WarehouseMaterialSettings
                 where setting.WarehouseId == query.WarehouseId
                 join material in context.Materials
@@ -53,7 +56,9 @@ internal sealed class GetWarehouseMaterialSettingsQueryHandler(
                     MaxQuantity = setting.MaxQuantity,
                     Status = setting.Status.ToString()
                 })
-            .ToListAsync(cancellationToken);
+            .OrderBy(s => s.MaterialCode)
+            .ThenBy(s => s.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return settings;
     }

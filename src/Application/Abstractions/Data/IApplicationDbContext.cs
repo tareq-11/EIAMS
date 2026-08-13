@@ -1,5 +1,8 @@
+using Domain.DocumentAttachments;
+using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
+using Domain.InventoryBalances;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
@@ -10,12 +13,14 @@ using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
+using Domain.StockMovements;
 using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.UserRoleScopes;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
 using Domain.Warehouses;
+using Domain.WarehouseDocuments;
 using Domain.WarehouseMaterialSettings;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,6 +49,11 @@ public interface IApplicationDbContext
     DbSet<WarehouseCapabilityOperation> WarehouseCapabilityOperations { get; }
     DbSet<WarehouseMaterialSetting> WarehouseMaterialSettings { get; }
     DbSet<DocumentSequence> DocumentSequences { get; }
+    DbSet<WarehouseDocument> WarehouseDocuments { get; }
+    DbSet<DocumentLine> DocumentLines { get; }
+    DbSet<DocumentAttachment> DocumentAttachments { get; }
+    DbSet<StockMovement> StockMovements { get; }
+    DbSet<InventoryBalance> InventoryBalances { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -20,4 +20,6 @@ public static class Tags
     public const string WarehouseCapabilities = "WarehouseCapabilities";
     public const string WarehouseCapabilityOperations = "WarehouseCapabilityOperations";
     public const string WarehouseMaterialSettings = "WarehouseMaterialSettings";
+    public const string WarehouseDocuments = "WarehouseDocuments";
+    public const string InventoryLedger = "InventoryLedger";
 }

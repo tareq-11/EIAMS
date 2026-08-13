@@ -1,18 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.Organizations.GetList;
 
 internal sealed class GetOrganizationsQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetOrganizationsQuery, List<OrganizationResponse>>
+    : IQueryHandler<GetOrganizationsQuery, PagedResult<OrganizationResponse>>
 {
-    public async Task<Result<List<OrganizationResponse>>> Handle(
+    public async Task<Result<PagedResult<OrganizationResponse>>> Handle(
         GetOrganizationsQuery query,
         CancellationToken cancellationToken)
     {
-        List<OrganizationResponse> organizations = await context.Organizations
+        PagedResult<OrganizationResponse> organizations = await context.Organizations
             .Where(o => query.Status == null || o.Status == query.Status)
             .Select(o => new OrganizationResponse
             {
@@ -21,7 +21,9 @@ internal sealed class GetOrganizationsQueryHandler(IApplicationDbContext context
                 Code = o.Code,
                 Status = o.Status.ToString()
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(o => o.Name)
+            .ThenBy(o => o.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return organizations;
     }

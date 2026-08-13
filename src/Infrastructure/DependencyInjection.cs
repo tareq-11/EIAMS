@@ -2,15 +2,21 @@ using System.Text;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Ledger;
 using Application.Abstractions.Numbering;
+using Application.Abstractions.Posting;
+using Application.Abstractions.Storage;
 using Application.Abstractions.Warehouses;
 using Infrastructure.Authentication;
 using Infrastructure.Authorization;
 using Infrastructure.Database;
 using Infrastructure.DomainEvents;
+using Infrastructure.Ledger;
 using Infrastructure.Numbering;
+using Infrastructure.Storage;
 using Infrastructure.Time;
 using Infrastructure.Warehouses;
+using Infrastructure.WarehouseDocuments;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +51,46 @@ public static class DependencyInjection
         services.AddScoped<IReferenceNumberGenerator, ReferenceNumberGenerator>();
 
         services.AddScoped<ICapabilityCheckService, CapabilityCheckService>();
+
+        services.AddScoped<IApplicationTransaction, EfApplicationTransaction>();
+
+        services.AddScoped<IDocumentLock, ApplicationDocumentLock>();
+
+        services.AddScoped<IInventoryLedgerWriter, InventoryLedgerWriter>();
+
+        services.AddScoped<IDocumentPostingCoordinator, DocumentPostingCoordinator>();
+
+        services.AddScoped<IReversalPostingStrategy, ReversalPostingStrategy>();
+
+        services.AddScoped<IFileStorage, LocalFileStorage>();
+
+        services.AddScoped<IAttachmentFileCleanup, AttachmentFileCleanup>();
+
+        services.AddHostedService<FileCleanupWorker>();
+
+        services.AddOptions<LocalFileStorageOptions>()
+            .Bind(configuration.GetSection(LocalFileStorageOptions.SectionName))
+            .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath),
+                "AttachmentStorage:Local:RootPath is required.")
+            .ValidateOnStart();
+
+        services.AddOptions<AttachmentStorageOptions>()
+            .Bind(configuration.GetSection(AttachmentStorageOptions.SectionName))
+            .Validate(options => options.MaxFileSizeInBytes > 0,
+                "AttachmentStorage:MaxFileSizeInBytes must be greater than 0.")
+            .Validate(options => options.AllowedMimeTypes.Length > 0,
+                "AttachmentStorage:AllowedMimeTypes must not be empty.")
+            .ValidateOnStart();
+
+        services.AddOptions<FileCleanupOptions>()
+            .Bind(configuration.GetSection(FileCleanupOptions.SectionName))
+            .Validate(options => options.PollInterval > TimeSpan.Zero,
+                "AttachmentStorage:Cleanup:PollInterval must be greater than zero.")
+            .Validate(options => options.BatchSize is > 0 and <= 1_000,
+                "AttachmentStorage:Cleanup:BatchSize must be between 1 and 1000.")
+            .Validate(options => options.MaxRetryDelay > TimeSpan.Zero,
+                "AttachmentStorage:Cleanup:MaxRetryDelay must be greater than zero.")
+            .ValidateOnStart();
 
         services.AddOptions<NumberingOptions>()
             .Bind(configuration.GetSection(NumberingOptions.SectionName))

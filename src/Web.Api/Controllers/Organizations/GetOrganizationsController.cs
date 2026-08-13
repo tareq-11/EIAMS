@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.Organizations.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -11,17 +12,23 @@ namespace Web.Api.Controllers.Organizations;
 [ApiController]
 [Route("organizations")]
 [Tags(Tags.Organizations)]
-public sealed class GetOrganizationsController(IQueryHandler<GetOrganizationsQuery, List<OrganizationResponse>> handler)
+public sealed class GetOrganizationsController(
+    IQueryHandler<GetOrganizationsQuery, PagedResult<OrganizationResponse>> handler)
     : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(Status? status, CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetOrganizationsQuery(status);
+        var query = new GetOrganizationsQuery(status, pagination.Page, pagination.PageSize);
 
-        Result<List<OrganizationResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<OrganizationResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

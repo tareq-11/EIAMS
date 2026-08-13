@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.MaterialDomains.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -12,16 +13,21 @@ namespace Web.Api.Controllers.MaterialDomains;
 [Route("material-domains")]
 [Tags(Tags.MaterialDomains)]
 public sealed class GetMaterialDomainsController(
-    IQueryHandler<GetMaterialDomainsQuery, List<MaterialDomainResponse>> handler) : ControllerBase
+    IQueryHandler<GetMaterialDomainsQuery, PagedResult<MaterialDomainResponse>> handler) : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(Status? status, CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialDomainResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetMaterialDomainsQuery(status);
+        var query = new GetMaterialDomainsQuery(status, pagination.Page, pagination.PageSize);
 
-        Result<List<MaterialDomainResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<MaterialDomainResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

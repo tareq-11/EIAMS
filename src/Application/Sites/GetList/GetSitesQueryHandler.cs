@@ -1,16 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.Sites.GetList;
 
 internal sealed class GetSitesQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetSitesQuery, List<SiteResponse>>
+    : IQueryHandler<GetSitesQuery, PagedResult<SiteResponse>>
 {
-    public async Task<Result<List<SiteResponse>>> Handle(GetSitesQuery query, CancellationToken cancellationToken)
+    public async Task<Result<PagedResult<SiteResponse>>> Handle(
+        GetSitesQuery query,
+        CancellationToken cancellationToken)
     {
-        List<SiteResponse> sites = await context.Sites
+        PagedResult<SiteResponse> sites = await context.Sites
             .Where(s => query.OrganizationId == null || s.OrganizationId == query.OrganizationId)
             .Where(s => query.Status == null || s.Status == query.Status)
             .Select(s => new SiteResponse
@@ -22,7 +24,9 @@ internal sealed class GetSitesQueryHandler(IApplicationDbContext context)
                 Location = s.Location,
                 Status = s.Status.ToString()
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(s => s.Name)
+            .ThenBy(s => s.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return sites;
     }

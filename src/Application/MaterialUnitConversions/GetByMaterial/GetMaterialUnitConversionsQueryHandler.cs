@@ -1,18 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.MaterialUnitConversions.GetByMaterial;
 
 internal sealed class GetMaterialUnitConversionsQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetMaterialUnitConversionsQuery, List<MaterialUnitConversionResponse>>
+    : IQueryHandler<GetMaterialUnitConversionsQuery, PagedResult<MaterialUnitConversionResponse>>
 {
-    public async Task<Result<List<MaterialUnitConversionResponse>>> Handle(
+    public async Task<Result<PagedResult<MaterialUnitConversionResponse>>> Handle(
         GetMaterialUnitConversionsQuery query,
         CancellationToken cancellationToken)
     {
-        List<MaterialUnitConversionResponse> conversions = await context.MaterialUnitConversions
+        PagedResult<MaterialUnitConversionResponse> conversions = await context.MaterialUnitConversions
             .Where(c => c.MaterialId == query.MaterialId)
             .Select(c => new MaterialUnitConversionResponse
             {
@@ -22,7 +22,9 @@ internal sealed class GetMaterialUnitConversionsQueryHandler(IApplicationDbConte
                 ToBaseUnitId = c.ToBaseUnitId,
                 Factor = c.Factor
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(c => c.FromUnitId)
+            .ThenBy(c => c.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return conversions;
     }

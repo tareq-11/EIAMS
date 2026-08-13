@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.Employees.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -11,17 +12,23 @@ namespace Web.Api.Controllers.Employees;
 [ApiController]
 [Route("employees")]
 [Tags(Tags.Employees)]
-public sealed class GetEmployeesController(IQueryHandler<GetEmployeesQuery, List<EmployeeResponse>> handler)
+public sealed class GetEmployeesController(IQueryHandler<GetEmployeesQuery, PagedResult<EmployeeResponse>> handler)
     : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(Guid? orgUnitId, Status? status, CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<EmployeeResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        Guid? orgUnitId,
+        Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetEmployeesQuery(orgUnitId, status);
+        var query = new GetEmployeesQuery(orgUnitId, status, pagination.Page, pagination.PageSize);
 
-        Result<List<EmployeeResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<EmployeeResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

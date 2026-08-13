@@ -1,4 +1,5 @@
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.Sites.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -11,16 +12,23 @@ namespace Web.Api.Controllers.Sites;
 [ApiController]
 [Route("sites")]
 [Tags(Tags.Sites)]
-public sealed class GetSitesController(IQueryHandler<GetSitesQuery, List<SiteResponse>> handler) : ControllerBase
+public sealed class GetSitesController(IQueryHandler<GetSitesQuery, PagedResult<SiteResponse>> handler)
+    : ControllerBase
 {
     [HttpGet]
     [Authorize]
-    public async Task<IResult> Handle(Guid? organizationId, Status? status, CancellationToken cancellationToken)
+    [ProducesResponseType<ApiResponse<IReadOnlyList<SiteResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    public async Task<IResult> Handle(
+        Guid? organizationId,
+        Status? status,
+        [FromQuery] PaginationQueryParameters pagination,
+        CancellationToken cancellationToken)
     {
-        var query = new GetSitesQuery(organizationId, status);
+        var query = new GetSitesQuery(organizationId, status, pagination.Page, pagination.PageSize);
 
-        Result<List<SiteResponse>> result = await handler.Handle(query, cancellationToken);
+        Result<PagedResult<SiteResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

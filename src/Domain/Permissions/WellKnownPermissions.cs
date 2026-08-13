@@ -21,4 +21,11 @@ public static class WellKnownPermissions
     public static readonly Guid WarehousesManageId = Guid.Parse("00000000-0000-0000-0000-000000000112");
     public static readonly Guid WarehouseCapabilitiesManageId = Guid.Parse("00000000-0000-0000-0000-000000000113");
     public static readonly Guid WarehouseMaterialSettingsManageId = Guid.Parse("00000000-0000-0000-0000-000000000114");
+    public static readonly Guid WarehouseDocumentsViewId = Guid.Parse("00000000-0000-0000-0000-000000000115");
+    public static readonly Guid WarehouseDocumentsCreateId = Guid.Parse("00000000-0000-0000-0000-000000000116");
+    public static readonly Guid WarehouseDocumentsEditId = Guid.Parse("00000000-0000-0000-0000-000000000117");
+    public static readonly Guid WarehouseDocumentsSubmitId = Guid.Parse("00000000-0000-0000-0000-000000000118");
+    public static readonly Guid WarehouseDocumentsCancelId = Guid.Parse("00000000-0000-0000-0000-000000000119");
+    public static readonly Guid WarehouseDocumentsReviewId = Guid.Parse("00000000-0000-0000-0000-000000000120");
+    public static readonly Guid WarehouseDocumentsReverseId = Guid.Parse("00000000-0000-0000-0000-000000000121");
 }

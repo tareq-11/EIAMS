@@ -1,18 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.Employees.GetList;
 
 internal sealed class GetEmployeesQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetEmployeesQuery, List<EmployeeResponse>>
+    : IQueryHandler<GetEmployeesQuery, PagedResult<EmployeeResponse>>
 {
-    public async Task<Result<List<EmployeeResponse>>> Handle(
+    public async Task<Result<PagedResult<EmployeeResponse>>> Handle(
         GetEmployeesQuery query,
         CancellationToken cancellationToken)
     {
-        List<EmployeeResponse> employees = await context.Employees
+        PagedResult<EmployeeResponse> employees = await context.Employees
             .Where(e => query.OrgUnitId == null || e.OrgUnitId == query.OrgUnitId)
             .Where(e => query.Status == null || e.Status == query.Status)
             .Select(e => new EmployeeResponse
@@ -24,7 +24,9 @@ internal sealed class GetEmployeesQueryHandler(IApplicationDbContext context)
                 JobTitle = e.JobTitle,
                 Status = e.Status.ToString()
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(e => e.FullName)
+            .ThenBy(e => e.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return employees;
     }

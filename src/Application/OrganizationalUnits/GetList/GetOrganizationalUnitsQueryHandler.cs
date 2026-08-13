@@ -1,18 +1,18 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 
 namespace Application.OrganizationalUnits.GetList;
 
 internal sealed class GetOrganizationalUnitsQueryHandler(IApplicationDbContext context)
-    : IQueryHandler<GetOrganizationalUnitsQuery, List<OrganizationalUnitResponse>>
+    : IQueryHandler<GetOrganizationalUnitsQuery, PagedResult<OrganizationalUnitResponse>>
 {
-    public async Task<Result<List<OrganizationalUnitResponse>>> Handle(
+    public async Task<Result<PagedResult<OrganizationalUnitResponse>>> Handle(
         GetOrganizationalUnitsQuery query,
         CancellationToken cancellationToken)
     {
-        List<OrganizationalUnitResponse> units = await context.OrganizationalUnits
+        PagedResult<OrganizationalUnitResponse> units = await context.OrganizationalUnits
             .Where(u => query.SiteId == null || u.SiteId == query.SiteId)
             .Where(u => query.ParentId == null || u.ParentId == query.ParentId)
             .Where(u => query.Status == null || u.Status == query.Status)
@@ -25,7 +25,9 @@ internal sealed class GetOrganizationalUnitsQueryHandler(IApplicationDbContext c
                 UnitType = u.UnitType,
                 Status = u.Status.ToString()
             })
-            .ToListAsync(cancellationToken);
+            .OrderBy(u => u.Name)
+            .ThenBy(u => u.Id)
+            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
 
         return units;
     }
