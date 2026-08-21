@@ -1,9 +1,15 @@
 using Domain.DocumentAttachments;
 using Domain.Assets;
+using Domain.AssetMovementHistories;
+using Domain.Custodies;
+using Domain.CustodyHistories;
+using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.InventoryBalances;
+using Domain.InventoryAdjustments;
+using Domain.InventoryCounts;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -15,6 +21,7 @@ using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.ReceivingInfos;
+using Domain.ReturnInfos;
 using Domain.Sites;
 using Domain.StockMovements;
 using Domain.TransferInfos;
@@ -62,6 +69,17 @@ public interface IApplicationDbContext
     DbSet<ReceivingInfo> ReceivingInfos { get; }
     DbSet<IssueTo> IssueTos { get; }
     DbSet<TransferInfo> TransferInfos { get; }
+    DbSet<AssetMovementHistory> AssetMovementHistories { get; }
+    DbSet<Custody> Custodies { get; }
+    DbSet<CustodyHistory> CustodyHistories { get; }
+    DbSet<DocumentLineAssetSelection> DocumentLineAssetSelections { get; }
+    DbSet<ReturnInfo> ReturnInfos { get; }
+    DbSet<AssetCurrentStatusView> AssetCurrentStatuses { get; }
+    DbSet<InventoryCount> InventoryCounts { get; }
+    DbSet<InventoryCountScopeMaterial> InventoryCountScopeMaterials { get; }
+    DbSet<InventoryCountLine> InventoryCountLines { get; }
+    DbSet<InventoryAdjustment> InventoryAdjustments { get; }
+    DbSet<AdjustmentLine> AdjustmentLines { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

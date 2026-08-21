@@ -1,6 +1,7 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Posting;
 using Application.Abstractions.Recipients;
+using Application.DocumentLineAssetSelections;
 using Domain.Common;
 using Domain.DocumentLines;
 using Domain.IssueTos;
@@ -26,11 +27,6 @@ internal sealed class IssueSubmissionValidator(
             return Result.Success();
         }
 
-        if (lines.Any(line => line.LineType == DocumentLineType.Asset))
-        {
-            return Result.Failure(IssueToErrors.AssetLinesNotSupported(document.Id));
-        }
-
         IssueTo? issueTo = await context.IssueTos
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == document.Id, cancellationToken);
@@ -45,7 +41,7 @@ internal sealed class IssueSubmissionValidator(
             issueTo.RecipientId,
             cancellationToken);
 
-        return recipientStatus switch
+        Result recipientResult = recipientStatus switch
         {
             ActivePartyLookupStatus.Active => Result.Success(),
             ActivePartyLookupStatus.NotFound => Result.Failure(
@@ -54,5 +50,13 @@ internal sealed class IssueSubmissionValidator(
                 IssueToErrors.RecipientInactive(issueTo.RecipientType, issueTo.RecipientId)),
             _ => Result.Failure(IssueToErrors.ExternalRecipientNotSupported)
         };
+
+        return recipientResult.IsFailure
+            ? recipientResult
+            : await AssetSelectionSubmissionValidator.ValidateAsync(
+                context,
+                document.Id,
+                lines,
+                cancellationToken);
     }
 }

@@ -10,13 +10,14 @@ namespace Web.Api.Controllers.WarehouseDocuments;
 [ApiController]
 [Route("warehouse-documents")]
 [Tags(Tags.WarehouseDocuments)]
-public sealed class PostDocumentController(ICommandHandler<PostDocumentCommand> handler) : ControllerBase
+public sealed class PostDocumentController(
+    ICommandHandler<PostDocumentCommand, PostDocumentResponse> handler) : ControllerBase
 {
     public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPost("{documentId:guid}/post")]
     [HasPermission(PermissionCodes.WarehouseDocuments.Review)]
-    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PostDocumentResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
@@ -26,7 +27,7 @@ public sealed class PostDocumentController(ICommandHandler<PostDocumentCommand> 
     {
         var command = new PostDocumentCommand(documentId, request.ExpectedRowVersion);
 
-        Result result = await handler.Handle(command, cancellationToken);
+        Result<PostDocumentResponse> result = await handler.Handle(command, cancellationToken);
 
         return result.ToApiResponse(HttpContext);
     }

@@ -1,6 +1,8 @@
 using Application.Abstractions.Behaviors;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Posting;
+using Application.Abstractions.WarehouseDocuments;
+using Application.WarehouseDocuments;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using SharedKernel;
@@ -41,6 +43,8 @@ public static class DependencyInjection
             .WithScopedLifetime());
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
+
+        services.AddScoped<IWarehouseDocumentDraftFactory, WarehouseDocumentDraftFactory>();
 
         services.Scan(scan => scan.FromAssembliesOf(typeof(DependencyInjection))
             .AddClasses(classes => classes.AssignableTo<IDocumentSubmissionValidator>(), publicOnly: false)

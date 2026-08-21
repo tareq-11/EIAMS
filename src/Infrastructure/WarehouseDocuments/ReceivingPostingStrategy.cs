@@ -3,6 +3,7 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Posting;
 using Application.Abstractions.Warehouses;
+using Domain.AssetMovementHistories;
 using Domain.Assets;
 using Domain.Common;
 using Domain.DocumentLines;
@@ -99,6 +100,23 @@ internal sealed class ReceivingPostingStrategy(
             }
 
             dbContext.Assets.AddRange(assetsResult.Value);
+
+            foreach (Asset asset in assetsResult.Value)
+            {
+                Result<AssetMovementHistory> historyResult = AssetMovementHistory.Create(
+                    Guid.NewGuid(),
+                    asset.Id,
+                    context.Document.Id,
+                    AssetMovementType.Received,
+                    context.PostedAtUtc);
+
+                if (historyResult.IsFailure)
+                {
+                    return Task.FromResult(Result.Failure(historyResult.Error));
+                }
+
+                dbContext.AssetMovementHistories.Add(historyResult.Value);
+            }
         }
 
         return Task.FromResult(Result.Success());

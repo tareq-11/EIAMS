@@ -3,10 +3,14 @@ using Application.Abstractions.Ledger;
 using Application.Abstractions.Posting;
 using Application.Abstractions.Recipients;
 using Application.Abstractions.Warehouses;
+using Domain.AssetMovementHistories;
 using Domain.Common;
+using Domain.Custodies;
+using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
 using Domain.IssueTos;
 using Domain.WarehouseDocuments;
+using Infrastructure.Assets;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -15,7 +19,8 @@ namespace Infrastructure.WarehouseDocuments;
 internal sealed class IssuePostingStrategy(
     IApplicationDbContext dbContext,
     ICapabilityCheckService capabilityCheckService,
-    IActivePartyLookup activePartyLookup) : IDocumentPostingStrategy
+    IActivePartyLookup activePartyLookup,
+    AssetPostingSelectionService assetPostingSelectionService) : IDocumentPostingStrategy
 {
     public DocumentType DocumentType => DocumentType.Issue;
 
@@ -26,11 +31,6 @@ internal sealed class IssuePostingStrategy(
         if (context.Lines.Count == 0)
         {
             return Result.Failure<PostingPlan>(WarehouseDocumentErrors.LinesRequired(context.Document.Id));
-        }
-
-        if (context.Lines.Any(line => line.LineType == DocumentLineType.Asset))
-        {
-            return Result.Failure<PostingPlan>(IssueToErrors.AssetLinesNotSupported(context.Document.Id));
         }
 
         IssueTo? issueTo = await dbContext.IssueTos
@@ -77,6 +77,17 @@ internal sealed class IssuePostingStrategy(
             }
         }
 
+        Result<IReadOnlyList<Domain.Assets.Asset>> assetSelectionsResult =
+            await assetPostingSelectionService.LockAndValidateForIssueAsync(
+                context.Document,
+                context.Lines,
+                cancellationToken);
+
+        if (assetSelectionsResult.IsFailure)
+        {
+            return Result.Failure<PostingPlan>(assetSelectionsResult.Error);
+        }
+
         return new PostingPlan(context.Lines
             .Select(line => new MovementDraft(
                 context.Document.WarehouseId,
@@ -88,10 +99,68 @@ internal sealed class IssuePostingStrategy(
             .ToList());
     }
 
-    public Task<Result> ApplySideEffectsAsync(
+    public async Task<Result> ApplySideEffectsAsync(
         DocumentPostingContext context,
         PostingPlan plan,
-        CancellationToken cancellationToken) => Task.FromResult(Result.Success());
+        CancellationToken cancellationToken)
+    {
+        var assetLines = context.Lines
+            .Where(line => line.LineType == DocumentLineType.Asset)
+            .ToList();
+
+        if (assetLines.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        IssueTo? issueTo = await dbContext.IssueTos
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == context.Document.Id, cancellationToken);
+
+        if (issueTo is null)
+        {
+            return Result.Failure(IssueToErrors.Required(context.Document.Id));
+        }
+
+        CustodyKind custodyKind = issueTo.RecipientType == PartyType.Employee
+            ? CustodyKind.Personal
+            : CustodyKind.Operational;
+
+        foreach (Domain.Assets.Asset asset in assetPostingSelectionService
+                     .GetPreparedIssueSelections(context.Document.Id))
+        {
+            Result<AssetMovementHistory> historyResult = AssetMovementHistory.Create(
+                Guid.NewGuid(),
+                asset.Id,
+                context.Document.Id,
+                AssetMovementType.Issued,
+                context.PostedAtUtc);
+
+            if (historyResult.IsFailure)
+            {
+                return Result.Failure(historyResult.Error);
+            }
+
+            Result<Custody> custodyResult = Custody.Open(
+                Guid.NewGuid(),
+                asset.Id,
+                issueTo.RecipientType,
+                issueTo.RecipientId,
+                custodyKind,
+                context.Document.Id,
+                context.PostedAtUtc);
+
+            if (custodyResult.IsFailure)
+            {
+                return Result.Failure(custodyResult.Error);
+            }
+
+            dbContext.AssetMovementHistories.Add(historyResult.Value);
+            dbContext.Custodies.Add(custodyResult.Value);
+        }
+
+        return Result.Success();
+    }
 
     private async Task<Result> EnsureRecipientActiveAsync(IssueTo issueTo, CancellationToken cancellationToken)
     {

@@ -8,6 +8,7 @@ using Domain.DocumentLines;
 using Domain.MaterialFamilies;
 using Domain.Materials;
 using Domain.MaterialUnitConversions;
+using Domain.InventoryAdjustments;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -69,6 +70,13 @@ internal sealed class UpdateDocumentLineCommandHandler(
         if (line is null)
         {
             return Result.Failure(DocumentLineErrors.NotFound(command.LineId));
+        }
+
+        bool hasAdjustmentDetail = await context.AdjustmentLines.AsNoTracking()
+            .AnyAsync(item => item.Id == line.Id, cancellationToken);
+        if (hasAdjustmentDetail)
+        {
+            return Result.Failure(AdjustmentLineErrors.MustUseDedicatedEndpoint(line.Id));
         }
 
         Result<DocumentLineCatalogContext> catalogResult = await DocumentLineCatalogResolver.ResolveAsync(

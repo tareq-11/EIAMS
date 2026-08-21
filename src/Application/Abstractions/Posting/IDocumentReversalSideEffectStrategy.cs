@@ -21,5 +21,7 @@ public interface IDocumentReversalSideEffectStrategy
     Task<Result> ApplyAsync(
         WarehouseDocument source,
         WarehouseDocument reversal,
+        Guid postedBy,
+        DateTime postedAtUtc,
         CancellationToken cancellationToken);
 }

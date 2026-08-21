@@ -1,10 +1,16 @@
 using Application.Abstractions.Data;
 using Domain.DocumentAttachments;
 using Domain.Assets;
+using Domain.AssetMovementHistories;
+using Domain.Custodies;
+using Domain.CustodyHistories;
+using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
 using Domain.InventoryBalances;
+using Domain.InventoryAdjustments;
+using Domain.InventoryCounts;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -16,6 +22,7 @@ using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.ReceivingInfos;
+using Domain.ReturnInfos;
 using Domain.Sites;
 using Domain.StockMovements;
 using Domain.TransferInfos;
@@ -97,6 +104,28 @@ public sealed class ApplicationDbContext(
     public DbSet<IssueTo> IssueTos { get; set; }
 
     public DbSet<TransferInfo> TransferInfos { get; set; }
+
+    public DbSet<AssetMovementHistory> AssetMovementHistories { get; set; }
+
+    public DbSet<Custody> Custodies { get; set; }
+
+    public DbSet<CustodyHistory> CustodyHistories { get; set; }
+
+    public DbSet<DocumentLineAssetSelection> DocumentLineAssetSelections { get; set; }
+
+    public DbSet<ReturnInfo> ReturnInfos { get; set; }
+
+    public DbSet<AssetCurrentStatusView> AssetCurrentStatuses { get; set; }
+
+    public DbSet<InventoryCount> InventoryCounts { get; set; }
+
+    public DbSet<InventoryCountScopeMaterial> InventoryCountScopeMaterials { get; set; }
+
+    public DbSet<InventoryCountLine> InventoryCountLines { get; set; }
+
+    public DbSet<InventoryAdjustment> InventoryAdjustments { get; set; }
+
+    public DbSet<AdjustmentLine> AdjustmentLines { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

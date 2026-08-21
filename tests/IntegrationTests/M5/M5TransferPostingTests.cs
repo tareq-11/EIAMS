@@ -6,6 +6,7 @@ using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
 using Domain.Materials;
+using Domain.InventoryCounts;
 using Domain.Organizations;
 using Domain.StockMovements;
 using Domain.TransferInfos;
@@ -89,6 +90,27 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await GetBalanceAsync(dbContext, seed.SourceWarehouseId, seed.MaterialId)).ShouldBe(3m);
         (await dbContext.StockMovements.AnyAsync(item => item.DocumentId == transfer.Id)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task TransferPost_Should_BeBlocked_WhenDestinationHasHardFreeze()
+    {
+        // Arrange
+        M5Seed seed = await SeedAsync(includeDestinationTransferCapability: true);
+        await CreateAndPostOpeningAsync(seed, 5m);
+        SubmittedDocument transfer = await CreateSubmittedTransferAsync(seed, 2m);
+        await StartHardFreezeAsync(seed.DestinationWarehouseId, seed.UserId);
+
+        // Act
+        Result<Guid> result = await PostAsync(transfer.Id, transfer.RowVersion, seed.UserId);
+
+        // Assert
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("InventoryCounts.PostingBlocked");
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await dbContext.StockMovements.AnyAsync(item => item.DocumentId == transfer.Id)).ShouldBeFalse();
+        (await GetBalanceAsync(dbContext, seed.SourceWarehouseId, seed.MaterialId)).ShouldBe(5m);
     }
 
     [Fact]
@@ -387,7 +409,29 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IDocumentPostingCoordinator coordinator = scope.ServiceProvider.GetRequiredService<IDocumentPostingCoordinator>();
-        return await coordinator.PostAsync(documentId, rowVersion, userId, CancellationToken.None);
+        Result<PostingOutcome> result = await coordinator.PostAsync(
+            documentId, rowVersion, userId, CancellationToken.None);
+        return result.IsFailure
+            ? Result.Failure<Guid>(result.Error)
+            : result.Value.DocumentId;
+    }
+
+    private async Task StartHardFreezeAsync(Guid warehouseId, Guid userId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        InventoryCount count = InventoryCount.Plan(
+            Guid.NewGuid(),
+            warehouseId,
+            userId,
+            InventoryCountType.Surprise,
+            InventoryCountScopeType.EntireWarehouse,
+            null,
+            FreezePolicy.HardFreeze,
+            DateTime.UtcNow).Value;
+        count.Start(DateTime.UtcNow.AddTicks(1)).IsSuccess.ShouldBeTrue();
+        context.InventoryCounts.Add(count);
+        await context.SaveChangesAsync();
     }
 
     private static Task<decimal> GetBalanceAsync(ApplicationDbContext context, Guid warehouseId, Guid materialId) => context.InventoryBalances.Where(item => item.WarehouseId == warehouseId && item.MaterialId == materialId).Select(item => item.Quantity).SingleAsync();

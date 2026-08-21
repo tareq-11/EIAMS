@@ -2,11 +2,9 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Application.Abstractions.Numbering;
+using Application.Abstractions.WarehouseDocuments;
 using Domain.Common;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
-using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
 namespace Application.WarehouseDocuments.Create;
@@ -15,7 +13,7 @@ internal sealed class CreateWarehouseDocumentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
-    IReferenceNumberGenerator referenceNumberGenerator)
+    IWarehouseDocumentDraftFactory draftFactory)
     : ICommandHandler<CreateWarehouseDocumentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(CreateWarehouseDocumentCommand command, CancellationToken cancellationToken)
@@ -32,39 +30,14 @@ internal sealed class CreateWarehouseDocumentCommandHandler(
             return Result.Failure<Guid>(WarehouseDocumentErrors.Forbidden);
         }
 
-        Warehouse? warehouse = await context.Warehouses
-            .SingleOrDefaultAsync(w => w.Id == command.WarehouseId, cancellationToken);
-
-        if (warehouse is null)
+        Result<WarehouseDocument> documentResult = await draftFactory.CreateAsync(
+            command.WarehouseId, command.DocumentType, cancellationToken);
+        if (documentResult.IsFailure)
         {
-            return Result.Failure<Guid>(WarehouseErrors.NotFound(command.WarehouseId));
+            return Result.Failure<Guid>(documentResult.Error);
         }
 
-        if (warehouse.Status != Status.Active)
-        {
-            return Result.Failure<Guid>(WarehouseErrors.Inactive(command.WarehouseId));
-        }
-
-        if (!warehouse.CanHoldStock)
-        {
-            return Result.Failure<Guid>(WarehouseErrors.CannotHoldStock(command.WarehouseId));
-        }
-
-        Result<string> referenceResult = await referenceNumberGenerator.AllocateAsync(
-            warehouse.SiteId,
-            command.DocumentType,
-            cancellationToken);
-
-        if (referenceResult.IsFailure)
-        {
-            return Result.Failure<Guid>(referenceResult.Error);
-        }
-
-        var document = WarehouseDocument.CreateDraft(
-            Guid.NewGuid(),
-            command.WarehouseId,
-            command.DocumentType,
-            referenceResult.Value);
+        WarehouseDocument document = documentResult.Value;
 
         context.WarehouseDocuments.Add(document);
 

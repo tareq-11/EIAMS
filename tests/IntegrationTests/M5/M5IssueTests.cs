@@ -387,7 +387,11 @@ public sealed class M5IssueTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         IDocumentPostingCoordinator coordinator = scope.ServiceProvider.GetRequiredService<IDocumentPostingCoordinator>();
-        return await coordinator.PostAsync(documentId, rowVersion, userId, CancellationToken.None);
+        Result<PostingOutcome> result = await coordinator.PostAsync(
+            documentId, rowVersion, userId, CancellationToken.None);
+        return result.IsFailure
+            ? Result.Failure<Guid>(result.Error)
+            : result.Value.DocumentId;
     }
 
     private async Task GrantWarehouseDocumentPermissionsAsync(Guid userId, Guid warehouseId)

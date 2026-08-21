@@ -92,6 +92,28 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
             })
             .SingleOrDefaultAsync(cancellationToken);
 
+        document.ReturnInfo = await context.ReturnInfos
+            .AsNoTracking()
+            .Where(info => info.Id == query.DocumentId)
+            .Select(info => new ReturnInfoResponse
+            {
+                OriginalIssueDocumentId = info.OriginalIssueDocumentId,
+                ReturnReason = info.ReturnReason
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        document.InventoryAdjustment = await context.InventoryAdjustments
+            .AsNoTracking()
+            .Where(info => info.Id == query.DocumentId)
+            .Select(info => new InventoryAdjustmentResponse
+            {
+                CountId = info.CountId,
+                AdjustmentKind = info.AdjustmentKind.ToString(),
+                Status = info.Status.ToString(),
+                Reason = info.Reason
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
         document.Lines = await context.DocumentLines
             .Where(l => l.DocumentId == query.DocumentId)
             .Select(l => new DocumentLineResponse
@@ -111,6 +133,23 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
             .ToListAsync(cancellationToken);
 
         Guid[] lineIds = document.Lines.Select(line => line.Id).ToArray();
+
+        Dictionary<Guid, AdjustmentLineResponse> adjustmentsByLineId = await context.AdjustmentLines
+            .AsNoTracking()
+            .Where(item => lineIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, item => new AdjustmentLineResponse
+            {
+                Difference = item.Difference,
+                Reason = item.Reason
+            }, cancellationToken);
+
+        foreach (DocumentLineResponse line in document.Lines)
+        {
+            if (adjustmentsByLineId.TryGetValue(line.Id, out AdjustmentLineResponse? adjustment))
+            {
+                line.Adjustment = adjustment;
+            }
+        }
 
         var assets = await context.Assets
             .AsNoTracking()
@@ -139,6 +178,37 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
             if (assetsByLineId.TryGetValue(line.Id, out List<DocumentLineAssetResponse>? lineAssets))
             {
                 line.Assets = lineAssets;
+            }
+        }
+
+        var selectedAssets = await (
+                from selection in context.DocumentLineAssetSelections.AsNoTracking()
+                join asset in context.Assets.AsNoTracking() on selection.AssetId equals asset.Id
+                where selection.DocumentId == query.DocumentId
+                select new
+                {
+                    selection.DocumentLineId,
+                    Selection = new DocumentLineSelectedAssetResponse
+                    {
+                        SelectionId = selection.Id,
+                        AssetId = asset.Id,
+                        AssetNumber = asset.AssetNumber,
+                        SerialNumber = asset.SerialNumber
+                    }
+                })
+            .ToListAsync(cancellationToken);
+
+        var selectedAssetsByLineId = selectedAssets
+            .GroupBy(item => item.DocumentLineId)
+            .ToDictionary(group => group.Key, group => group.Select(item => item.Selection).ToList());
+
+        foreach (DocumentLineResponse line in document.Lines)
+        {
+            if (selectedAssetsByLineId.TryGetValue(
+                    line.Id,
+                    out List<DocumentLineSelectedAssetResponse>? lineSelections))
+            {
+                line.SelectedAssets = lineSelections;
             }
         }
 

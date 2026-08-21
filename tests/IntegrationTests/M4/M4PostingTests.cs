@@ -661,7 +661,11 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
         IDocumentPostingCoordinator coordinator =
             scope.ServiceProvider.GetRequiredService<IDocumentPostingCoordinator>();
 
-        return await coordinator.PostAsync(documentId, rowVersion, postedBy, CancellationToken.None);
+        Result<PostingOutcome> result = await coordinator.PostAsync(
+            documentId, rowVersion, postedBy, CancellationToken.None);
+        return result.IsFailure
+            ? Result.Failure<Guid>(result.Error)
+            : result.Value.DocumentId;
     }
 
     private sealed record M4Seed(

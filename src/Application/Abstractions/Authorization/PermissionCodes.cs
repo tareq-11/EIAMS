@@ -82,4 +82,12 @@ public static class PermissionCodes
         public const string Review = "warehouse-documents:review";
         public const string Reverse = "warehouse-documents:reverse";
     }
+
+    public static class InventoryCounts
+    {
+        public const string View = "inventory-counts:view";
+        public const string Plan = "inventory-counts:plan";
+        public const string EnterActual = "inventory-counts:enter-actual";
+        public const string Review = "inventory-counts:review";
+    }
 }

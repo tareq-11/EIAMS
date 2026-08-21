@@ -28,4 +28,8 @@ public static class WellKnownPermissions
     public static readonly Guid WarehouseDocumentsCancelId = Guid.Parse("00000000-0000-0000-0000-000000000119");
     public static readonly Guid WarehouseDocumentsReviewId = Guid.Parse("00000000-0000-0000-0000-000000000120");
     public static readonly Guid WarehouseDocumentsReverseId = Guid.Parse("00000000-0000-0000-0000-000000000121");
+    public static readonly Guid InventoryCountsViewId = Guid.Parse("00000000-0000-0000-0000-000000000122");
+    public static readonly Guid InventoryCountsPlanId = Guid.Parse("00000000-0000-0000-0000-000000000123");
+    public static readonly Guid InventoryCountsEnterActualId = Guid.Parse("00000000-0000-0000-0000-000000000124");
+    public static readonly Guid InventoryCountsReviewId = Guid.Parse("00000000-0000-0000-0000-000000000125");
 }

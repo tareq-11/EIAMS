@@ -41,6 +41,8 @@ internal sealed class AssetCreationReversalSideEffectStrategy(
     public async Task<Result> ApplyAsync(
         WarehouseDocument source,
         WarehouseDocument reversal,
+        Guid postedBy,
+        DateTime postedAtUtc,
         CancellationToken cancellationToken)
     {
         Result validationResult = await ValidateAsync(source, reversal, cancellationToken);

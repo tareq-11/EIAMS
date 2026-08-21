@@ -4,6 +4,11 @@ namespace Domain.Assets;
 
 public static class AssetErrors
 {
+    public static Error NotFound(Guid assetId) => Error.NotFound(
+        "Assets.NotFound",
+        "The asset was not found.",
+        new { asset_id = assetId });
+
     public static readonly Error AssetNumberInvalid = Error.Problem(
         "Assets.AssetNumberInvalid",
         "Asset number is required and must not exceed 100 characters.");

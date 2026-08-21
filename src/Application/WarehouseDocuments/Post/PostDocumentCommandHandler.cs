@@ -16,9 +16,11 @@ internal sealed class PostDocumentCommandHandler(
     IScopeAuthorizationService scopeAuthorizationService,
     IDocumentPostingScopeResolver postingScopeResolver,
     IDocumentPostingCoordinator postingCoordinator)
-    : ICommandHandler<PostDocumentCommand>
+    : ICommandHandler<PostDocumentCommand, PostDocumentResponse>
 {
-    public async Task<Result> Handle(PostDocumentCommand command, CancellationToken cancellationToken)
+    public async Task<Result<PostDocumentResponse>> Handle(
+        PostDocumentCommand command,
+        CancellationToken cancellationToken)
     {
         WarehouseDocument? document = await context.WarehouseDocuments
             .AsNoTracking()
@@ -26,7 +28,7 @@ internal sealed class PostDocumentCommandHandler(
 
         if (document is null)
         {
-            return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            return Result.Failure<PostDocumentResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
         bool hasReview = await scopeAuthorizationService.HasPermissionInScopeAsync(
@@ -38,7 +40,7 @@ internal sealed class PostDocumentCommandHandler(
 
         if (!hasReview)
         {
-            return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            return Result.Failure<PostDocumentResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
         Result<IReadOnlyCollection<Guid>> scopeResult = await postingScopeResolver.ResolveAsync(
@@ -47,7 +49,7 @@ internal sealed class PostDocumentCommandHandler(
 
         if (scopeResult.IsFailure)
         {
-            return Result.Failure(scopeResult.Error);
+            return Result.Failure<PostDocumentResponse>(scopeResult.Error);
         }
 
         foreach (Guid warehouseId in scopeResult.Value.Where(id => id != document.WarehouseId))
@@ -61,7 +63,7 @@ internal sealed class PostDocumentCommandHandler(
 
             if (!canReviewDestination)
             {
-                return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+                return Result.Failure<PostDocumentResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
             }
         }
 
@@ -80,17 +82,30 @@ internal sealed class PostDocumentCommandHandler(
 
                 if (!hasReverse)
                 {
-                    return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+                    return Result.Failure<PostDocumentResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
                 }
             }
         }
 
-        Result<Guid> postResult = await postingCoordinator.PostAsync(
+        Result<PostingOutcome> postResult = await postingCoordinator.PostAsync(
             command.DocumentId,
             command.ExpectedRowVersion,
             userContext.UserId,
             cancellationToken);
 
-        return postResult.IsFailure ? Result.Failure(postResult.Error) : Result.Success();
+        if (postResult.IsFailure)
+        {
+            return Result.Failure<PostDocumentResponse>(postResult.Error);
+        }
+
+        return new PostDocumentResponse(
+            postResult.Value.DocumentId,
+            postResult.Value.Warnings
+                .Select(warning => new PostDocumentWarningResponse(
+                    warning.Code,
+                    warning.Message,
+                    warning.CountId,
+                    warning.WarehouseId))
+                .ToList());
     }
 }

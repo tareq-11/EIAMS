@@ -3,7 +3,9 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
+using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
+using Domain.InventoryAdjustments;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -63,6 +65,22 @@ internal sealed class RemoveDocumentLineCommandHandler(
         if (line is null)
         {
             return Result.Failure(DocumentLineErrors.NotFound(command.LineId));
+        }
+
+        bool hasAssetSelections = await context.DocumentLineAssetSelections
+            .AsNoTracking()
+            .AnyAsync(selection => selection.DocumentLineId == line.Id, cancellationToken);
+
+        if (hasAssetSelections)
+        {
+            return Result.Failure(DocumentLineAssetSelectionErrors.LineHasSelections(line.Id));
+        }
+
+        bool hasAdjustmentDetail = await context.AdjustmentLines.AsNoTracking()
+            .AnyAsync(item => item.Id == line.Id, cancellationToken);
+        if (hasAdjustmentDetail)
+        {
+            return Result.Failure(AdjustmentLineErrors.MustUseDedicatedEndpoint(line.Id));
         }
 
         line.MarkAsRemoved();

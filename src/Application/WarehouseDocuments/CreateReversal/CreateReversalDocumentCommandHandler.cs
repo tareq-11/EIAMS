@@ -5,6 +5,7 @@ using Application.Abstractions.Messaging;
 using Application.Abstractions.Numbering;
 using Domain.Common;
 using Domain.DocumentLines;
+using Domain.InventoryAdjustments;
 using Domain.Warehouses;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
@@ -47,6 +48,18 @@ internal sealed class CreateReversalDocumentCommandHandler(
         if (source.DocumentStatus != DocumentStatus.Posted || source.ReversalOfDocumentId is not null)
         {
             return Result.Failure<Guid>(WarehouseDocumentErrors.NotEligibleForReversal(source.Id, source.DocumentStatus));
+        }
+
+        if (source.DocumentType == DocumentType.Adjustment)
+        {
+            AdjustmentKind? kind = await context.InventoryAdjustments.AsNoTracking()
+                .Where(item => item.Id == source.Id)
+                .Select(item => (AdjustmentKind?)item.AdjustmentKind)
+                .SingleOrDefaultAsync(cancellationToken);
+            if (kind == AdjustmentKind.Disposal)
+            {
+                return Result.Failure<Guid>(InventoryAdjustmentErrors.DisposalReversalNotAllowed(source.Id));
+            }
         }
 
         bool alreadyReversed = await context.WarehouseDocuments

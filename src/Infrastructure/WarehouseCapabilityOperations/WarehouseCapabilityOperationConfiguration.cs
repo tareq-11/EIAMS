@@ -17,7 +17,7 @@ internal sealed class WarehouseCapabilityOperationConfiguration : IEntityTypeCon
 
         builder.ToTable(tableBuilder => tableBuilder.HasCheckConstraint(
             "ck_warehouse_capability_operations_operation_type_valid",
-            "operation_type IN ('Receiving', 'Issue', 'Transfer', 'Count', 'Return')"));
+            "operation_type IN ('Receiving', 'Issue', 'Transfer', 'Count', 'Return', 'Adjustment')"));
 
         builder.HasOne<WarehouseCapability>().WithMany()
             .HasForeignKey(o => o.CapabilityId)

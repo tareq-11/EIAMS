@@ -10,5 +10,6 @@ public enum OperationType
     Issue,
     Transfer,
     Count,
-    Return
+    Return,
+    Adjustment
 }

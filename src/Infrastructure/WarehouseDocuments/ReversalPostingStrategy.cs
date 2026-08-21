@@ -120,6 +120,8 @@ internal sealed class ReversalPostingStrategy(
             Result sideEffectResult = await sideEffectContext.Strategy.ApplyAsync(
                 sideEffectContext.SourceDocument,
                 context.Document,
+                context.PostedBy,
+                context.PostedAtUtc,
                 cancellationToken);
 
             if (sideEffectResult.IsFailure)

@@ -1,6 +1,7 @@
 using System.Text;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Assets;
+using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Ledger;
@@ -15,6 +16,7 @@ using Infrastructure.Authorization;
 using Infrastructure.Database;
 using Infrastructure.DomainEvents;
 using Infrastructure.Ledger;
+using Infrastructure.InventoryCounts;
 using Infrastructure.Numbering;
 using Infrastructure.Recipients;
 using Infrastructure.Storage;
@@ -80,13 +82,31 @@ public static class DependencyInjection
 
         services.AddScoped<IDocumentPostingStrategy, TransferPostingStrategy>();
 
+        services.AddScoped<IDocumentPostingStrategy, ReturnPostingStrategy>();
+
+        services.AddScoped<IDocumentPostingStrategy, AdjustmentPostingStrategy>();
+
         services.AddScoped<IDocumentReversalSideEffectStrategy, AssetCreationReversalSideEffectStrategy>();
+
+        services.AddScoped<IDocumentReversalSideEffectStrategy, AssetCustodyReversalSideEffectStrategy>();
+
+        services.AddScoped<IDocumentReversalSideEffectStrategy, AdjustmentReversalSideEffectStrategy>();
 
         services.AddSingleton<IAssetNumberGenerator, AssetNumberGenerator>();
 
         services.AddScoped<IReceivedAssetFactory, ReceivedAssetFactory>();
 
         services.AddScoped<IAssetUsageChecker, AssetUsageChecker>();
+
+        services.AddScoped<IAssetKeyLock, PostgresAssetKeyLock>();
+
+        services.AddScoped<IAssetLifecycleGuard, AssetLifecycleGuard>();
+
+        services.AddScoped<IWarehouseOperationLock, PostgresWarehouseOperationLock>();
+
+        services.AddScoped<IInventoryFreezePolicyService, InventoryFreezePolicyService>();
+
+        services.AddScoped<AssetPostingSelectionService>();
 
         services.AddScoped<IFileStorage, LocalFileStorage>();
 

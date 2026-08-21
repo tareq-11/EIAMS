@@ -1,6 +1,7 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Assets;
 using Application.Abstractions.Ledger;
+using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Posting;
 using Application.DocumentLines;
 using Domain.Common;
@@ -18,6 +19,9 @@ internal sealed class DocumentPostingCoordinator(
     IApplicationDbContext context,
     IApplicationTransaction transaction,
     IDocumentLock documentLock,
+    IDocumentPostingScopeResolver postingScopeResolver,
+    IWarehouseOperationLock warehouseOperationLock,
+    IInventoryFreezePolicyService freezePolicyService,
     IInventoryLedgerWriter ledgerWriter,
     IEnumerable<IDocumentPostingStrategy> strategies,
     IEnumerable<IDocumentSubmissionValidator> submissionValidators,
@@ -25,7 +29,7 @@ internal sealed class DocumentPostingCoordinator(
     IDateTimeProvider dateTimeProvider,
     IOptions<AssetCreationOptions> assetCreationOptions) : IDocumentPostingCoordinator
 {
-    public Task<Result<Guid>> PostAsync(
+    public Task<Result<PostingOutcome>> PostAsync(
         Guid documentId,
         int expectedRowVersion,
         Guid postedBy,
@@ -34,7 +38,7 @@ internal sealed class DocumentPostingCoordinator(
             ct => PostInTransactionAsync(documentId, expectedRowVersion, postedBy, ct),
             cancellationToken);
 
-    private async Task<Result<Guid>> PostInTransactionAsync(
+    private async Task<Result<PostingOutcome>> PostInTransactionAsync(
         Guid documentId,
         int expectedRowVersion,
         Guid postedBy,
@@ -44,14 +48,14 @@ internal sealed class DocumentPostingCoordinator(
 
         if (lockResult.IsFailure)
         {
-            return Result.Failure<Guid>(lockResult.Error);
+            return Result.Failure<PostingOutcome>(lockResult.Error);
         }
 
         WarehouseDocument document = lockResult.Value;
 
         if (document.RowVersion != expectedRowVersion)
         {
-            return Result.Failure<Guid>(WarehouseDocumentErrors.RowVersionMismatch(
+            return Result.Failure<PostingOutcome>(WarehouseDocumentErrors.RowVersionMismatch(
                 documentId,
                 expectedRowVersion,
                 document.RowVersion));
@@ -61,7 +65,7 @@ internal sealed class DocumentPostingCoordinator(
 
         if (postingGateResult.IsFailure)
         {
-            return Result.Failure<Guid>(postingGateResult.Error);
+            return Result.Failure<PostingOutcome>(postingGateResult.Error);
         }
 
         bool hasValidSignedOriginal = await context.DocumentAttachments.AnyAsync(
@@ -72,7 +76,7 @@ internal sealed class DocumentPostingCoordinator(
 
         if (!hasValidSignedOriginal)
         {
-            return Result.Failure<Guid>(WarehouseDocumentErrors.SignedCopyRequired(document.Id));
+            return Result.Failure<PostingOutcome>(WarehouseDocumentErrors.SignedCopyRequired(document.Id));
         }
 
         Warehouse? warehouse = await context.Warehouses
@@ -80,17 +84,17 @@ internal sealed class DocumentPostingCoordinator(
 
         if (warehouse is null)
         {
-            return Result.Failure<Guid>(WarehouseErrors.NotFound(document.WarehouseId));
+            return Result.Failure<PostingOutcome>(WarehouseErrors.NotFound(document.WarehouseId));
         }
 
         if (warehouse.Status != Status.Active)
         {
-            return Result.Failure<Guid>(WarehouseErrors.Inactive(document.WarehouseId));
+            return Result.Failure<PostingOutcome>(WarehouseErrors.Inactive(document.WarehouseId));
         }
 
         if (!warehouse.CanHoldStock)
         {
-            return Result.Failure<Guid>(WarehouseErrors.CannotHoldStock(document.WarehouseId));
+            return Result.Failure<PostingOutcome>(WarehouseErrors.CannotHoldStock(document.WarehouseId));
         }
 
         List<DocumentLine> lines = await context.DocumentLines
@@ -98,6 +102,21 @@ internal sealed class DocumentPostingCoordinator(
             .OrderBy(l => l.CreatedAtUtc)
             .ThenBy(l => l.Id)
             .ToListAsync(cancellationToken);
+
+        Result<IReadOnlyCollection<Guid>> scopesResult = await postingScopeResolver.ResolveAsync(document, cancellationToken);
+        if (scopesResult.IsFailure)
+        {
+            return Result.Failure<PostingOutcome>(scopesResult.Error);
+        }
+
+        await warehouseOperationLock.AcquireAsync(scopesResult.Value, cancellationToken);
+        InventoryFreezeEvaluation freezeEvaluation = await freezePolicyService.EvaluateAsync(
+            scopesResult.Value,
+            cancellationToken);
+        if (freezeEvaluation.BlockingError is not null)
+        {
+            return Result.Failure<PostingOutcome>(freezeEvaluation.BlockingError);
+        }
 
         Result linesValidationResult = await DocumentLineSubmissionValidator.ValidateAsync(
             context,
@@ -108,7 +127,7 @@ internal sealed class DocumentPostingCoordinator(
 
         if (linesValidationResult.IsFailure)
         {
-            return Result.Failure<Guid>(linesValidationResult.Error);
+            return Result.Failure<PostingOutcome>(linesValidationResult.Error);
         }
 
         DateTime postedAtUtc = dateTimeProvider.UtcNow;
@@ -129,7 +148,7 @@ internal sealed class DocumentPostingCoordinator(
 
             if (strategy is null)
             {
-                return Result.Failure<Guid>(
+                return Result.Failure<PostingOutcome>(
                     WarehouseDocumentErrors.PostingStrategyNotAvailable(documentId, document.DocumentType));
             }
 
@@ -138,7 +157,7 @@ internal sealed class DocumentPostingCoordinator(
 
         if (planResult.IsFailure)
         {
-            return Result.Failure<Guid>(planResult.Error);
+            return Result.Failure<PostingOutcome>(planResult.Error);
         }
 
         PostingPlan plan = planResult.Value;
@@ -151,7 +170,7 @@ internal sealed class DocumentPostingCoordinator(
 
             if (sideEffectsValidationResult.IsFailure)
             {
-                return Result.Failure<Guid>(sideEffectsValidationResult.Error);
+                return Result.Failure<PostingOutcome>(sideEffectsValidationResult.Error);
             }
         }
 
@@ -159,7 +178,7 @@ internal sealed class DocumentPostingCoordinator(
 
         if (ledgerResult.IsFailure)
         {
-            return Result.Failure<Guid>(ledgerResult.Error);
+            return Result.Failure<PostingOutcome>(ledgerResult.Error);
         }
 
         Result sideEffectsResult = isReversal
@@ -170,18 +189,26 @@ internal sealed class DocumentPostingCoordinator(
 
         if (sideEffectsResult.IsFailure)
         {
-            return Result.Failure<Guid>(sideEffectsResult.Error);
+            return Result.Failure<PostingOutcome>(sideEffectsResult.Error);
         }
 
         Result markPostedResult = document.MarkPosted(postedBy, postedAtUtc);
 
         if (markPostedResult.IsFailure)
         {
-            return Result.Failure<Guid>(markPostedResult.Error);
+            return Result.Failure<PostingOutcome>(markPostedResult.Error);
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return document.Id;
+        return new PostingOutcome(
+            document.Id,
+            freezeEvaluation.Warnings
+                .Select(warning => new PostingWarning(
+                    warning.Code,
+                    warning.Message,
+                    warning.CountId,
+                    warning.WarehouseId))
+                .ToList());
     }
 }

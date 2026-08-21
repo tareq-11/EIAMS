@@ -41,13 +41,23 @@ internal sealed class RolePermissionConfiguration : IEntityTypeConfiguration<Rol
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsCancelId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsReviewId },
             new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.WarehouseDocumentsReverseId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.InventoryCountsViewId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.InventoryCountsPlanId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.InventoryCountsEnterActualId },
+            new { RoleId = WellKnownRoles.AdministratorId, PermissionId = WellKnownPermissions.InventoryCountsReviewId },
             new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsViewId },
             new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsCreateId },
             new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsEditId },
             new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsSubmitId },
             new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.WarehouseDocumentsCancelId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.InventoryCountsViewId },
+            new { RoleId = WellKnownRoles.WarehouseKeeperId, PermissionId = WellKnownPermissions.InventoryCountsEnterActualId },
             new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsViewId },
             new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsReviewId },
-            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsReverseId });
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.WarehouseDocumentsReverseId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.InventoryCountsViewId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.InventoryCountsPlanId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.InventoryCountsEnterActualId },
+            new { RoleId = WellKnownRoles.WarehouseManagerId, PermissionId = WellKnownPermissions.InventoryCountsReviewId });
     }
 }

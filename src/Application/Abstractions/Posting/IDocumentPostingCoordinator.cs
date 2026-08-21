@@ -11,7 +11,7 @@ namespace Application.Abstractions.Posting;
 /// </summary>
 public interface IDocumentPostingCoordinator
 {
-    Task<Result<Guid>> PostAsync(
+    Task<Result<PostingOutcome>> PostAsync(
         Guid documentId,
         int expectedRowVersion,
         Guid postedBy,

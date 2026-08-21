@@ -141,6 +141,30 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
                 Id = WellKnownPermissions.WarehouseDocumentsReverseId,
                 Code = PermissionCodes.WarehouseDocuments.Reverse,
                 Description = (string?)"Authorize posting a reversal of a posted warehouse document."
+            },
+            new
+            {
+                Id = WellKnownPermissions.InventoryCountsViewId,
+                Code = PermissionCodes.InventoryCounts.View,
+                Description = (string?)"View warehouse inventory counts and freeze status."
+            },
+            new
+            {
+                Id = WellKnownPermissions.InventoryCountsPlanId,
+                Code = PermissionCodes.InventoryCounts.Plan,
+                Description = (string?)"Plan inventory counts and capture snapshots."
+            },
+            new
+            {
+                Id = WellKnownPermissions.InventoryCountsEnterActualId,
+                Code = PermissionCodes.InventoryCounts.EnterActual,
+                Description = (string?)"Enter actual quantities during inventory counts."
+            },
+            new
+            {
+                Id = WellKnownPermissions.InventoryCountsReviewId,
+                Code = PermissionCodes.InventoryCounts.Review,
+                Description = (string?)"Start, complete, explain, and close inventory counts."
             });
     }
 }

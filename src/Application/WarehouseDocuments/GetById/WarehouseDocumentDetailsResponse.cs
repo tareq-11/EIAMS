@@ -18,6 +18,8 @@ public sealed class WarehouseDocumentDetailsResponse
     public ReceivingInfoResponse? ReceivingInfo { get; set; }
     public IssueToResponse? IssueTo { get; set; }
     public TransferInfoResponse? TransferInfo { get; set; }
+    public ReturnInfoResponse? ReturnInfo { get; set; }
+    public InventoryAdjustmentResponse? InventoryAdjustment { get; set; }
     public List<DocumentLineResponse> Lines { get; set; } = [];
     public List<DocumentAttachmentResponse> Attachments { get; set; } = [];
 }
@@ -36,6 +38,8 @@ public sealed class DocumentLineResponse
     public DateOnly? ExpiryDate { get; init; }
     public string? OpeningType { get; init; }
     public List<DocumentLineAssetResponse> Assets { get; set; } = [];
+    public List<DocumentLineSelectedAssetResponse> SelectedAssets { get; set; } = [];
+    public AdjustmentLineResponse? Adjustment { get; set; }
 }
 
 public sealed class ReceivingInfoResponse
@@ -56,6 +60,34 @@ public sealed class TransferInfoResponse
 {
     public Guid DestinationWarehouseId { get; init; }
     public string TransferReason { get; init; }
+}
+
+public sealed class ReturnInfoResponse
+{
+    public Guid OriginalIssueDocumentId { get; init; }
+    public string ReturnReason { get; init; }
+}
+
+public sealed class InventoryAdjustmentResponse
+{
+    public Guid? CountId { get; init; }
+    public string AdjustmentKind { get; init; }
+    public string Status { get; init; }
+    public string Reason { get; init; }
+}
+
+public sealed class AdjustmentLineResponse
+{
+    public decimal Difference { get; init; }
+    public string Reason { get; init; }
+}
+
+public sealed class DocumentLineSelectedAssetResponse
+{
+    public Guid SelectionId { get; init; }
+    public Guid AssetId { get; init; }
+    public string AssetNumber { get; init; }
+    public string? SerialNumber { get; init; }
 }
 
 public sealed class DocumentLineAssetResponse
