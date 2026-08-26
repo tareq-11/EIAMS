@@ -4,8 +4,8 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Domain.Common;
-using Domain.Warehouses;
 using Domain.WarehouseMaterialSettings;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -29,7 +29,7 @@ internal sealed class GetWarehouseMaterialSettingsQueryHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseMaterialSettings.Manage,
+            PermissionCodes.Warehouses.View,
             ScopeType.Warehouse,
             query.WarehouseId,
             cancellationToken);

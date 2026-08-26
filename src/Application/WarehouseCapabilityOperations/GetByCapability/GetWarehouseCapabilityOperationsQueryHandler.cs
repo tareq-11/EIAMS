@@ -21,6 +21,7 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehouseCapability? capability = await context.WarehouseCapabilities
+            .AsNoTracking()
             .SingleOrDefaultAsync(c => c.Id == query.CapabilityId, cancellationToken);
 
         if (capability is null)
@@ -31,7 +32,7 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseCapabilities.Manage,
+            PermissionCodes.Warehouses.View,
             ScopeType.Warehouse,
             capability.WarehouseId,
             cancellationToken);
@@ -43,6 +44,7 @@ internal sealed class GetWarehouseCapabilityOperationsQueryHandler(
         }
 
         PagedResult<WarehouseCapabilityOperationResponse> operations = await context.WarehouseCapabilityOperations
+            .AsNoTracking()
             .Where(o => o.CapabilityId == query.CapabilityId)
             .Select(o => new WarehouseCapabilityOperationResponse
             {

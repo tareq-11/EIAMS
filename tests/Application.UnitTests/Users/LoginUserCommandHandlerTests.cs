@@ -1,7 +1,7 @@
 using Application.Abstractions.Authentication;
+using Application.UnitTests.Abstractions;
 using Application.Users;
 using Application.Users.Login;
-using Application.UnitTests.Abstractions;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -22,7 +22,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             context,
             Substitute.For<IPasswordHasher>(),
             Substitute.For<ITokenProvider>(),
-            Substitute.For<IDateTimeProvider>());
+            Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -48,7 +49,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             context,
             passwordHasher,
             Substitute.For<ITokenProvider>(),
-            Substitute.For<IDateTimeProvider>());
+            Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -77,7 +79,12 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
 
-        var handler = new LoginUserCommandHandler(context, passwordHasher, tokenProvider, dateTimeProvider);
+        var handler = new LoginUserCommandHandler(
+            context,
+            passwordHasher,
+            tokenProvider,
+            dateTimeProvider,
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(

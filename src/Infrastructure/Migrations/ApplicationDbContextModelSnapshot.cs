@@ -212,6 +212,150 @@ namespace Infrastructure.Migrations
                     b.ToView("v_asset_current_status", "public");
                 });
 
+            modelBuilder.Entity("Domain.AuditLogs.AuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("AggregateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("aggregate_id");
+
+                    b.Property<string>("AggregateType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("aggregate_type");
+
+                    b.Property<string>("CommandName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("command_name");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)")
+                        .HasColumnName("ip_address");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operation_id");
+
+                    b.Property<string>("RequestId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_id");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_logs");
+
+                    b.HasIndex("RequestId")
+                        .HasDatabaseName("ix_audit_logs_request_id")
+                        .HasFilter("request_id IS NOT NULL");
+
+                    b.HasIndex("CreatedAtUtc", "Id")
+                        .IsDescending()
+                        .HasDatabaseName("ix_audit_logs_created_at_utc_id");
+
+                    b.HasIndex("OperationId", "CreatedAtUtc", "Id")
+                        .HasDatabaseName("ix_audit_logs_operation_id_created_at_utc_id");
+
+                    b.HasIndex("UserId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, true, true)
+                        .HasDatabaseName("ix_audit_logs_user_id_created_at_utc_id")
+                        .HasFilter("user_id IS NOT NULL");
+
+                    b.HasIndex("AggregateType", "AggregateId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_audit_logs_aggregate_type_aggregate_id_created_at_utc_id");
+
+                    b.HasIndex("EntityType", "EntityId", "CreatedAtUtc", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_audit_logs_entity_type_entity_id_created_at_utc_id");
+
+                    b.ToTable("audit_logs", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_audit_logs_action_not_blank", "btrim(action) <> ''");
+
+                            t.HasCheckConstraint("ck_audit_logs_entity_type_not_blank", "btrim(entity_type) <> ''");
+
+                            t.HasCheckConstraint("ck_audit_logs_summary_is_json_object", "summary IS NULL OR jsonb_typeof(summary) = 'object'");
+
+                            t.HasCheckConstraint("ck_audit_logs_summary_max_bytes", "summary IS NULL OR octet_length(summary::text) <= 16384");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.AuditLogs.AuditLogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuditLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("audit_log_id");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("field_name");
+
+                    b.Property<string>("NewValue")
+                        .HasColumnType("text")
+                        .HasColumnName("new_value");
+
+                    b.Property<string>("OldValue")
+                        .HasColumnType("text")
+                        .HasColumnName("old_value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_audit_log_entries");
+
+                    b.HasIndex("FieldName", "AuditLogId")
+                        .HasDatabaseName("ix_audit_log_entries_field_name_audit_log_id");
+
+                    b.HasIndex("AuditLogId", "FieldName", "Id")
+                        .HasDatabaseName("ix_audit_log_entries_audit_log_id_field_name_id");
+
+                    b.ToTable("audit_log_entries", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_audit_log_entries_field_name_not_blank", "btrim(field_name) <> ''");
+
+                            t.HasCheckConstraint("ck_audit_log_entries_values_distinct", "old_value IS DISTINCT FROM new_value");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Custodies.Custody", b =>
                 {
                     b.Property<Guid>("Id")
@@ -308,6 +452,10 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("HolderType", "HolderId")
                         .HasDatabaseName("ix_custodies_holder_type_holder_id");
+
+                    b.HasIndex("AssetId", "FromUtc", "Id")
+                        .HasDatabaseName("ix_custodies_asset_id_from_utc_id")
+                        .HasFilter("status = 'Active'");
 
                     b.ToTable("custodies", "public", t =>
                         {
@@ -467,6 +615,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_document_attachments");
+
+                    b.HasIndex("DocumentId")
+                        .HasDatabaseName("ix_document_attachments_document_id");
 
                     b.HasIndex("StorageKey")
                         .IsUnique()
@@ -775,8 +926,8 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_employees_employee_number");
 
-                    b.HasIndex("OrgUnitId")
-                        .HasDatabaseName("ix_employees_org_unit_id");
+                    b.HasIndex("OrgUnitId", "Status", "FullName")
+                        .HasDatabaseName("ix_employees_org_unit_id_status_full_name");
 
                     b.ToTable("employees", "public");
                 });
@@ -1056,6 +1207,9 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_inventory_counts_warehouse_id")
                         .HasFilter("status = 'InProgress'");
+
+                    b.HasIndex("WarehouseId", "Status", "PlannedAtUtc")
+                        .HasDatabaseName("ix_inventory_counts_warehouse_id_status_planned_at_utc");
 
                     b.ToTable("inventory_counts", "public", t =>
                         {
@@ -1864,6 +2018,84 @@ namespace Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000125"),
                             Code = "inventory-counts:review",
                             Description = "Start, complete, explain, and close inventory counts."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000126"),
+                            Code = "audit-logs:view",
+                            Description = "View the immutable audit trail of system activity."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000127"),
+                            Code = "organizations:view",
+                            Description = "View organizations."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000128"),
+                            Code = "sites:view",
+                            Description = "View sites."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000129"),
+                            Code = "org-units:view",
+                            Description = "View organizational units."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000130"),
+                            Code = "employees:view",
+                            Description = "View employees."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000131"),
+                            Code = "roles:view",
+                            Description = "View roles and permissions."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000132"),
+                            Code = "units-of-measure:view",
+                            Description = "View units of measure."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000133"),
+                            Code = "materials:view",
+                            Description = "View the material catalog and unit conversions."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000134"),
+                            Code = "warehouses:view",
+                            Description = "View warehouses, capabilities, and material settings."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000135"),
+                            Code = "inventory:view",
+                            Description = "View inventory balances and stock movements."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000136"),
+                            Code = "assets:view",
+                            Description = "View asset status."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000137"),
+                            Code = "custody:view",
+                            Description = "View custody state and history."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000138"),
+                            Code = "custody:manage",
+                            Description = "Assign and manage asset custody."
                         });
                 });
 
@@ -2173,6 +2405,71 @@ namespace Infrastructure.Migrations
                         },
                         new
                         {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000126")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000127")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000128")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000129")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000130")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000131")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000132")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000138")
+                        },
+                        new
+                        {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000115")
                         },
@@ -2208,6 +2505,36 @@ namespace Infrastructure.Migrations
                         },
                         new
                         {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000138")
+                        },
+                        new
+                        {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000115")
                         },
@@ -2240,6 +2567,31 @@ namespace Infrastructure.Migrations
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000125")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137")
                         });
                 });
 
@@ -2263,6 +2615,11 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
+
+                    b.Property<string>("GovernorateCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("governorate_code");
 
                     b.Property<string>("Location")
                         .HasMaxLength(300)
@@ -2300,10 +2657,17 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_sites_code");
 
+                    b.HasIndex("GovernorateCode")
+                        .HasDatabaseName("ix_sites_governorate_code")
+                        .HasFilter("governorate_code IS NOT NULL");
+
                     b.HasIndex("OrganizationId")
                         .HasDatabaseName("ix_sites_organization_id");
 
-                    b.ToTable("sites", "public");
+                    b.ToTable("sites", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_sites_governorate_code_valid", "governorate_code IS NULL OR governorate_code ~ '^[A-Z0-9_-]{1,20}$'");
+                        });
                 });
 
             modelBuilder.Entity("Domain.StockMovements.StockMovement", b =>
@@ -2363,12 +2727,17 @@ namespace Infrastructure.Migrations
                     b.HasIndex("WarehouseId", "MaterialId")
                         .HasDatabaseName("ix_stock_movements_warehouse_id_material_id");
 
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("WarehouseId", "MaterialId"), new[] { "QuantityDelta" });
+
                     b.HasIndex("DocumentId", "LineId", "MovementType")
                         .IsUnique()
                         .HasDatabaseName("ix_stock_movements_document_id_line_id_movement_type");
 
                     b.HasIndex("LineId", "DocumentId", "MaterialId")
                         .HasDatabaseName("ix_stock_movements_line_id_document_id_material_id");
+
+                    b.HasIndex("WarehouseId", "PostedAtUtc", "Id")
+                        .HasDatabaseName("ix_stock_movements_warehouse_id_posted_at_utc_id");
 
                     b.ToTable("stock_movements", "public", t =>
                         {
@@ -2826,8 +3195,8 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_warehouse_documents_system_reference_number");
 
-                    b.HasIndex("WarehouseId")
-                        .HasDatabaseName("ix_warehouse_documents_warehouse_id");
+                    b.HasIndex("WarehouseId", "DocumentStatus", "CreatedAtUtc")
+                        .HasDatabaseName("ix_warehouse_documents_warehouse_id_document_status_created_at");
 
                     b.ToTable("warehouse_documents", "public", t =>
                         {
@@ -3074,6 +3443,25 @@ namespace Infrastructure.Migrations
                         .HasPrincipalKey("Id", "MaterialId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_assets_document_lines_receipt_line_id_material_id");
+                });
+
+            modelBuilder.Entity("Domain.AuditLogs.AuditLog", b =>
+                {
+                    b.HasOne("Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_audit_logs_users_user_id");
+                });
+
+            modelBuilder.Entity("Domain.AuditLogs.AuditLogEntry", b =>
+                {
+                    b.HasOne("Domain.AuditLogs.AuditLog", null)
+                        .WithMany()
+                        .HasForeignKey("AuditLogId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_audit_log_entries_audit_logs_audit_log_id");
                 });
 
             modelBuilder.Entity("Domain.Custodies.Custody", b =>

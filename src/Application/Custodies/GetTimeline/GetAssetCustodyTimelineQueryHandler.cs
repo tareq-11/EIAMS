@@ -33,7 +33,7 @@ internal sealed class GetAssetCustodyTimelineQueryHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.View,
+            PermissionCodes.Custodies.View,
             ScopeType.Warehouse,
             warehouseId,
             cancellationToken);

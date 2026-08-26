@@ -1,7 +1,7 @@
 using Domain.DocumentAttachments;
 using Domain.Users;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -14,6 +14,8 @@ internal sealed class WarehouseDocumentConfiguration : IEntityTypeConfiguration<
         builder.HasKey(d => d.Id);
 
         builder.HasIndex(d => d.SystemReferenceNumber).IsUnique();
+
+        builder.HasIndex(d => new { d.WarehouseId, d.DocumentStatus, d.CreatedAtUtc });
 
         builder.HasIndex(d => d.ReversalOfDocumentId)
             .IsUnique()

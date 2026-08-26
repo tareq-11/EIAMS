@@ -14,11 +14,19 @@ internal sealed class PostgresWarehouseOperationLock(ApplicationDbContext dbCont
             throw new InvalidOperationException("Warehouse operation locks require an active database transaction.");
         }
 
-        foreach (Guid warehouseId in warehouseIds.Distinct().OrderBy(id => id))
+        string[] sortedKeys = warehouseIds
+            .Distinct()
+            .OrderBy(id => id)
+            .Select(id => $"warehouse:{id}")
+            .ToArray();
+
+        if (sortedKeys.Length == 0)
         {
-            await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtextextended({"warehouse:" + warehouseId}, 0))",
-                cancellationToken);
+            return;
         }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended(k, 0)) FROM unnest({sortedKeys}) AS k",
+            cancellationToken);
     }
 }

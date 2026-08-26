@@ -1,15 +1,16 @@
 using Application.Abstractions.Data;
-using Domain.Assets;
 using Domain.AssetMovementHistories;
+using Domain.Assets;
+using Domain.AuditLogs;
 using Domain.Custodies;
 using Domain.CustodyHistories;
-using Domain.DocumentLineAssetSelections;
 using Domain.DocumentAttachments;
+using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
-using Domain.InventoryBalances;
 using Domain.InventoryAdjustments;
+using Domain.InventoryBalances;
 using Domain.InventoryCounts;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
@@ -20,20 +21,20 @@ using Domain.MaterialUnitConversions;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Permissions;
-using Domain.Roles;
 using Domain.ReceivingInfos;
 using Domain.ReturnInfos;
+using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
 using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
-using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.Users;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
 using Domain.WarehouseMaterialSettings;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.UnitTests.Abstractions;
@@ -127,6 +128,10 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<AdjustmentLine> AdjustmentLines { get; set; }
 
+    public DbSet<AuditLog> AuditLogs { get; set; }
+
+    public DbSet<AuditLogEntry> AuditLogEntries { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<RolePermission>()
@@ -212,5 +217,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
         modelBuilder.Entity<InventoryCountLine>().HasKey(line => line.Id);
         modelBuilder.Entity<InventoryAdjustment>().HasKey(adjustment => adjustment.Id);
         modelBuilder.Entity<AdjustmentLine>().HasKey(line => line.Id);
+
+        modelBuilder.Entity<AuditLog>().HasKey(auditLog => auditLog.Id);
+        modelBuilder.Entity<AuditLogEntry>().HasKey(entry => entry.Id);
     }
 }

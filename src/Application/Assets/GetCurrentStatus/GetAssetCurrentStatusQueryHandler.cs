@@ -29,7 +29,7 @@ internal sealed class GetAssetCurrentStatusQueryHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.View,
+            PermissionCodes.Assets.View,
             ScopeType.Warehouse,
             view.WarehouseId,
             cancellationToken);

@@ -2,8 +2,8 @@ using Domain.DocumentLines;
 using Domain.Materials;
 using Domain.StockMovements;
 using Domain.Users;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -17,7 +17,9 @@ internal sealed class StockMovementConfiguration : IEntityTypeConfiguration<Stoc
 
         builder.HasIndex(m => new { m.DocumentId, m.LineId, m.MovementType }).IsUnique();
 
-        builder.HasIndex(m => new { m.WarehouseId, m.MaterialId });
+        builder.HasIndex(m => new { m.WarehouseId, m.MaterialId }).IncludeProperties(m => m.QuantityDelta);
+
+        builder.HasIndex(m => new { m.WarehouseId, m.PostedAtUtc, m.Id });
 
         builder.HasIndex(m => m.DocumentId);
 

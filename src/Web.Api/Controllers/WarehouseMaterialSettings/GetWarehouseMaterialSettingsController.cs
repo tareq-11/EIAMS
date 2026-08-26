@@ -1,7 +1,7 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Application.WarehouseMaterialSettings.GetByWarehouse;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -16,7 +16,7 @@ public sealed class GetWarehouseMaterialSettingsController(
     : ControllerBase
 {
     [HttpGet("{warehouseId:guid}/material-settings")]
-    [Authorize]
+    [HasPermission(PermissionCodes.Warehouses.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseMaterialSettingResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

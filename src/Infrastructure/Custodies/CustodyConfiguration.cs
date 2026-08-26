@@ -19,6 +19,7 @@ internal sealed class CustodyConfiguration : IEntityTypeConfiguration<Custody>
         builder.HasIndex(custody => new { custody.AssetId, custody.Status });
         builder.HasIndex(custody => new { custody.HolderType, custody.HolderId });
         builder.HasIndex(custody => custody.AssetId).HasFilter("status = 'Active'").IsUnique();
+        builder.HasIndex(custody => new { custody.AssetId, custody.FromUtc, custody.Id }).HasFilter("status = 'Active'");
         builder.ToTable("custodies", table =>
         {
             table.HasCheckConstraint("ck_custodies_holder_type_valid", "holder_type IN ('Employee', 'OrganizationalUnit', 'Site', 'External')");

@@ -165,6 +165,84 @@ internal sealed class PermissionConfiguration : IEntityTypeConfiguration<Permiss
                 Id = WellKnownPermissions.InventoryCountsReviewId,
                 Code = PermissionCodes.InventoryCounts.Review,
                 Description = (string?)"Start, complete, explain, and close inventory counts."
+            },
+            new
+            {
+                Id = WellKnownPermissions.AuditLogsViewId,
+                Code = PermissionCodes.AuditLogs.View,
+                Description = (string?)"View the immutable audit trail of system activity."
+            },
+            new
+            {
+                Id = WellKnownPermissions.OrganizationsViewId,
+                Code = PermissionCodes.Organizations.View,
+                Description = (string?)"View organizations."
+            },
+            new
+            {
+                Id = WellKnownPermissions.SitesViewId,
+                Code = PermissionCodes.Sites.View,
+                Description = (string?)"View sites."
+            },
+            new
+            {
+                Id = WellKnownPermissions.OrganizationalUnitsViewId,
+                Code = PermissionCodes.OrganizationalUnits.View,
+                Description = (string?)"View organizational units."
+            },
+            new
+            {
+                Id = WellKnownPermissions.EmployeesViewId,
+                Code = PermissionCodes.Employees.View,
+                Description = (string?)"View employees."
+            },
+            new
+            {
+                Id = WellKnownPermissions.RolesViewId,
+                Code = PermissionCodes.Roles.View,
+                Description = (string?)"View roles and permissions."
+            },
+            new
+            {
+                Id = WellKnownPermissions.UnitsOfMeasureViewId,
+                Code = PermissionCodes.UnitsOfMeasure.View,
+                Description = (string?)"View units of measure."
+            },
+            new
+            {
+                Id = WellKnownPermissions.MaterialsViewId,
+                Code = PermissionCodes.Materials.View,
+                Description = (string?)"View the material catalog and unit conversions."
+            },
+            new
+            {
+                Id = WellKnownPermissions.WarehousesViewId,
+                Code = PermissionCodes.Warehouses.View,
+                Description = (string?)"View warehouses, capabilities, and material settings."
+            },
+            new
+            {
+                Id = WellKnownPermissions.InventoryViewId,
+                Code = PermissionCodes.Inventory.View,
+                Description = (string?)"View inventory balances and stock movements."
+            },
+            new
+            {
+                Id = WellKnownPermissions.AssetsViewId,
+                Code = PermissionCodes.Assets.View,
+                Description = (string?)"View asset status."
+            },
+            new
+            {
+                Id = WellKnownPermissions.CustodiesViewId,
+                Code = PermissionCodes.Custodies.View,
+                Description = (string?)"View custody state and history."
+            },
+            new
+            {
+                Id = WellKnownPermissions.CustodiesManageId,
+                Code = PermissionCodes.Custodies.Manage,
+                Description = (string?)"Assign and manage asset custody."
             });
     }
 }

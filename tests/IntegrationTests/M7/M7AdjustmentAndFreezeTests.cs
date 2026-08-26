@@ -1,14 +1,16 @@
+using System.Net;
+using System.Net.Http.Json;
 using Application.Abstractions.Posting;
-using Domain.Common;
 using Domain.AssetMovementHistories;
 using Domain.Assets;
-using Domain.DocumentLineAssetSelections;
+using Domain.Common;
+using Domain.Custodies;
 using Domain.DocumentAttachments;
+using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
 using Domain.InventoryAdjustments;
 using Domain.InventoryCounts;
 using Domain.IssueTos;
-using Domain.Custodies;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
@@ -19,17 +21,15 @@ using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
 using Domain.UnitsOfMeasure;
-using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.Users;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using System.Net.Http.Json;
-using System.Net;
 using SharedKernel;
 
 namespace IntegrationTests.M7;
@@ -352,8 +352,14 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         // Act
         HttpResponseMessage addResponse = await HttpClient.PostAsJsonAsync(
             $"inventory-adjustments/{documentId}/lines",
-            new { materialId = seed.MaterialId, difference = -2m, unitId = seed.UnitId,
-                reason = "Shortage", expectedRowVersion = 1 });
+            new
+            {
+                materialId = seed.MaterialId,
+                difference = -2m,
+                unitId = seed.UnitId,
+                reason = "Shortage",
+                expectedRowVersion = 1
+            });
         addResponse.EnsureSuccessStatusCode();
         ApiEnvelope<ResourceIdDto>? added =
             await addResponse.Content.ReadFromJsonAsync<ApiEnvelope<ResourceIdDto>>();

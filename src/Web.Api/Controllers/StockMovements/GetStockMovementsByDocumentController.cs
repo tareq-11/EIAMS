@@ -1,7 +1,7 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Application.StockMovements.GetByDocument;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -16,7 +16,7 @@ public sealed class GetStockMovementsByDocumentController(
     : ControllerBase
 {
     [HttpGet]
-    [Authorize]
+    [HasPermission(PermissionCodes.Inventory.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<StockMovementResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

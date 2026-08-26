@@ -39,7 +39,20 @@ internal sealed class CreateSiteCommandHandler(
             return Result.Failure<Guid>(SiteErrors.CodeNotUnique);
         }
 
-        var site = Site.Create(Guid.NewGuid(), command.OrganizationId, command.Name, command.Code, command.Location);
+        Result<Site> siteResult = Site.Create(
+            Guid.NewGuid(),
+            command.OrganizationId,
+            command.Name,
+            command.Code,
+            command.Location,
+            command.GovernorateCode);
+
+        if (siteResult.IsFailure)
+        {
+            return Result.Failure<Guid>(siteResult.Error);
+        }
+
+        Site site = siteResult.Value;
 
         context.Sites.Add(site);
 

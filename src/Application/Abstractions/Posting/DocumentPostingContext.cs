@@ -1,6 +1,6 @@
 using Domain.DocumentLines;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 
 namespace Application.Abstractions.Posting;
 

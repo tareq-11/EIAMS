@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.UnitsOfMeasure.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetByIdController(IQueryHandler<GetUnitOfMeasureByIdQuery, U
     : ControllerBase
 {
     [HttpGet("{unitOfMeasureId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.UnitsOfMeasure.View)]
     public async Task<IResult> Handle(Guid unitOfMeasureId, CancellationToken cancellationToken)
     {
         var query = new GetUnitOfMeasureByIdQuery(unitOfMeasureId);

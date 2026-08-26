@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.OrganizationalUnits.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetOrganizationalUnitByIdController(
     IQueryHandler<GetOrganizationalUnitByIdQuery, OrganizationalUnitResponse> handler) : ControllerBase
 {
     [HttpGet("{organizationalUnitId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.OrganizationalUnits.View)]
     public async Task<IResult> Handle(Guid organizationalUnitId, CancellationToken cancellationToken)
     {
         var query = new GetOrganizationalUnitByIdQuery(organizationalUnitId);

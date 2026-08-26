@@ -22,6 +22,8 @@ internal sealed class IssuePostingStrategy(
     IActivePartyLookup activePartyLookup,
     AssetPostingSelectionService assetPostingSelectionService) : IDocumentPostingStrategy
 {
+    private IssueTo? preparedIssueTo;
+
     public DocumentType DocumentType => DocumentType.Issue;
 
     public async Task<Result<PostingPlan>> PrepareAsync(
@@ -42,6 +44,8 @@ internal sealed class IssuePostingStrategy(
             return Result.Failure<PostingPlan>(IssueToErrors.Required(context.Document.Id));
         }
 
+        preparedIssueTo = issueTo;
+
         Result recipientResult = await EnsureRecipientActiveAsync(issueTo, cancellationToken);
 
         if (recipientResult.IsFailure)
@@ -61,20 +65,20 @@ internal sealed class IssuePostingStrategy(
             return Result.Failure<PostingPlan>(catalogResult.Error);
         }
 
-        foreach (Guid materialDomainId in catalogResult.Value.Values
-                     .Select(item => item.MaterialDomainId)
-                     .Distinct())
-        {
-            Result capabilityResult = await capabilityCheckService.EnsureAllowedAsync(
-                context.Document.WarehouseId,
-                materialDomainId,
-                OperationType.Issue,
-                cancellationToken);
+        Guid[] materialDomainIds = catalogResult.Value.Values
+            .Select(item => item.MaterialDomainId)
+            .Distinct()
+            .ToArray();
 
-            if (capabilityResult.IsFailure)
-            {
-                return Result.Failure<PostingPlan>(capabilityResult.Error);
-            }
+        Result capabilityResult = await capabilityCheckService.EnsureAllowedBatchAsync(
+            context.Document.WarehouseId,
+            materialDomainIds,
+            OperationType.Issue,
+            cancellationToken);
+
+        if (capabilityResult.IsFailure)
+        {
+            return Result.Failure<PostingPlan>(capabilityResult.Error);
         }
 
         Result<IReadOnlyList<Domain.Assets.Asset>> assetSelectionsResult =
@@ -88,7 +92,7 @@ internal sealed class IssuePostingStrategy(
             return Result.Failure<PostingPlan>(assetSelectionsResult.Error);
         }
 
-        return new PostingPlan(context.Lines
+        var movements = context.Lines
             .Select(line => new MovementDraft(
                 context.Document.WarehouseId,
                 line.MaterialId,
@@ -96,7 +100,9 @@ internal sealed class IssuePostingStrategy(
                 line.Id,
                 MovementType.Issue,
                 -line.BaseQuantity))
-            .ToList());
+            .ToList();
+
+        return new PostingPlan(movements);
     }
 
     public async Task<Result> ApplySideEffectsAsync(
@@ -113,7 +119,7 @@ internal sealed class IssuePostingStrategy(
             return Result.Success();
         }
 
-        IssueTo? issueTo = await dbContext.IssueTos
+        IssueTo? issueTo = preparedIssueTo ?? await dbContext.IssueTos
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == context.Document.Id, cancellationToken);
 
@@ -138,8 +144,10 @@ internal sealed class IssuePostingStrategy(
 
             if (historyResult.IsFailure)
             {
-                return Result.Failure(historyResult.Error);
+                return historyResult;
             }
+
+            dbContext.AssetMovementHistories.Add(historyResult.Value);
 
             Result<Custody> custodyResult = Custody.Open(
                 Guid.NewGuid(),
@@ -152,17 +160,18 @@ internal sealed class IssuePostingStrategy(
 
             if (custodyResult.IsFailure)
             {
-                return Result.Failure(custodyResult.Error);
+                return custodyResult;
             }
 
-            dbContext.AssetMovementHistories.Add(historyResult.Value);
             dbContext.Custodies.Add(custodyResult.Value);
         }
 
         return Result.Success();
     }
 
-    private async Task<Result> EnsureRecipientActiveAsync(IssueTo issueTo, CancellationToken cancellationToken)
+    private async Task<Result> EnsureRecipientActiveAsync(
+        IssueTo issueTo,
+        CancellationToken cancellationToken)
     {
         ActivePartyLookupStatus status = await activePartyLookup.GetStatusAsync(
             issueTo.RecipientType,
@@ -176,7 +185,7 @@ internal sealed class IssuePostingStrategy(
                 IssueToErrors.RecipientNotFound(issueTo.RecipientType, issueTo.RecipientId)),
             ActivePartyLookupStatus.Inactive => Result.Failure(
                 IssueToErrors.RecipientInactive(issueTo.RecipientType, issueTo.RecipientId)),
-            _ => Result.Failure(IssueToErrors.ExternalRecipientNotSupported)
+            _ => Result.Failure(IssueToErrors.RecipientNotFound(issueTo.RecipientType, issueTo.RecipientId))
         };
     }
 }

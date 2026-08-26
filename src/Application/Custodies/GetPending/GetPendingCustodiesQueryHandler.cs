@@ -25,7 +25,7 @@ internal sealed class GetPendingCustodiesQueryHandler(
 
         bool authorized = exists && await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.View,
+            PermissionCodes.Custodies.View,
             ScopeType.Warehouse,
             query.WarehouseId,
             cancellationToken);

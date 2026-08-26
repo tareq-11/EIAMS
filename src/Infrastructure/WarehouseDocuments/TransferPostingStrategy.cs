@@ -1,12 +1,13 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Ledger;
+using Application.Abstractions.Policies;
 using Application.Abstractions.Posting;
 using Application.Abstractions.Warehouses;
 using Domain.Common;
 using Domain.DocumentLines;
 using Domain.TransferInfos;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -14,7 +15,8 @@ namespace Infrastructure.WarehouseDocuments;
 
 internal sealed class TransferPostingStrategy(
     IApplicationDbContext dbContext,
-    ICapabilityCheckService capabilityCheckService) : IDocumentPostingStrategy
+    ICapabilityCheckService capabilityCheckService,
+    ITransferPolicyService transferPolicyService) : IDocumentPostingStrategy
 {
     public DocumentType DocumentType => DocumentType.Transfer;
 
@@ -48,6 +50,19 @@ internal sealed class TransferPostingStrategy(
             return Result.Failure<PostingPlan>(destinationResult.Error);
         }
 
+        if (context.Document.ReversalOfDocumentId is null)
+        {
+            Result policyResult = await transferPolicyService.EnsureTransferAllowedAsync(
+                context.Document.WarehouseId,
+                transferInfo.DestinationWarehouseId,
+                cancellationToken);
+
+            if (policyResult.IsFailure)
+            {
+                return Result.Failure<PostingPlan>(policyResult.Error);
+            }
+        }
+
         Result<IReadOnlyDictionary<Guid, PostingMaterialInfo>> catalogResult =
             await PostingMaterialCatalogLoader.LoadAsync(
                 dbContext,
@@ -60,31 +75,31 @@ internal sealed class TransferPostingStrategy(
             return Result.Failure<PostingPlan>(catalogResult.Error);
         }
 
-        foreach (Guid materialDomainId in catalogResult.Value.Values
-                     .Select(item => item.MaterialDomainId)
-                     .Distinct())
+        Guid[] materialDomainIds = catalogResult.Value.Values
+            .Select(item => item.MaterialDomainId)
+            .Distinct()
+            .ToArray();
+
+        Result sourceCapabilityResult = await capabilityCheckService.EnsureAllowedBatchAsync(
+            context.Document.WarehouseId,
+            materialDomainIds,
+            OperationType.Transfer,
+            cancellationToken);
+
+        if (sourceCapabilityResult.IsFailure)
         {
-            Result sourceCapabilityResult = await capabilityCheckService.EnsureAllowedAsync(
-                context.Document.WarehouseId,
-                materialDomainId,
-                OperationType.Transfer,
-                cancellationToken);
+            return Result.Failure<PostingPlan>(sourceCapabilityResult.Error);
+        }
 
-            if (sourceCapabilityResult.IsFailure)
-            {
-                return Result.Failure<PostingPlan>(sourceCapabilityResult.Error);
-            }
+        Result destinationCapabilityResult = await capabilityCheckService.EnsureAllowedBatchAsync(
+            transferInfo.DestinationWarehouseId,
+            materialDomainIds,
+            OperationType.Transfer,
+            cancellationToken);
 
-            Result destinationCapabilityResult = await capabilityCheckService.EnsureAllowedAsync(
-                transferInfo.DestinationWarehouseId,
-                materialDomainId,
-                OperationType.Transfer,
-                cancellationToken);
-
-            if (destinationCapabilityResult.IsFailure)
-            {
-                return Result.Failure<PostingPlan>(destinationCapabilityResult.Error);
-            }
+        if (destinationCapabilityResult.IsFailure)
+        {
+            return Result.Failure<PostingPlan>(destinationCapabilityResult.Error);
         }
 
         var movements = new List<MovementDraft>(context.Lines.Count * 2);

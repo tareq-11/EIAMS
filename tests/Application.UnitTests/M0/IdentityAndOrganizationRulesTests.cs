@@ -1,7 +1,7 @@
 using Domain.Common;
 using Domain.Employees;
-using Domain.Organizations;
 using Domain.OrganizationalUnits;
+using Domain.Organizations;
 using Domain.Roles;
 using Domain.UserRoleScopes;
 using Domain.Users;

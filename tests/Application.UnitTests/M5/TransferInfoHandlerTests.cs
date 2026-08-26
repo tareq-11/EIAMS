@@ -1,12 +1,13 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Policies;
 using Application.TransferInfos.Upsert;
 using Application.UnitTests.Abstractions;
 using Domain.Common;
 using Domain.TransferInfos;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -73,6 +74,27 @@ public sealed class TransferInfoHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_RejectTransfer_WhenPolicyBlocksDestination()
+    {
+        await using TestDbContext context = CreateDbContext();
+        (WarehouseDocument document, Warehouse destination) = await SeedTransferAsync(context);
+        var command = new UpsertTransferInfoCommand(document.Id, destination.Id, "Reason", 1);
+        Error policyError = TransferPolicyErrors.CrossGovernorateBlocked(
+            document.WarehouseId,
+            destination.Id,
+            "AMMAN",
+            "IRBID");
+
+        Result result = await CreateHandler(context, authorized: true, policyError: policyError)
+            .Handle(command, CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(policyError);
+        (await context.TransferInfos.CountAsync()).ShouldBe(0);
+        (await context.WarehouseDocuments.SingleAsync()).RowVersion.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Handle_Should_NotAdvanceVersion_WhenPayloadHasNoChanges()
     {
         await using TestDbContext context = CreateDbContext();
@@ -112,7 +134,10 @@ public sealed class TransferInfoHandlerTests : BaseHandlerTest
             nameof(command.ExpectedRowVersion)]);
     }
 
-    private static UpsertTransferInfoCommandHandler CreateHandler(TestDbContext context, bool authorized)
+    private static UpsertTransferInfoCommandHandler CreateHandler(
+        TestDbContext context,
+        bool authorized,
+        Error? policyError = null)
     {
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(Guid.NewGuid());
@@ -126,10 +151,18 @@ public sealed class TransferInfoHandlerTests : BaseHandlerTest
                 Arg.Any<CancellationToken>())
             .Returns(authorized);
 
+        ITransferPolicyService transferPolicy = Substitute.For<ITransferPolicyService>();
+        transferPolicy.EnsureTransferAllowedAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(policyError is null ? Result.Success() : Result.Failure(policyError));
+
         return new UpsertTransferInfoCommandHandler(
             context,
             userContext,
             authorization,
+            transferPolicy,
             Substitute.For<IDatabaseExceptionClassifier>());
     }
 

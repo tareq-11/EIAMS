@@ -4,8 +4,8 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
 using Domain.Materials;
-using Domain.Warehouses;
 using Domain.WarehouseMaterialSettings;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 

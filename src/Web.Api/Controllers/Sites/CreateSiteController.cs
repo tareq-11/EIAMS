@@ -12,13 +12,23 @@ namespace Web.Api.Controllers.Sites;
 [Tags(Tags.Sites)]
 public sealed class CreateSiteController(ICommandHandler<CreateSiteCommand, Guid> handler) : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] Guid OrganizationId, string Name, string Code, string? Location);
+    public sealed record RequestBody(
+        [property: JsonRequired] Guid OrganizationId,
+        string Name,
+        string Code,
+        string? Location,
+        string? GovernorateCode);
 
     [HttpPost]
     [HasPermission(PermissionCodes.Sites.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new CreateSiteCommand(request.OrganizationId, request.Name, request.Code, request.Location);
+        var command = new CreateSiteCommand(
+            request.OrganizationId,
+            request.Name,
+            request.Code,
+            request.Location,
+            request.GovernorateCode);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 

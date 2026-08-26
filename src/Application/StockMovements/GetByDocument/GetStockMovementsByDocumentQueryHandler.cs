@@ -21,6 +21,7 @@ internal sealed class GetStockMovementsByDocumentQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehouseDocument? document = await context.WarehouseDocuments
+            .AsNoTracking()
             .SingleOrDefaultAsync(d => d.Id == query.DocumentId, cancellationToken);
 
         if (document is null)
@@ -30,7 +31,7 @@ internal sealed class GetStockMovementsByDocumentQueryHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.View,
+            PermissionCodes.Inventory.View,
             ScopeType.Warehouse,
             document.WarehouseId,
             cancellationToken);
@@ -42,6 +43,7 @@ internal sealed class GetStockMovementsByDocumentQueryHandler(
         }
 
         PagedResult<StockMovementResponse> movements = await context.StockMovements
+            .AsNoTracking()
             .Where(m => m.DocumentId == query.DocumentId)
             .Select(m => new StockMovementResponse
             {

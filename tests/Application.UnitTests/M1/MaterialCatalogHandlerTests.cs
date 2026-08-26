@@ -211,7 +211,7 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
     {
         await using TestDbContext context = CreateDbContext();
         CatalogSeed seed = await SeedCatalogAsync(context);
-        var handler = new GetMaterialByIdQueryHandler(context);
+        var handler = new GetMaterialByIdQueryHandler(context, CreateCache());
 
         Result<MaterialResponse> result = await handler.Handle(new GetMaterialByIdQuery(seed.MaterialId), CancellationToken.None);
 

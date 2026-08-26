@@ -13,14 +13,9 @@ using SharedKernel;
 
 namespace Infrastructure.Assets;
 
-/// <summary>
-/// Re-validates persisted asset selections while their asset identifiers are transaction-locked.
-/// Submission catches incomplete drafts; this service protects posting from races after Submit.
-/// </summary>
 internal sealed class AssetPostingSelectionService(
     IApplicationDbContext context,
-    IAssetKeyLock assetKeyLock,
-    IAssetLifecycleGuard assetLifecycleGuard)
+    IAssetKeyLock assetKeyLock)
 {
     private readonly Dictionary<Guid, IReadOnlyList<Asset>> issueSelectionsByDocumentId = [];
     private readonly Dictionary<Guid, IReadOnlyList<AssetCustodySelection>> returnSelectionsByDocumentId = [];
@@ -42,36 +37,28 @@ internal sealed class AssetPostingSelectionService(
 
         if (selections.Count == 0)
         {
-            IReadOnlyList<Asset> noAssets = Array.Empty<Asset>();
-            issueSelectionsByDocumentId[document.Id] = noAssets;
-            return Result.Success(noAssets);
+            issueSelectionsByDocumentId[document.Id] = [];
+            return Result.Success<IReadOnlyList<Asset>>([]);
         }
 
         await assetKeyLock.AcquireAsync(selections.Select(selection => selection.AssetId), cancellationToken);
-
-        Result terminalResult = await assetLifecycleGuard.EnsureNotDisposedAsync(
-            selections.Select(selection => selection.AssetId), cancellationToken);
-        if (terminalResult.IsFailure)
-        {
-            return Result.Failure<IReadOnlyList<Asset>>(terminalResult.Error);
-        }
 
         List<Asset> assets = await LoadAssetsAsync(selections, cancellationToken);
 
         if (assets.Count != selections.Count)
         {
-            Guid missingAssetId = selections.Select(selection => selection.AssetId)
+            Guid missingAssetId = selections
+                .Select(selection => selection.AssetId)
                 .Except(assets.Select(asset => asset.Id))
                 .First();
             return Result.Failure<IReadOnlyList<Asset>>(AssetErrors.NotFound(missingAssetId));
         }
 
         var lineById = lines.ToDictionary(line => line.Id);
-        var assetById = assets.ToDictionary(asset => asset.Id);
 
         foreach (DocumentLineAssetSelection selection in selections)
         {
-            Asset asset = assetById[selection.AssetId];
+            Asset asset = assets.First(candidate => candidate.Id == selection.AssetId);
             DocumentLine line = lineById[selection.DocumentLineId];
 
             if (asset.MaterialId != line.MaterialId)
@@ -88,17 +75,16 @@ internal sealed class AssetPostingSelectionService(
         }
 
         Guid[] assetIds = assets.Select(asset => asset.Id).ToArray();
-        bool hasActiveCustody = await context.Custodies
-            .AnyAsync(custody => assetIds.Contains(custody.AssetId) && custody.Status == CustodyStatus.Active,
-                cancellationToken);
 
-        if (hasActiveCustody)
+        Guid? activeCustodyAssetId = await context.Custodies
+            .AsNoTracking()
+            .Where(custody => assetIds.Contains(custody.AssetId) && custody.Status == CustodyStatus.Active)
+            .Select(custody => (Guid?)custody.AssetId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activeCustodyAssetId.HasValue)
         {
-            Guid assetId = await context.Custodies
-                .Where(custody => assetIds.Contains(custody.AssetId) && custody.Status == CustodyStatus.Active)
-                .Select(custody => custody.AssetId)
-                .FirstAsync(cancellationToken);
-            return Result.Failure<IReadOnlyList<Asset>>(DocumentLineAssetSelectionErrors.AssetNotInStock(assetId));
+            return Result.Failure<IReadOnlyList<Asset>>(DocumentLineAssetSelectionErrors.AssetNotInStock(activeCustodyAssetId.Value));
         }
 
         List<AssetMovementHistory> histories = await context.AssetMovementHistories
@@ -143,25 +129,18 @@ internal sealed class AssetPostingSelectionService(
 
         if (selections.Count == 0)
         {
-            IReadOnlyList<AssetCustodySelection> noAssets = Array.Empty<AssetCustodySelection>();
-            returnSelectionsByDocumentId[document.Id] = noAssets;
-            return Result.Success(noAssets);
+            returnSelectionsByDocumentId[document.Id] = [];
+            return Result.Success<IReadOnlyList<AssetCustodySelection>>([]);
         }
 
         await assetKeyLock.AcquireAsync(selections.Select(selection => selection.AssetId), cancellationToken);
-
-        Result terminalResult = await assetLifecycleGuard.EnsureNotDisposedAsync(
-            selections.Select(selection => selection.AssetId), cancellationToken);
-        if (terminalResult.IsFailure)
-        {
-            return Result.Failure<IReadOnlyList<AssetCustodySelection>>(terminalResult.Error);
-        }
 
         List<Asset> assets = await LoadAssetsAsync(selections, cancellationToken);
 
         if (assets.Count != selections.Count)
         {
-            Guid missingAssetId = selections.Select(selection => selection.AssetId)
+            Guid missingAssetId = selections
+                .Select(selection => selection.AssetId)
                 .Except(assets.Select(asset => asset.Id))
                 .First();
             return Result.Failure<IReadOnlyList<AssetCustodySelection>>(AssetErrors.NotFound(missingAssetId));
@@ -273,6 +252,7 @@ internal sealed class AssetPostingSelectionService(
         Guid[] assetIds = selections.Select(selection => selection.AssetId).ToArray();
 
         return await context.Assets
+            .AsNoTracking()
             .Where(asset => assetIds.Contains(asset.Id))
             .OrderBy(asset => asset.Id)
             .ToListAsync(cancellationToken);

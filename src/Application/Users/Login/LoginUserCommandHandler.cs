@@ -1,6 +1,8 @@
+using Application.Abstractions.Audit;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Domain.AuditLogs;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -11,7 +13,8 @@ internal sealed class LoginUserCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
     ITokenProvider tokenProvider,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
+    IDateTimeProvider dateTimeProvider,
+    IAuditOperationContextAccessor auditContext) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
@@ -41,6 +44,14 @@ internal sealed class LoginUserCommandHandler(
             dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays));
 
         context.RefreshTokens.Add(refreshTokenEntity);
+
+        auditContext.RecordSynthetic(new AuditSyntheticSubject(
+            user.Id,
+            "User",
+            user.Id,
+            AuditActions.Authenticate,
+            nameof(LoginUserCommand),
+            null));
 
         await context.SaveChangesAsync(cancellationToken);
 

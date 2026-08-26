@@ -18,4 +18,13 @@ public interface IScopeAuthorizationService
         ScopeType scopeType,
         Guid? scopeId,
         CancellationToken cancellationToken);
+
+    Task<WarehousePermissionScope> GetWarehousePermissionScopeAsync(
+        Guid userId,
+        string permission,
+        CancellationToken cancellationToken);
 }
+
+public sealed record WarehousePermissionScope(
+    bool HasEnterpriseAccess,
+    IReadOnlySet<Guid> WarehouseIds);

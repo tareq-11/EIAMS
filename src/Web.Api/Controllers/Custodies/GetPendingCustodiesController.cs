@@ -16,7 +16,7 @@ public sealed class GetPendingCustodiesController(
     : ControllerBase
 {
     [HttpGet]
-    [HasPermission(PermissionCodes.WarehouseDocuments.View)]
+    [HasPermission(PermissionCodes.Custodies.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<PendingCustodyResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]

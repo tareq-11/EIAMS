@@ -16,9 +16,23 @@ internal sealed class CapabilityCheckService(IApplicationDbContext context) : IC
         Guid warehouseId,
         Guid materialDomainId,
         OperationType operationType,
+        CancellationToken cancellationToken) =>
+        await EnsureAllowedBatchAsync(warehouseId, [materialDomainId], operationType, cancellationToken);
+
+    public async Task<Result> EnsureAllowedBatchAsync(
+        Guid warehouseId,
+        IEnumerable<Guid> materialDomainIds,
+        OperationType operationType,
         CancellationToken cancellationToken)
     {
+        Guid[] domainIds = materialDomainIds.Distinct().ToArray();
+        if (domainIds.Length == 0)
+        {
+            return Result.Success();
+        }
+
         Warehouse? warehouse = await context.Warehouses
+            .AsNoTracking()
             .SingleOrDefaultAsync(w => w.Id == warehouseId, cancellationToken);
 
         if (warehouse is null)
@@ -36,36 +50,58 @@ internal sealed class CapabilityCheckService(IApplicationDbContext context) : IC
             return Result.Failure(WarehouseErrors.CannotHoldStock(warehouseId));
         }
 
-        MaterialDomain? materialDomain = await context.MaterialDomains
-            .SingleOrDefaultAsync(d => d.Id == materialDomainId, cancellationToken);
+        List<MaterialDomain> materialDomains = await context.MaterialDomains
+            .AsNoTracking()
+            .Where(d => domainIds.Contains(d.Id))
+            .ToListAsync(cancellationToken);
 
-        if (materialDomain is null)
+        var domainById = materialDomains.ToDictionary(d => d.Id);
+
+        foreach (Guid domainId in domainIds)
         {
-            return Result.Failure(WarehouseCapabilityErrors.MaterialDomainNotFound(materialDomainId));
+            if (!domainById.TryGetValue(domainId, out MaterialDomain? domain))
+            {
+                return Result.Failure(WarehouseCapabilityErrors.MaterialDomainNotFound(domainId));
+            }
+
+            if (domain.Status != Status.Active)
+            {
+                return Result.Failure(WarehouseCapabilityErrors.MaterialDomainInactive(domainId));
+            }
         }
 
-        if (materialDomain.Status != Status.Active)
+        List<Guid> grantedOperations = await (
+            from capability in context.WarehouseCapabilities.AsNoTracking()
+            where capability.WarehouseId == warehouseId && domainIds.Contains(capability.MaterialDomainId) && capability.Status == Status.Active
+            join operation in context.WarehouseCapabilityOperations.AsNoTracking() on capability.Id equals operation.CapabilityId
+            where operation.OperationType == operationType
+            select capability.MaterialDomainId
+        ).ToListAsync(cancellationToken);
+
+        var grantedDomainSet = grantedOperations.ToHashSet();
+
+        foreach (Guid domainId in domainIds)
         {
-            return Result.Failure(WarehouseCapabilityErrors.MaterialDomainInactive(materialDomainId));
-        }
+            if (!grantedDomainSet.Contains(domainId))
+            {
+                // Check if capability exists to give exact error
+                bool capabilityExists = await context.WarehouseCapabilities
+                    .AsNoTracking()
+                    .AnyAsync(c => c.WarehouseId == warehouseId && c.MaterialDomainId == domainId && c.Status == Status.Active, cancellationToken);
 
-        WarehouseCapability? capability = await context.WarehouseCapabilities
-            .SingleOrDefaultAsync(
-                c => c.WarehouseId == warehouseId && c.MaterialDomainId == materialDomainId,
-                cancellationToken);
+                if (!capabilityExists)
+                {
+                    return Result.Failure(WarehouseCapabilityErrors.NotGranted(warehouseId, domainId));
+                }
 
-        if (capability is null || capability.Status != Status.Active)
-        {
-            return Result.Failure(WarehouseCapabilityErrors.NotGranted(warehouseId, materialDomainId));
-        }
+                Guid capabilityId = await context.WarehouseCapabilities
+                    .AsNoTracking()
+                    .Where(c => c.WarehouseId == warehouseId && c.MaterialDomainId == domainId)
+                    .Select(c => c.Id)
+                    .FirstAsync(cancellationToken);
 
-        bool operationGranted = await context.WarehouseCapabilityOperations.AnyAsync(
-            o => o.CapabilityId == capability.Id && o.OperationType == operationType,
-            cancellationToken);
-
-        if (!operationGranted)
-        {
-            return Result.Failure(WarehouseCapabilityOperationErrors.OperationNotGranted(capability.Id, operationType));
+                return Result.Failure(WarehouseCapabilityOperationErrors.OperationNotGranted(capabilityId, operationType));
+            }
         }
 
         return Result.Success();

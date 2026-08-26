@@ -24,8 +24,11 @@ public static class DependencyInjection
                 .AsImplementedInterfaces()
                 .WithScopedLifetime());
 
-        // Order matters: decorators are applied inner-to-outer.
-        // Validation → Performance → Logging
+        // Order matters: registration is inner-to-outer, producing the runtime chain
+        // Logging → Performance → Validation → Audit → handler.
+        services.Decorate(typeof(ICommandHandler<,>), typeof(AuditCommandDecorator.CommandHandler<,>));
+        services.Decorate(typeof(ICommandHandler<>), typeof(AuditCommandDecorator.CommandBaseHandler<>));
+
         services.Decorate(typeof(ICommandHandler<,>), typeof(ValidationDecorator.CommandHandler<,>));
         services.Decorate(typeof(ICommandHandler<>), typeof(ValidationDecorator.CommandBaseHandler<>));
 

@@ -1,8 +1,8 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
-using Application.Abstractions.Messaging;
 using Application.Abstractions.InventoryCounts;
+using Application.Abstractions.Messaging;
 using Application.Abstractions.Warehouses;
 using Domain.Common;
 using Domain.InventoryCounts;
@@ -95,18 +95,16 @@ internal sealed class PlanInventoryCountCommandHandler(
             return Result.Failure<Guid>(InventoryCountErrors.ScopeReferenceInvalid);
         }
 
-        foreach (Guid domainId in materials.Select(item => item.DomainId).Distinct())
-        {
-            Result capability = await capabilityCheckService.EnsureAllowedAsync(
-                command.WarehouseId,
-                domainId,
-                OperationType.Count,
-                cancellationToken);
+        Guid[] domainIds = materials.Select(item => item.DomainId).Distinct().ToArray();
+        Result capability = await capabilityCheckService.EnsureAllowedBatchAsync(
+            command.WarehouseId,
+            domainIds,
+            OperationType.Count,
+            cancellationToken);
 
-            if (capability.IsFailure)
-            {
-                return Result.Failure<Guid>(capability.Error);
-            }
+        if (capability.IsFailure)
+        {
+            return Result.Failure<Guid>(capability.Error);
         }
 
         var countId = Guid.NewGuid();

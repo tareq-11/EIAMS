@@ -24,7 +24,7 @@ internal sealed class GetUserRoleScopesQueryHandler(
         {
             bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
                 userContext.UserId,
-                PermissionCodes.Roles.Manage,
+                PermissionCodes.Roles.View,
                 ScopeType.Enterprise,
                 scopeId: null,
                 cancellationToken);

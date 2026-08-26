@@ -59,20 +59,20 @@ internal sealed class ReturnPostingStrategy(
             return Result.Failure<PostingPlan>(catalogResult.Error);
         }
 
-        foreach (Guid materialDomainId in catalogResult.Value.Values
-                     .Select(material => material.MaterialDomainId)
-                     .Distinct())
-        {
-            Result capabilityResult = await capabilityCheckService.EnsureAllowedAsync(
-                context.Document.WarehouseId,
-                materialDomainId,
-                OperationType.Return,
-                cancellationToken);
+        Guid[] materialDomainIds = catalogResult.Value.Values
+            .Select(material => material.MaterialDomainId)
+            .Distinct()
+            .ToArray();
 
-            if (capabilityResult.IsFailure)
-            {
-                return Result.Failure<PostingPlan>(capabilityResult.Error);
-            }
+        Result capabilityResult = await capabilityCheckService.EnsureAllowedBatchAsync(
+            context.Document.WarehouseId,
+            materialDomainIds,
+            OperationType.Return,
+            cancellationToken);
+
+        if (capabilityResult.IsFailure)
+        {
+            return Result.Failure<PostingPlan>(capabilityResult.Error);
         }
 
         Result<IReadOnlyList<AssetCustodySelection>> assetSelectionsResult =

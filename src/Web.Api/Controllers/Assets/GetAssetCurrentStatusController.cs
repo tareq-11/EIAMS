@@ -14,7 +14,7 @@ public sealed class GetAssetCurrentStatusController(
     IQueryHandler<GetAssetCurrentStatusQuery, AssetCurrentStatusResponse> handler) : ControllerBase
 {
     [HttpGet]
-    [HasPermission(PermissionCodes.WarehouseDocuments.View)]
+    [HasPermission(PermissionCodes.Assets.View)]
     [ProducesResponseType<ApiResponse<AssetCurrentStatusResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]

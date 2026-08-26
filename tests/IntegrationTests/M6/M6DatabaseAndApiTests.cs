@@ -12,16 +12,16 @@ using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
 using Domain.Materials;
-using Domain.Organizations;
 using Domain.OrganizationalUnits;
+using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
 using Domain.UnitsOfMeasure;
 using Domain.UserRoleScopes;
 using Domain.Users;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -292,10 +292,22 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
     {
         // Arrange
         M6Seed seed = await SeedAsync();
-        Custody first = CreateCustody(seed.AssetId, seed.OriginalIssueDocumentId, PartyType.Site, CustodyKind.Operational);
-        Custody second = CreateCustody(seed.AssetId, seed.OriginalIssueDocumentId, PartyType.Site, CustodyKind.Operational);
+        Custody first = CreateCustody(
+            seed.AssetId,
+            seed.OriginalIssueDocumentId,
+            PartyType.Employee,
+            seed.EmployeeId,
+            CustodyKind.Operational);
+        Custody second = CreateCustody(
+            seed.AssetId,
+            seed.OriginalIssueDocumentId,
+            PartyType.Employee,
+            seed.EmployeeId,
+            CustodyKind.Operational);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.Employees.AnyAsync(item =>
+            item.Id == seed.EmployeeId && item.Status == Status.Active)).ShouldBeTrue();
         context.Custodies.Add(first);
         await context.SaveChangesAsync();
         context.Custodies.Add(second);
@@ -316,6 +328,10 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         M6Seed seed = await SeedAsync();
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid siteId = await context.Warehouses
+            .Where(item => item.Id == seed.WarehouseId)
+            .Select(item => item.SiteId)
+            .SingleAsync();
 
         // Act
         PostgresException exception = await Should.ThrowAsync<PostgresException>(
@@ -325,7 +341,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
                      (id, asset_id, holder_type, holder_id, custody_kind, issue_document_id,
                       status, from_utc, row_version, created_at_utc)
                  VALUES
-                     ({Guid.NewGuid()}, {seed.AssetId}, {"Site"}, {Guid.NewGuid()}, {"Personal"},
+                     ({Guid.NewGuid()}, {seed.AssetId}, {"Site"}, {siteId}, {"Personal"},
                       {seed.OriginalIssueDocumentId}, {"Active"}, {DateTime.UtcNow}, {1}, {DateTime.UtcNow})
                  """));
 
@@ -573,7 +589,15 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        context.Custodies.Add(CreateCustody(assetId, seed.OriginalIssueDocumentId, PartyType.Site, CustodyKind.Operational, fromUtc));
+        (await context.Employees.AnyAsync(item =>
+            item.Id == seed.EmployeeId && item.Status == Status.Active)).ShouldBeTrue();
+        context.Custodies.Add(CreateCustody(
+            assetId,
+            seed.OriginalIssueDocumentId,
+            PartyType.Employee,
+            seed.EmployeeId,
+            CustodyKind.Operational,
+            fromUtc));
         await context.SaveChangesAsync();
     }
 
@@ -582,7 +606,12 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         context.Custodies.Add(CreateCustody(
-            assetId, seed.OriginalIssueDocumentId, PartyType.Employee, CustodyKind.Personal, fromUtc));
+            assetId,
+            seed.OriginalIssueDocumentId,
+            PartyType.Employee,
+            seed.EmployeeId,
+            CustodyKind.Personal,
+            fromUtc));
         await context.SaveChangesAsync();
     }
 
@@ -590,6 +619,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         Guid assetId,
         Guid issueDocumentId,
         PartyType holderType,
+        Guid holderId,
         CustodyKind custodyKind,
         DateTime? fromUtc = null)
     {
@@ -597,7 +627,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
             Guid.NewGuid(),
             assetId,
             holderType,
-            Guid.NewGuid(),
+            holderId,
             custodyKind,
             issueDocumentId,
             fromUtc ?? DateTime.UtcNow.AddMinutes(-5));
@@ -613,7 +643,10 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         context.Roles.Add(Role.Create(roleId, $"M6 role {roleId:N}", null));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId));
+            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
+            RolePermission.Create(roleId, WellKnownPermissions.AssetsViewId),
+            RolePermission.Create(roleId, WellKnownPermissions.CustodiesViewId),
+            RolePermission.Create(roleId, WellKnownPermissions.CustodiesManageId));
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();

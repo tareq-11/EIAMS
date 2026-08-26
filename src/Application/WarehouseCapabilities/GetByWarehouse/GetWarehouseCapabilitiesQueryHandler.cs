@@ -29,7 +29,7 @@ internal sealed class GetWarehouseCapabilitiesQueryHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseCapabilities.Manage,
+            PermissionCodes.Warehouses.View,
             ScopeType.Warehouse,
             query.WarehouseId,
             cancellationToken);

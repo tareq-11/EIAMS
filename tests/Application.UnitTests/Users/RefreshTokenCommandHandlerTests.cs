@@ -1,7 +1,7 @@
 using Application.Abstractions.Authentication;
+using Application.UnitTests.Abstractions;
 using Application.Users;
 using Application.Users.Refresh;
-using Application.UnitTests.Abstractions;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -18,7 +18,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         var handler = new RefreshTokenCommandHandler(
             context,
             Substitute.For<ITokenProvider>(),
-            Substitute.For<IDateTimeProvider>());
+            Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -44,7 +45,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         var handler = new RefreshTokenCommandHandler(
             context,
             Substitute.For<ITokenProvider>(),
-            dateTimeProvider);
+            dateTimeProvider,
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -71,7 +73,11 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(now);
 
-        var handler = new RefreshTokenCommandHandler(context, tokenProvider, dateTimeProvider);
+        var handler = new RefreshTokenCommandHandler(
+            context,
+            tokenProvider,
+            dateTimeProvider,
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(

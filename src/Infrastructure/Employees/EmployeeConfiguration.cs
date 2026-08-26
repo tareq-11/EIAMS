@@ -13,6 +13,8 @@ internal sealed class EmployeeConfiguration : IEntityTypeConfiguration<Employee>
 
         builder.HasIndex(e => e.EmployeeNumber).IsUnique();
 
+        builder.HasIndex(e => new { e.OrgUnitId, e.Status, e.FullName });
+
         builder.Property(e => e.FullName).HasMaxLength(200);
 
         builder.Property(e => e.EmployeeNumber).HasMaxLength(50);

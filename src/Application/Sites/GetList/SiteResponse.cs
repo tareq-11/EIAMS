@@ -12,5 +12,7 @@ public sealed class SiteResponse
 
     public string? Location { get; init; }
 
+    public string? GovernorateCode { get; init; }
+
     public string Status { get; init; }
 }

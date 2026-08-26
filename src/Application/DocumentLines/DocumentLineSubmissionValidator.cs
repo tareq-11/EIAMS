@@ -1,5 +1,5 @@
-using Application.Abstractions.Data;
 using Application.Abstractions.Assets;
+using Application.Abstractions.Data;
 using Application.Abstractions.Posting;
 using Domain.Common;
 using Domain.DocumentLines;
@@ -16,14 +16,23 @@ namespace Application.DocumentLines;
 
 public static class DocumentLineSubmissionValidator
 {
-    public static async Task<Result> ValidateAsync(
+    public static Task<Result> ValidateAsync(
         IApplicationDbContext context,
         WarehouseDocument document,
         AssetCreationOptions assetCreationOptions,
         IEnumerable<IDocumentSubmissionValidator> typeValidators,
+        CancellationToken cancellationToken) =>
+        ValidateAsync(context, document, null, assetCreationOptions, typeValidators, cancellationToken);
+
+    public static async Task<Result> ValidateAsync(
+        IApplicationDbContext context,
+        WarehouseDocument document,
+        IReadOnlyList<DocumentLine>? preloadedLines,
+        AssetCreationOptions assetCreationOptions,
+        IEnumerable<IDocumentSubmissionValidator> typeValidators,
         CancellationToken cancellationToken)
     {
-        List<DocumentLine> lines = await context.DocumentLines
+        IReadOnlyList<DocumentLine> lines = preloadedLines ?? await context.DocumentLines
             .AsNoTracking()
             .Where(line => line.DocumentId == document.Id)
             .ToListAsync(cancellationToken);
@@ -42,7 +51,6 @@ public static class DocumentLineSubmissionValidator
                 lines,
                 cancellationToken);
         }
-
 
         Result documentLimitResult = DocumentAssetLimitRules.Validate(
             document.Id,
@@ -78,47 +86,39 @@ public static class DocumentLineSubmissionValidator
     private static async Task<Result> ValidateOperationalLinesAsync(
         IApplicationDbContext context,
         WarehouseDocument document,
-        List<DocumentLine> lines,
+        IReadOnlyList<DocumentLine> lines,
         int maxAssetsPerLine,
         CancellationToken cancellationToken)
     {
         Guid[] materialIds = lines.Select(line => line.MaterialId).Distinct().ToArray();
 
-        List<Material> materials = await context.Materials
-            .AsNoTracking()
-            .Where(material => materialIds.Contains(material.Id))
-            .ToListAsync(cancellationToken);
-        var materialById = materials.ToDictionary(material => material.Id);
+        var catalogRows = await (
+            from material in context.Materials.AsNoTracking()
+            where materialIds.Contains(material.Id)
+            join family in context.MaterialFamilies.AsNoTracking() on material.FamilyId equals family.Id into fGroup
+            from family in fGroup.DefaultIfEmpty()
+            join category in context.MaterialCategories.AsNoTracking() on family.CategoryId equals category.Id into cGroup
+            from category in cGroup.DefaultIfEmpty()
+            join domain in context.MaterialDomains.AsNoTracking() on category.MaterialDomainId equals domain.Id into dGroup
+            from domain in dGroup.DefaultIfEmpty()
+            select new
+            {
+                Material = material,
+                Family = family,
+                Category = category,
+                Domain = domain
+            }
+        ).ToListAsync(cancellationToken);
 
-        Guid[] familyIds = materials.Select(material => material.FamilyId).Distinct().ToArray();
-        List<MaterialFamily> families = await context.MaterialFamilies
-            .AsNoTracking()
-            .Where(family => familyIds.Contains(family.Id))
-            .ToListAsync(cancellationToken);
-        var familyById = families.ToDictionary(family => family.Id);
+        var rowByMaterialId = catalogRows.ToDictionary(r => r.Material.Id);
 
-        Guid[] categoryIds = families.Select(family => family.CategoryId).Distinct().ToArray();
-        List<MaterialCategory> categories = await context.MaterialCategories
-            .AsNoTracking()
-            .Where(category => categoryIds.Contains(category.Id))
-            .ToListAsync(cancellationToken);
-        var categoryById = categories.ToDictionary(category => category.Id);
-
-        Guid[] materialDomainIds = categories
-            .Select(category => category.MaterialDomainId)
-            .Distinct()
-            .ToArray();
-        List<MaterialDomain> materialDomains = await context.MaterialDomains
-            .AsNoTracking()
-            .Where(domain => materialDomainIds.Contains(domain.Id))
-            .ToListAsync(cancellationToken);
-        var materialDomainById = materialDomains.ToDictionary(domain => domain.Id);
-
-        Guid[] unitIds = families
-            .Select(family => family.BaseUnitId)
+        Guid[] unitIds = catalogRows
+            .Where(r => r.Family is not null)
+            .Select(r => r.Family!.BaseUnitId)
             .Concat(lines.Where(line => line.UnitId is not null).Select(line => line.UnitId!.Value))
             .Distinct()
             .ToArray();
+
         var existingUnitIds = (await context.UnitsOfMeasure
                 .AsNoTracking()
                 .Where(unit => unitIds.Contains(unit.Id))
@@ -131,6 +131,7 @@ public static class DocumentLineSubmissionValidator
             .Select(line => line.UnitId!.Value)
             .Distinct()
             .ToArray();
+
         List<MaterialUnitConversion> conversions = requestedConversionUnitIds.Length == 0
             ? []
             : await context.MaterialUnitConversions
@@ -139,59 +140,60 @@ public static class DocumentLineSubmissionValidator
                     materialIds.Contains(conversion.MaterialId) &&
                     requestedConversionUnitIds.Contains(conversion.FromUnitId))
                 .ToListAsync(cancellationToken);
+
         var conversionByMaterialAndUnit = conversions.ToDictionary(
             conversion => (conversion.MaterialId, conversion.FromUnitId));
 
         foreach (DocumentLine line in lines)
         {
-            if (!materialById.TryGetValue(line.MaterialId, out Material? material))
+            if (!rowByMaterialId.TryGetValue(line.MaterialId, out var row))
             {
                 return Result.Failure(MaterialErrors.NotFound(line.MaterialId));
             }
 
-            if (material.Status != MaterialStatus.Active)
+            if (row.Material.Status != MaterialStatus.Active)
             {
-                return Result.Failure(DocumentLineErrors.MaterialNotActive(material.Id));
+                return Result.Failure(DocumentLineErrors.MaterialNotActive(row.Material.Id));
             }
 
-            if (!familyById.TryGetValue(material.FamilyId, out MaterialFamily? family))
+            if (row.Family is null)
             {
-                return Result.Failure(MaterialFamilyErrors.NotFound(material.FamilyId));
+                return Result.Failure(MaterialFamilyErrors.NotFound(row.Material.FamilyId));
             }
 
-            if (family.Status != Status.Active)
+            if (row.Family.Status != Status.Active)
             {
-                return Result.Failure(DocumentLineErrors.MaterialFamilyNotActive(family.Id));
+                return Result.Failure(DocumentLineErrors.MaterialFamilyNotActive(row.Family.Id));
             }
 
-            if (!categoryById.TryGetValue(family.CategoryId, out MaterialCategory? category))
+            if (row.Category is null)
             {
-                return Result.Failure(MaterialCategoryErrors.NotFound(family.CategoryId));
+                return Result.Failure(MaterialCategoryErrors.NotFound(row.Family.CategoryId));
             }
 
-            if (category.Status != Status.Active)
+            if (row.Category.Status != Status.Active)
             {
-                return Result.Failure(DocumentLineErrors.MaterialCategoryNotActive(category.Id));
+                return Result.Failure(DocumentLineErrors.MaterialCategoryNotActive(row.Category.Id));
             }
 
-            if (!materialDomainById.TryGetValue(category.MaterialDomainId, out MaterialDomain? materialDomain))
+            if (row.Domain is null)
             {
-                return Result.Failure(MaterialDomainErrors.NotFound(category.MaterialDomainId));
+                return Result.Failure(MaterialDomainErrors.NotFound(row.Category.MaterialDomainId));
             }
 
-            if (materialDomain.Status != Status.Active)
+            if (row.Domain.Status != Status.Active)
             {
-                return Result.Failure(DocumentLineErrors.MaterialDomainNotActive(materialDomain.Id));
+                return Result.Failure(DocumentLineErrors.MaterialDomainNotActive(row.Domain.Id));
             }
 
-            if (!existingUnitIds.Contains(family.BaseUnitId))
+            if (!existingUnitIds.Contains(row.Family.BaseUnitId))
             {
-                return Result.Failure(DocumentLineErrors.UnitNotFound(family.BaseUnitId));
+                return Result.Failure(DocumentLineErrors.UnitNotFound(row.Family.BaseUnitId));
             }
 
             MaterialUnitConversion? conversion = null;
 
-            if (line.UnitId is not null && line.UnitId != family.BaseUnitId)
+            if (line.UnitId is not null && line.UnitId != row.Family.BaseUnitId)
             {
                 if (!existingUnitIds.Contains(line.UnitId.Value))
                 {
@@ -201,7 +203,7 @@ public static class DocumentLineSubmissionValidator
                 if (!conversionByMaterialAndUnit.TryGetValue(
                         (line.MaterialId, line.UnitId.Value),
                         out conversion) ||
-                    conversion.ToBaseUnitId != family.BaseUnitId)
+                    conversion.ToBaseUnitId != row.Family.BaseUnitId)
                 {
                     return Result.Failure(DocumentLineErrors.UnitConversionNotFound(
                         line.MaterialId,
@@ -213,7 +215,7 @@ public static class DocumentLineSubmissionValidator
                 line.MaterialId,
                 line.Quantity,
                 line.UnitId,
-                family.BaseUnitId,
+                row.Family.BaseUnitId,
                 conversion);
 
             if (baseQuantityResult.IsFailure)
@@ -230,7 +232,7 @@ public static class DocumentLineSubmissionValidator
                     baseQuantityResult.Value));
             }
 
-            DocumentLineType expectedLineType = material.IsAssetTracked
+            DocumentLineType expectedLineType = row.Material.IsAssetTracked
                 ? DocumentLineType.Asset
                 : DocumentLineType.Normal;
 
@@ -272,7 +274,7 @@ public static class DocumentLineSubmissionValidator
         IApplicationDbContext context,
         Guid reversalDocumentId,
         Guid sourceDocumentId,
-        List<DocumentLine> reversalLines,
+        IReadOnlyList<DocumentLine> reversalLines,
         CancellationToken cancellationToken)
     {
         List<DocumentLine> sourceLines = await context.DocumentLines

@@ -29,6 +29,7 @@ internal sealed class InventoryCountConfiguration : IEntityTypeConfiguration<Inv
         builder.Property(item => item.RowVersion).IsConcurrencyToken();
         builder.HasIndex(item => item.WarehouseId);
         builder.HasIndex(item => item.WarehouseId).HasFilter("status = 'InProgress'").IsUnique();
+        builder.HasIndex(item => new { item.WarehouseId, item.Status, item.PlannedAtUtc });
         builder.HasOne<Warehouse>().WithMany().HasForeignKey(item => item.WarehouseId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<User>().WithMany().HasForeignKey(item => item.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<MaterialDomain>().WithMany().HasForeignKey(item => item.ScopeMaterialDomainId).OnDelete(DeleteBehavior.Restrict);

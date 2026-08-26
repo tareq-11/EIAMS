@@ -9,15 +9,16 @@ public class RequestContextLoggingMiddleware(RequestDelegate next)
     private const string CorrelationIdHeaderName = "Correlation-Id";
     private const string RequestIdHeaderName = "X-Request-Id";
 
-    public Task Invoke(HttpContext context)
+    public async Task Invoke(HttpContext context)
     {
         string requestId = GetRequestId(context);
+        context.TraceIdentifier = requestId;
         context.Items[ApiRequestContext.RequestIdItemKey] = requestId;
         context.Response.Headers[RequestIdHeaderName] = requestId;
 
         using (LogContext.PushProperty("CorrelationId", requestId))
         {
-            return next.Invoke(context);
+            await next.Invoke(context);
         }
     }
 

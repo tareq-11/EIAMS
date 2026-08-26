@@ -1,0 +1,60 @@
+using System.Reflection;
+using Microsoft.AspNetCore.Mvc;
+using Shouldly;
+using Web.Api.Infrastructure;
+
+namespace ArchitectureTests;
+
+public sealed class EndpointAuthorizationTests : BaseTest
+{
+    private static readonly HashSet<string> AnonymousAllowlist =
+    [
+        "Web.Api.Controllers.Users.RegisterController",
+        "Web.Api.Controllers.Users.LoginController",
+        "Web.Api.Controllers.Users.RefreshTokenController"
+    ];
+
+    [Fact]
+    public void Every_Protected_Controller_Action_Should_Require_A_Specific_Permission()
+    {
+        // Arrange
+        var controllerTypes = PresentationAssembly.GetTypes()
+            .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
+            .ToList();
+
+        var unauthorizedEndpoints = new List<string>();
+
+        // Act
+        foreach (Type controller in controllerTypes)
+        {
+            if (AnonymousAllowlist.Contains(controller.FullName ?? string.Empty))
+            {
+                continue;
+            }
+
+            bool controllerHasPermission = controller
+                .GetCustomAttributes(typeof(HasPermissionAttribute), true)
+                .Length != 0;
+
+            MethodInfo[] actionMethods = controller.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+                .Where(m => !m.IsSpecialName)
+                .ToArray();
+
+            foreach (MethodInfo method in actionMethods)
+            {
+                bool methodHasPermission = method
+                    .GetCustomAttributes(typeof(HasPermissionAttribute), true)
+                    .Length != 0;
+
+                if (!controllerHasPermission && !methodHasPermission)
+                {
+                    unauthorizedEndpoints.Add($"{controller.FullName}.{method.Name}");
+                }
+            }
+        }
+
+        // Assert
+        unauthorizedEndpoints.ShouldBeEmpty(
+            $"The following controller actions do not require a specific permission: {string.Join(", ", unauthorizedEndpoints)}");
+    }
+}

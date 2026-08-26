@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Warehouses.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetWarehouseByIdController(IQueryHandler<GetWarehouseByIdQue
     : ControllerBase
 {
     [HttpGet("{warehouseId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.Warehouses.View)]
     [ProducesResponseType<ApiResponse<WarehouseResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

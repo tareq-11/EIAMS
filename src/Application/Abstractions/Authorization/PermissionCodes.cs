@@ -9,31 +9,37 @@ public static class PermissionCodes
 {
     public static class Organizations
     {
+        public const string View = "organizations:view";
         public const string Manage = "organizations:manage";
     }
 
     public static class Sites
     {
+        public const string View = "sites:view";
         public const string Manage = "sites:manage";
     }
 
     public static class OrganizationalUnits
     {
+        public const string View = "org-units:view";
         public const string Manage = "org-units:manage";
     }
 
     public static class Employees
     {
+        public const string View = "employees:view";
         public const string Manage = "employees:manage";
     }
 
     public static class Roles
     {
+        public const string View = "roles:view";
         public const string Manage = "roles:manage";
     }
 
     public static class UnitsOfMeasure
     {
+        public const string View = "units-of-measure:view";
         public const string Manage = "units-of-measure:manage";
     }
 
@@ -54,12 +60,30 @@ public static class PermissionCodes
 
     public static class Materials
     {
+        public const string View = "materials:view";
         public const string Manage = "materials:manage";
     }
 
     public static class Warehouses
     {
+        public const string View = "warehouses:view";
         public const string Manage = "warehouses:manage";
+    }
+
+    public static class Inventory
+    {
+        public const string View = "inventory:view";
+    }
+
+    public static class Assets
+    {
+        public const string View = "assets:view";
+    }
+
+    public static class Custodies
+    {
+        public const string View = "custody:view";
+        public const string Manage = "custody:manage";
     }
 
     public static class WarehouseCapabilities
@@ -89,5 +113,10 @@ public static class PermissionCodes
         public const string Plan = "inventory-counts:plan";
         public const string EnterActual = "inventory-counts:enter-actual";
         public const string Review = "inventory-counts:review";
+    }
+
+    public static class AuditLogs
+    {
+        public const string View = "audit-logs:view";
     }
 }

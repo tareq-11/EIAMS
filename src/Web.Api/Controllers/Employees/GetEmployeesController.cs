@@ -1,8 +1,8 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Application.Employees.GetList;
 using Domain.Common;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -16,7 +16,7 @@ public sealed class GetEmployeesController(IQueryHandler<GetEmployeesQuery, Page
     : ControllerBase
 {
     [HttpGet]
-    [Authorize]
+    [HasPermission(PermissionCodes.Employees.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<EmployeeResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(

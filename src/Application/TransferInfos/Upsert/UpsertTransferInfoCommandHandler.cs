@@ -2,10 +2,11 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Policies;
 using Domain.Common;
 using Domain.TransferInfos;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -15,6 +16,7 @@ internal sealed class UpsertTransferInfoCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
+    ITransferPolicyService transferPolicyService,
     IDatabaseExceptionClassifier databaseExceptionClassifier)
     : ICommandHandler<UpsertTransferInfoCommand>
 {
@@ -89,6 +91,16 @@ internal sealed class UpsertTransferInfoCommandHandler(
         if (!destination.CanHoldStock)
         {
             return Result.Failure(WarehouseErrors.CannotHoldStock(destination.Id));
+        }
+
+        Result policyResult = await transferPolicyService.EnsureTransferAllowedAsync(
+            document.WarehouseId,
+            destination.Id,
+            cancellationToken);
+
+        if (policyResult.IsFailure)
+        {
+            return policyResult;
         }
 
         TransferInfo? info = await context.TransferInfos

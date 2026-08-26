@@ -1,8 +1,8 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Application.Organizations.GetList;
 using Domain.Common;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -17,7 +17,7 @@ public sealed class GetOrganizationsController(
     : ControllerBase
 {
     [HttpGet]
-    [Authorize]
+    [HasPermission(PermissionCodes.Organizations.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(

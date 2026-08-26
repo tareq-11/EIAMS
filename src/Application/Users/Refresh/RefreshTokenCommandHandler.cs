@@ -1,6 +1,8 @@
+using Application.Abstractions.Audit;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Domain.AuditLogs;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -10,7 +12,8 @@ namespace Application.Users.Refresh;
 internal sealed class RefreshTokenCommandHandler(
     IApplicationDbContext context,
     ITokenProvider tokenProvider,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
+    IDateTimeProvider dateTimeProvider,
+    IAuditOperationContextAccessor auditContext) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(RefreshTokenCommand command, CancellationToken cancellationToken)
     {
@@ -28,6 +31,14 @@ internal sealed class RefreshTokenCommandHandler(
 
         // Rotate the refresh token so a stolen token can only be used once.
         refreshToken.Rotate(newRefreshToken, dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays));
+
+        auditContext.RecordSynthetic(new AuditSyntheticSubject(
+            refreshToken.UserId,
+            "User",
+            refreshToken.UserId,
+            AuditActions.TokenRefresh,
+            nameof(RefreshTokenCommand),
+            null));
 
         await context.SaveChangesAsync(cancellationToken);
 

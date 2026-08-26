@@ -1,14 +1,15 @@
-using Application.Abstractions.Data;
+using System.Diagnostics;
 using Application.Abstractions.Assets;
-using Application.Abstractions.Ledger;
+using Application.Abstractions.Data;
 using Application.Abstractions.InventoryCounts;
+using Application.Abstractions.Ledger;
 using Application.Abstractions.Posting;
 using Application.DocumentLines;
 using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.DocumentLines;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SharedKernel;
@@ -29,6 +30,8 @@ internal sealed class DocumentPostingCoordinator(
     IDateTimeProvider dateTimeProvider,
     IOptions<AssetCreationOptions> assetCreationOptions) : IDocumentPostingCoordinator
 {
+    private static readonly ActivitySource ActivitySource = new("CleanArchitecture.DocumentPosting");
+
     public Task<Result<PostingOutcome>> PostAsync(
         Guid documentId,
         int expectedRowVersion,
@@ -44,6 +47,9 @@ internal sealed class DocumentPostingCoordinator(
         Guid postedBy,
         CancellationToken cancellationToken)
     {
+        using Activity? activity = ActivitySource.StartActivity("PostDocument");
+        activity?.SetTag("document.id", documentId);
+        activity?.SetTag("posted_by.id", postedBy);
         Result<WarehouseDocument> lockResult = await documentLock.LockAsync(documentId, cancellationToken);
 
         if (lockResult.IsFailure)
@@ -121,6 +127,7 @@ internal sealed class DocumentPostingCoordinator(
         Result linesValidationResult = await DocumentLineSubmissionValidator.ValidateAsync(
             context,
             document,
+            lines,
             assetCreationOptions.Value,
             submissionValidators,
             cancellationToken);

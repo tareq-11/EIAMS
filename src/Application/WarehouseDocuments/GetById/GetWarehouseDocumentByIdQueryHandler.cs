@@ -20,6 +20,7 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehouseDocumentDetailsResponse? document = await context.WarehouseDocuments
+            .AsNoTracking()
             .Where(d => d.Id == query.DocumentId)
             .Select(d => new WarehouseDocumentDetailsResponse
             {
@@ -56,65 +57,76 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
         }
 
         document.ReversedByDocumentId = await context.WarehouseDocuments
+            .AsNoTracking()
             .Where(d => d.ReversalOfDocumentId == query.DocumentId)
             .Select(d => (Guid?)d.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
-        document.ReceivingInfo = await context.ReceivingInfos
-            .AsNoTracking()
-            .Where(info => info.Id == query.DocumentId)
-            .Select(info => new ReceivingInfoResponse
-            {
-                SupplierRef = info.SupplierRef,
-                SupplierInvoiceRef = info.SupplierInvoiceRef,
-                ReceivingType = info.ReceivingType.ToString()
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        document.IssueTo = await context.IssueTos
-            .AsNoTracking()
-            .Where(info => info.Id == query.DocumentId)
-            .Select(info => new IssueToResponse
-            {
-                RecipientType = info.RecipientType.ToString(),
-                RecipientId = info.RecipientId,
-                IssueReason = info.IssueReason
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        document.TransferInfo = await context.TransferInfos
-            .AsNoTracking()
-            .Where(info => info.Id == query.DocumentId)
-            .Select(info => new TransferInfoResponse
-            {
-                DestinationWarehouseId = info.DestinationWarehouseId,
-                TransferReason = info.TransferReason
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        document.ReturnInfo = await context.ReturnInfos
-            .AsNoTracking()
-            .Where(info => info.Id == query.DocumentId)
-            .Select(info => new ReturnInfoResponse
-            {
-                OriginalIssueDocumentId = info.OriginalIssueDocumentId,
-                ReturnReason = info.ReturnReason
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-
-        document.InventoryAdjustment = await context.InventoryAdjustments
-            .AsNoTracking()
-            .Where(info => info.Id == query.DocumentId)
-            .Select(info => new InventoryAdjustmentResponse
-            {
-                CountId = info.CountId,
-                AdjustmentKind = info.AdjustmentKind.ToString(),
-                Status = info.Status.ToString(),
-                Reason = info.Reason
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+        switch (document.DocumentType)
+        {
+            case "Receiving":
+                document.ReceivingInfo = await context.ReceivingInfos
+                    .AsNoTracking()
+                    .Where(info => info.Id == query.DocumentId)
+                    .Select(info => new ReceivingInfoResponse
+                    {
+                        SupplierRef = info.SupplierRef,
+                        SupplierInvoiceRef = info.SupplierInvoiceRef,
+                        ReceivingType = info.ReceivingType.ToString()
+                    })
+                    .SingleOrDefaultAsync(cancellationToken);
+                break;
+            case "Issue":
+                document.IssueTo = await context.IssueTos
+                    .AsNoTracking()
+                    .Where(info => info.Id == query.DocumentId)
+                    .Select(info => new IssueToResponse
+                    {
+                        RecipientType = info.RecipientType.ToString(),
+                        RecipientId = info.RecipientId,
+                        IssueReason = info.IssueReason
+                    })
+                    .SingleOrDefaultAsync(cancellationToken);
+                break;
+            case "Transfer":
+                document.TransferInfo = await context.TransferInfos
+                    .AsNoTracking()
+                    .Where(info => info.Id == query.DocumentId)
+                    .Select(info => new TransferInfoResponse
+                    {
+                        DestinationWarehouseId = info.DestinationWarehouseId,
+                        TransferReason = info.TransferReason
+                    })
+                    .SingleOrDefaultAsync(cancellationToken);
+                break;
+            case "Return":
+                document.ReturnInfo = await context.ReturnInfos
+                    .AsNoTracking()
+                    .Where(info => info.Id == query.DocumentId)
+                    .Select(info => new ReturnInfoResponse
+                    {
+                        OriginalIssueDocumentId = info.OriginalIssueDocumentId,
+                        ReturnReason = info.ReturnReason
+                    })
+                    .SingleOrDefaultAsync(cancellationToken);
+                break;
+            case "Adjustment":
+                document.InventoryAdjustment = await context.InventoryAdjustments
+                    .AsNoTracking()
+                    .Where(info => info.Id == query.DocumentId)
+                    .Select(info => new InventoryAdjustmentResponse
+                    {
+                        CountId = info.CountId,
+                        AdjustmentKind = info.AdjustmentKind.ToString(),
+                        Status = info.Status.ToString(),
+                        Reason = info.Reason
+                    })
+                    .SingleOrDefaultAsync(cancellationToken);
+                break;
+        }
 
         document.Lines = await context.DocumentLines
+            .AsNoTracking()
             .Where(l => l.DocumentId == query.DocumentId)
             .Select(l => new DocumentLineResponse
             {
@@ -134,20 +146,23 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
 
         Guid[] lineIds = document.Lines.Select(line => line.Id).ToArray();
 
-        Dictionary<Guid, AdjustmentLineResponse> adjustmentsByLineId = await context.AdjustmentLines
-            .AsNoTracking()
-            .Where(item => lineIds.Contains(item.Id))
-            .ToDictionaryAsync(item => item.Id, item => new AdjustmentLineResponse
-            {
-                Difference = item.Difference,
-                Reason = item.Reason
-            }, cancellationToken);
-
-        foreach (DocumentLineResponse line in document.Lines)
+        if (document.DocumentType == "Adjustment" && lineIds.Length > 0)
         {
-            if (adjustmentsByLineId.TryGetValue(line.Id, out AdjustmentLineResponse? adjustment))
+            Dictionary<Guid, AdjustmentLineResponse> adjustmentsByLineId = await context.AdjustmentLines
+                .AsNoTracking()
+                .Where(item => lineIds.Contains(item.Id))
+                .ToDictionaryAsync(item => item.Id, item => new AdjustmentLineResponse
+                {
+                    Difference = item.Difference,
+                    Reason = item.Reason
+                }, cancellationToken);
+
+            foreach (DocumentLineResponse line in document.Lines)
             {
-                line.Adjustment = adjustment;
+                if (adjustmentsByLineId.TryGetValue(line.Id, out AdjustmentLineResponse? adjustment))
+                {
+                    line.Adjustment = adjustment;
+                }
             }
         }
 
@@ -213,6 +228,7 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
         }
 
         document.Attachments = await context.DocumentAttachments
+            .AsNoTracking()
             .Where(a => a.DocumentId == query.DocumentId)
             .Select(a => new DocumentAttachmentResponse
             {

@@ -1,8 +1,8 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Application.MaterialCategories.GetList;
 using Domain.Common;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -16,7 +16,7 @@ public sealed class GetMaterialCategoriesController(
     IQueryHandler<GetMaterialCategoriesQuery, PagedResult<MaterialCategoryResponse>> handler) : ControllerBase
 {
     [HttpGet]
-    [Authorize]
+    [HasPermission(PermissionCodes.Materials.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialCategoryResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(

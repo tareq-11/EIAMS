@@ -12,13 +12,13 @@ namespace Web.Api.Controllers.Sites;
 [Tags(Tags.Sites)]
 public sealed class UpdateSiteController(ICommandHandler<UpdateSiteCommand> handler) : ControllerBase
 {
-    public sealed record RequestBody(string Name, string? Location);
+    public sealed record RequestBody(string Name, string? Location, string? GovernorateCode);
 
     [HttpPut("{siteId:guid}")]
     [HasPermission(PermissionCodes.Sites.Manage)]
     public async Task<IResult> Handle(Guid siteId, RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new UpdateSiteCommand(siteId, request.Name, request.Location);
+        var command = new UpdateSiteCommand(siteId, request.Name, request.Location, request.GovernorateCode);
 
         Result result = await handler.Handle(command, cancellationToken);
 

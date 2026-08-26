@@ -60,6 +60,9 @@ public sealed class PlanInventoryCountCommandHandlerTests : BaseHandlerTest
         capability.EnsureAllowedAsync(
                 warehouseId, domainId, OperationType.Count, Arg.Any<CancellationToken>())
             .Returns(Result.Success());
+        capability.EnsureAllowedBatchAsync(
+                warehouseId, Arg.Any<IEnumerable<Guid>>(), OperationType.Count, Arg.Any<CancellationToken>())
+            .Returns(Result.Success());
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
         var handler = new PlanInventoryCountCommandHandler(

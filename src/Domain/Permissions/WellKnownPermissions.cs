@@ -32,4 +32,17 @@ public static class WellKnownPermissions
     public static readonly Guid InventoryCountsPlanId = Guid.Parse("00000000-0000-0000-0000-000000000123");
     public static readonly Guid InventoryCountsEnterActualId = Guid.Parse("00000000-0000-0000-0000-000000000124");
     public static readonly Guid InventoryCountsReviewId = Guid.Parse("00000000-0000-0000-0000-000000000125");
+    public static readonly Guid AuditLogsViewId = Guid.Parse("00000000-0000-0000-0000-000000000126");
+    public static readonly Guid OrganizationsViewId = Guid.Parse("00000000-0000-0000-0000-000000000127");
+    public static readonly Guid SitesViewId = Guid.Parse("00000000-0000-0000-0000-000000000128");
+    public static readonly Guid OrganizationalUnitsViewId = Guid.Parse("00000000-0000-0000-0000-000000000129");
+    public static readonly Guid EmployeesViewId = Guid.Parse("00000000-0000-0000-0000-000000000130");
+    public static readonly Guid RolesViewId = Guid.Parse("00000000-0000-0000-0000-000000000131");
+    public static readonly Guid UnitsOfMeasureViewId = Guid.Parse("00000000-0000-0000-0000-000000000132");
+    public static readonly Guid MaterialsViewId = Guid.Parse("00000000-0000-0000-0000-000000000133");
+    public static readonly Guid WarehousesViewId = Guid.Parse("00000000-0000-0000-0000-000000000134");
+    public static readonly Guid InventoryViewId = Guid.Parse("00000000-0000-0000-0000-000000000135");
+    public static readonly Guid AssetsViewId = Guid.Parse("00000000-0000-0000-0000-000000000136");
+    public static readonly Guid CustodiesViewId = Guid.Parse("00000000-0000-0000-0000-000000000137");
+    public static readonly Guid CustodiesManageId = Guid.Parse("00000000-0000-0000-0000-000000000138");
 }

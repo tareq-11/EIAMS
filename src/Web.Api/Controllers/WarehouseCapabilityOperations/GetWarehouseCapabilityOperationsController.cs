@@ -1,7 +1,7 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Application.WarehouseCapabilityOperations.GetByCapability;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -16,7 +16,7 @@ public sealed class GetWarehouseCapabilityOperationsController(
     : ControllerBase
 {
     [HttpGet]
-    [Authorize]
+    [HasPermission(PermissionCodes.Warehouses.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityOperationResponse>>>(
         StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]

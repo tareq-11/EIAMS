@@ -1,6 +1,6 @@
 using Domain.Materials;
-using Domain.Warehouses;
 using Domain.WarehouseMaterialSettings;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

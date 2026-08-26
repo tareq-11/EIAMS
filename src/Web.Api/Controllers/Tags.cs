@@ -24,4 +24,5 @@ public static class Tags
     public const string InventoryLedger = "InventoryLedger";
     public const string Assets = "Assets";
     public const string InventoryCounts = "Inventory Counts";
+    public const string AuditLogs = "Audit Logs";
 }

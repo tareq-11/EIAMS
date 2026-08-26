@@ -1,6 +1,6 @@
 using Domain.Roles;
-using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

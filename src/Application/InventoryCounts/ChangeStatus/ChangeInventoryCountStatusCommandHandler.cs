@@ -1,8 +1,8 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
-using Application.Abstractions.Messaging;
 using Application.Abstractions.InventoryCounts;
+using Application.Abstractions.Messaging;
 using Domain.Common;
 using Domain.InventoryCounts;
 using Microsoft.EntityFrameworkCore;

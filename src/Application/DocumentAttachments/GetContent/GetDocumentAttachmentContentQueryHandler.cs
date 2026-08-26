@@ -23,6 +23,7 @@ internal sealed class GetDocumentAttachmentContentQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehouseDocument? document = await context.WarehouseDocuments
+            .AsNoTracking()
             .SingleOrDefaultAsync(d => d.Id == query.DocumentId, cancellationToken);
 
         if (document is null)
@@ -42,9 +43,11 @@ internal sealed class GetDocumentAttachmentContentQueryHandler(
             return Result.Failure<DocumentAttachmentContentResponse>(WarehouseDocumentErrors.NotFound(query.DocumentId));
         }
 
-        DocumentAttachment? attachment = await context.DocumentAttachments.SingleOrDefaultAsync(
-            a => a.Id == query.AttachmentId && a.DocumentId == query.DocumentId,
-            cancellationToken);
+        DocumentAttachment? attachment = await context.DocumentAttachments
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                a => a.Id == query.AttachmentId && a.DocumentId == query.DocumentId,
+                cancellationToken);
 
         if (attachment is null)
         {

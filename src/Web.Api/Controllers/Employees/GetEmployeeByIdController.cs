@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Employees.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetEmployeeByIdController(IQueryHandler<GetEmployeeByIdQuery
     : ControllerBase
 {
     [HttpGet("{employeeId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.Employees.View)]
     public async Task<IResult> Handle(Guid employeeId, CancellationToken cancellationToken)
     {
         var query = new GetEmployeeByIdQuery(employeeId);

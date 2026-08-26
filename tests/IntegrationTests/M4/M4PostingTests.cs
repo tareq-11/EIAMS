@@ -1,6 +1,6 @@
 using Application.Abstractions.Posting;
-using Domain.Common;
 using Domain.Assets;
+using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.DocumentLines;
 using Domain.MaterialCategories;
@@ -15,8 +15,8 @@ using Domain.UnitsOfMeasure;
 using Domain.Users;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

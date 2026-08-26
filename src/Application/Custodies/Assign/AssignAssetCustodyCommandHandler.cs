@@ -56,7 +56,7 @@ internal sealed class AssignAssetCustodyCommandHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.Edit,
+            PermissionCodes.Custodies.Manage,
             ScopeType.Warehouse,
             warehouseId,
             cancellationToken);

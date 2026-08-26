@@ -1,20 +1,20 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Employees.Create;
-using Application.Organizations.Create;
 using Application.OrganizationalUnits.Create;
+using Application.Organizations.Create;
 using Application.Sites.Create;
 using Application.UnitTests.Abstractions;
 using Application.UserRoleScopes.Grant;
 using Application.Users.LinkEmployee;
 using Domain.Common;
 using Domain.Employees;
-using Domain.Organizations;
 using Domain.OrganizationalUnits;
+using Domain.Organizations;
 using Domain.Roles;
 using Domain.Sites;
-using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -172,7 +172,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         context.Roles.Add(Role.Create(roleId, "Reader", null));
         await context.SaveChangesAsync();
 
-        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
         var command = new GrantUserRoleScopeCommand(userId, roleId, ScopeType.Site, missingSiteId);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
@@ -192,7 +192,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         context.Roles.Add(Role.Create(roleId, "Reader", null));
         await context.SaveChangesAsync();
 
-        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
         var command = new GrantUserRoleScopeCommand(userId, roleId, ScopeType.Enterprise, null);
 
         Result<Guid> created = await handler.Handle(command, CancellationToken.None);

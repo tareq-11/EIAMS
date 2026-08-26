@@ -1,28 +1,34 @@
 using System.Text;
-using Application.Abstractions.Authentication;
 using Application.Abstractions.Assets;
-using Application.Abstractions.InventoryCounts;
+using Application.Abstractions.Audit;
+using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Numbering;
+using Application.Abstractions.Policies;
+using Application.Abstractions.PolymorphicReferences;
 using Application.Abstractions.Posting;
 using Application.Abstractions.Recipients;
 using Application.Abstractions.Storage;
 using Application.Abstractions.Warehouses;
-using Infrastructure.Authentication;
 using Infrastructure.Assets;
+using Infrastructure.AuditLogs;
+using Infrastructure.Authentication;
 using Infrastructure.Authorization;
 using Infrastructure.Database;
 using Infrastructure.DomainEvents;
-using Infrastructure.Ledger;
 using Infrastructure.InventoryCounts;
+using Infrastructure.Ledger;
 using Infrastructure.Numbering;
+using Infrastructure.Policies;
+using Infrastructure.PolymorphicReferences;
 using Infrastructure.Recipients;
 using Infrastructure.Storage;
 using Infrastructure.Time;
-using Infrastructure.Warehouses;
 using Infrastructure.WarehouseDocuments;
+using Infrastructure.Warehouses;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -49,6 +55,14 @@ public static class DependencyInjection
     private static IServiceCollection AddServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
+
+        services.AddScoped<IAuditOperationContextAccessor, AuditOperationContextAccessor>();
+
+        services.AddScoped<IRequestAuditContext, RequestAuditContext>();
+
+        services.AddSingleton<AuditEntityRegistry>();
+
+        services.AddSingleton<IAuditValuePolicy, AuditValuePolicy>();
 
         services.AddTransient<IDomainEventsDispatcher, DomainEventsDispatcher>();
 
@@ -105,6 +119,12 @@ public static class DependencyInjection
         services.AddScoped<IWarehouseOperationLock, PostgresWarehouseOperationLock>();
 
         services.AddScoped<IInventoryFreezePolicyService, InventoryFreezePolicyService>();
+
+        services.AddScoped<ITransferPolicyService, TransferPolicyService>();
+
+        services.AddScoped<IPolymorphicReferenceAuditor, PolymorphicReferenceAuditor>();
+
+        services.AddHostedService<PolymorphicReferenceAuditWorker>();
 
         services.AddScoped<AssetPostingSelectionService>();
 
@@ -168,6 +188,30 @@ public static class DependencyInjection
                 "Document type codes must be unique.")
             .ValidateOnStart();
 
+        services.AddOptions<TransferPolicyOptions>()
+            .Bind(configuration.GetSection(TransferPolicyOptions.SectionName))
+            .ValidateOnStart();
+
+        services.AddOptions<InventoryPolicyOptions>()
+            .Bind(configuration.GetSection(InventoryPolicyOptions.SectionName))
+            .Validate(
+                options => string.Equals(
+                    options.NegativeStockPolicy,
+                    InventoryPolicyOptions.Block,
+                    StringComparison.Ordinal),
+                "Policies:Inventory:NegativeStockPolicy must be 'Block'.")
+            .ValidateOnStart();
+
+        services.AddOptions<PolymorphicReferenceAuditOptions>()
+            .Bind(configuration.GetSection(PolymorphicReferenceAuditOptions.SectionName))
+            .Validate(options => options.InitialDelay >= TimeSpan.Zero,
+                "PolymorphicReferenceAudit:InitialDelay must not be negative.")
+            .Validate(options => options.Interval > TimeSpan.Zero,
+                "PolymorphicReferenceAudit:Interval must be greater than zero.")
+            .Validate(options => options.MaximumLoggedFindingsPerCycle is > 0 and <= 10_000,
+                "PolymorphicReferenceAudit:MaximumLoggedFindingsPerCycle must be between 1 and 10000.")
+            .ValidateOnStart();
+
 #pragma warning disable EXTEXP0018 // HybridCache is released; the API is stable in .NET 10.
         services.AddHybridCache();
 #pragma warning restore EXTEXP0018
@@ -184,12 +228,16 @@ public static class DependencyInjection
 
         services.AddScoped<AuditableEntityInterceptor>();
 
+        services.AddScoped<AuditSaveChangesInterceptor>();
+
         services.AddDbContext<ApplicationDbContext>(
             (sp, options) => options
                 .UseNpgsql(connectionString, npgsqlOptions =>
                     npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
                 .UseSnakeCaseNamingConvention()
-                .AddInterceptors(sp.GetRequiredService<AuditableEntityInterceptor>()));
+                .AddInterceptors(
+                    sp.GetRequiredService<AuditableEntityInterceptor>(),
+                    sp.GetRequiredService<AuditSaveChangesInterceptor>()));
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 

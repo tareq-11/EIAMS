@@ -5,7 +5,6 @@ using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Domain.Common;
 using Domain.Warehouses;
-using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -23,7 +22,7 @@ internal sealed class GetInventoryBalancesByWarehouseQueryHandler(
     {
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.View,
+            PermissionCodes.Inventory.View,
             ScopeType.Warehouse,
             query.WarehouseId,
             cancellationToken);
@@ -33,15 +32,15 @@ internal sealed class GetInventoryBalancesByWarehouseQueryHandler(
             return Result.Failure<PagedResult<InventoryBalanceResponse>>(WarehouseErrors.NotFound(query.WarehouseId));
         }
 
-        if (!await context.Warehouses.AnyAsync(w => w.Id == query.WarehouseId, cancellationToken))
+        if (!await context.Warehouses.AsNoTracking().AnyAsync(w => w.Id == query.WarehouseId, cancellationToken))
         {
             return Result.Failure<PagedResult<InventoryBalanceResponse>>(WarehouseErrors.NotFound(query.WarehouseId));
         }
 
         PagedResult<InventoryBalanceResponse> balances = await (
-                from balance in context.InventoryBalances
+                from balance in context.InventoryBalances.AsNoTracking()
                 where balance.WarehouseId == query.WarehouseId
-                join material in context.Materials on balance.MaterialId equals material.Id
+                join material in context.Materials.AsNoTracking() on balance.MaterialId equals material.Id
                 select new InventoryBalanceResponse
                 {
                     Id = balance.Id,

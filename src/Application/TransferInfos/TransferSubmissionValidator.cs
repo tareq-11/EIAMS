@@ -1,16 +1,19 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Policies;
 using Application.Abstractions.Posting;
 using Domain.Common;
 using Domain.DocumentLines;
 using Domain.TransferInfos;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
 namespace Application.TransferInfos;
 
-internal sealed class TransferSubmissionValidator(IApplicationDbContext context) : IDocumentSubmissionValidator
+internal sealed class TransferSubmissionValidator(
+    IApplicationDbContext context,
+    ITransferPolicyService transferPolicyService) : IDocumentSubmissionValidator
 {
     public DocumentType DocumentType => DocumentType.Transfer;
 
@@ -38,6 +41,16 @@ internal sealed class TransferSubmissionValidator(IApplicationDbContext context)
         if (destinationResult.IsFailure)
         {
             return destinationResult;
+        }
+
+        Result policyResult = await transferPolicyService.EnsureTransferAllowedAsync(
+            document.WarehouseId,
+            transferInfo.DestinationWarehouseId,
+            cancellationToken);
+
+        if (policyResult.IsFailure)
+        {
+            return policyResult;
         }
 
         return lines.Any(line => line.LineType == DocumentLineType.Asset)

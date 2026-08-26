@@ -16,6 +16,7 @@ internal static class OpenTelemetryExtensions
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService(serviceName))
             .WithTracing(tracing => tracing
+                .AddSource("CleanArchitecture.DocumentPosting")
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddNpgsql())

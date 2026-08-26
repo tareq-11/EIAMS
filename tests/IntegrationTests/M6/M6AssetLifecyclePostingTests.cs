@@ -15,8 +15,8 @@ using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
 using Domain.Materials;
-using Domain.Organizations;
 using Domain.OrganizationalUnits;
+using Domain.Organizations;
 using Domain.Permissions;
 using Domain.ReceivingInfos;
 using Domain.ReturnInfos;
@@ -27,8 +27,8 @@ using Domain.UserRoleScopes;
 using Domain.Users;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -640,7 +640,7 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M6 edit {roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.CustodiesManageId));
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();

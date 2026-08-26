@@ -19,6 +19,8 @@ internal sealed class DocumentAttachmentConfiguration : IEntityTypeConfiguration
             .IsUnique()
             .HasFilter("attachment_type = 'SignedOriginal'");
 
+        builder.HasIndex(a => a.DocumentId);
+
         builder.Property(a => a.AttachmentType).HasConversion<string>().HasMaxLength(20);
 
         builder.Property(a => a.StorageKey).HasMaxLength(500);

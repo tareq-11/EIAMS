@@ -13,11 +13,19 @@ internal sealed class PostgresAssetKeyLock(ApplicationDbContext dbContext) : IAs
             throw new InvalidOperationException("Asset-key locks require an active database transaction.");
         }
 
-        foreach (Guid assetId in assetIds.Distinct().OrderBy(assetId => assetId))
+        string[] sortedKeys = assetIds
+            .Distinct()
+            .OrderBy(assetId => assetId)
+            .Select(assetId => assetId.ToString())
+            .ToArray();
+
+        if (sortedKeys.Length == 0)
         {
-            await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtextextended({assetId.ToString()}, 0))",
-                cancellationToken);
+            return;
         }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended(k, 0)) FROM unnest({sortedKeys}) AS k",
+            cancellationToken);
     }
 }

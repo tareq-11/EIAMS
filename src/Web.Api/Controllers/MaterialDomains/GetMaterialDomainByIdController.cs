@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.MaterialDomains.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetMaterialDomainByIdController(
     IQueryHandler<GetMaterialDomainByIdQuery, MaterialDomainResponse> handler) : ControllerBase
 {
     [HttpGet("{materialDomainId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.Materials.View)]
     public async Task<IResult> Handle(Guid materialDomainId, CancellationToken cancellationToken)
     {
         var query = new GetMaterialDomainByIdQuery(materialDomainId);

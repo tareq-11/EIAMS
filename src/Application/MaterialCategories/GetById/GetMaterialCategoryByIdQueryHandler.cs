@@ -2,29 +2,42 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.MaterialCategories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.MaterialCategories.GetById;
 
-internal sealed class GetMaterialCategoryByIdQueryHandler(IApplicationDbContext context)
+internal sealed class GetMaterialCategoryByIdQueryHandler(
+    IApplicationDbContext context,
+    HybridCache hybridCache)
     : IQueryHandler<GetMaterialCategoryByIdQuery, MaterialCategoryResponse>
 {
     public async Task<Result<MaterialCategoryResponse>> Handle(
         GetMaterialCategoryByIdQuery query,
         CancellationToken cancellationToken)
     {
-        MaterialCategoryResponse? category = await context.MaterialCategories
-            .Where(c => c.Id == query.MaterialCategoryId)
-            .Select(c => new MaterialCategoryResponse
+        MaterialCategoryResponse? category = await hybridCache.GetOrCreateAsync(
+            $"categories:by-id:{query.MaterialCategoryId}",
+            async ct => await context.MaterialCategories
+                .AsNoTracking()
+                .Where(c => c.Id == query.MaterialCategoryId)
+                .Select(c => new MaterialCategoryResponse
+                {
+                    Id = c.Id,
+                    MaterialDomainId = c.MaterialDomainId,
+                    ParentCategoryId = c.ParentCategoryId,
+                    Name = c.Name,
+                    Code = c.Code,
+                    Status = c.Status.ToString()
+                })
+                .SingleOrDefaultAsync(ct),
+            new HybridCacheEntryOptions
             {
-                Id = c.Id,
-                MaterialDomainId = c.MaterialDomainId,
-                ParentCategoryId = c.ParentCategoryId,
-                Name = c.Name,
-                Code = c.Code,
-                Status = c.Status.ToString()
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+                Expiration = TimeSpan.FromMinutes(10),
+                LocalCacheExpiration = TimeSpan.FromMinutes(10)
+            },
+            tags: ["categories"],
+            cancellationToken: cancellationToken);
 
         if (category is null)
         {

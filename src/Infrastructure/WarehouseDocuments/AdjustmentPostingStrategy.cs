@@ -21,6 +21,7 @@ internal sealed class AdjustmentPostingStrategy(
     IAssetKeyLock assetKeyLock) : IDocumentPostingStrategy
 {
     private readonly Dictionary<Guid, DisposalPreparation> disposalPreparations = [];
+    private InventoryAdjustment? preparedAdjustment;
     public DocumentType DocumentType => DocumentType.Adjustment;
 
     public async Task<Result<PostingPlan>> PrepareAsync(DocumentPostingContext context, CancellationToken cancellationToken)
@@ -32,6 +33,8 @@ internal sealed class AdjustmentPostingStrategy(
             return Result.Failure<PostingPlan>(InventoryAdjustmentErrors.Required(context.Document.Id));
         }
 
+        preparedAdjustment = adjustment;
+
         Result<IReadOnlyDictionary<Guid, PostingMaterialInfo>> catalogResult =
             await PostingMaterialCatalogLoader.LoadAsync(dbContext, context.Document.Id, context.Lines, cancellationToken);
         if (catalogResult.IsFailure)
@@ -39,14 +42,20 @@ internal sealed class AdjustmentPostingStrategy(
             return Result.Failure<PostingPlan>(catalogResult.Error);
         }
 
-        foreach (Guid domainId in catalogResult.Value.Values.Select(item => item.MaterialDomainId).Distinct())
+        Guid[] domainIds = catalogResult.Value.Values
+            .Select(item => item.MaterialDomainId)
+            .Distinct()
+            .ToArray();
+
+        Result capability = await capabilityCheckService.EnsureAllowedBatchAsync(
+            context.Document.WarehouseId,
+            domainIds,
+            OperationType.Adjustment,
+            cancellationToken);
+
+        if (capability.IsFailure)
         {
-            Result capability = await capabilityCheckService.EnsureAllowedAsync(
-                context.Document.WarehouseId, domainId, OperationType.Adjustment, cancellationToken);
-            if (capability.IsFailure)
-            {
-                return Result.Failure<PostingPlan>(capability.Error);
-            }
+            return Result.Failure<PostingPlan>(capability.Error);
         }
 
         return adjustment.AdjustmentKind == AdjustmentKind.Disposal
@@ -59,7 +68,7 @@ internal sealed class AdjustmentPostingStrategy(
         PostingPlan plan,
         CancellationToken cancellationToken)
     {
-        InventoryAdjustment? adjustment = await dbContext.InventoryAdjustments
+        InventoryAdjustment? adjustment = preparedAdjustment ?? await dbContext.InventoryAdjustments
             .SingleOrDefaultAsync(item => item.Id == context.Document.Id, cancellationToken);
         if (adjustment is null)
         {

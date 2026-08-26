@@ -4,8 +4,8 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
 using Domain.Common;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -23,7 +23,7 @@ internal sealed class GetStockMovementsByWarehouseQueryHandler(
     {
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.View,
+            PermissionCodes.Inventory.View,
             ScopeType.Warehouse,
             query.WarehouseId,
             cancellationToken);

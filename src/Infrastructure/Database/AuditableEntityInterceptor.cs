@@ -9,6 +9,18 @@ namespace Infrastructure.Database;
 internal sealed class AuditableEntityInterceptor(IDateTimeProvider dateTimeProvider, IUserContext userContext)
     : SaveChangesInterceptor
 {
+    public override InterceptionResult<int> SavingChanges(
+        DbContextEventData eventData,
+        InterceptionResult<int> result)
+    {
+        if (eventData.Context is not null)
+        {
+            UpdateAuditableEntities(eventData.Context);
+        }
+
+        return base.SavingChanges(eventData, result);
+    }
+
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,

@@ -15,14 +15,20 @@ internal sealed class PostgresInventoryKeyLock(ApplicationDbContext dbContext) :
             throw new InvalidOperationException("Inventory-key locks require an active database transaction.");
         }
 
-        foreach ((Guid warehouseId, Guid materialId) in keys
-                     .Distinct()
-                     .OrderBy(key => key.WarehouseId)
-                     .ThenBy(key => key.MaterialId))
+        string[] sortedKeys = keys
+            .Distinct()
+            .OrderBy(key => key.WarehouseId)
+            .ThenBy(key => key.MaterialId)
+            .Select(key => $"{key.WarehouseId}:{key.MaterialId}")
+            .ToArray();
+
+        if (sortedKeys.Length == 0)
         {
-            await dbContext.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT pg_advisory_xact_lock(hashtextextended({warehouseId + ":" + materialId}, 0))",
-                cancellationToken);
+            return;
         }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended(k, 0)) FROM unnest({sortedKeys}) AS k",
+            cancellationToken);
     }
 }

@@ -36,7 +36,12 @@ internal sealed class UpdateSiteCommandHandler(
             return Result.Failure(SiteErrors.NotFound(command.SiteId));
         }
 
-        site.UpdateDetails(command.Name, command.Location);
+        Result updateResult = site.UpdateDetails(command.Name, command.Location, command.GovernorateCode);
+
+        if (updateResult.IsFailure)
+        {
+            return updateResult;
+        }
 
         await context.SaveChangesAsync(cancellationToken);
 

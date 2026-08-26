@@ -6,8 +6,8 @@ using Application.Abstractions.Numbering;
 using Domain.Common;
 using Domain.DocumentLines;
 using Domain.InventoryAdjustments;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 

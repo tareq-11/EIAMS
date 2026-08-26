@@ -19,7 +19,7 @@ public sealed class AssignAssetCustodyController(
         string? Note);
 
     [HttpPost]
-    [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
+    [HasPermission(PermissionCodes.Custodies.Manage)]
     [ProducesResponseType<ApiResponse<Guid>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

@@ -122,6 +122,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
         await GrantPermissionAsync(userId, WellKnownPermissions.RolesManageId, ScopeType.Enterprise, null);
+        await GrantPermissionAsync(userId, WellKnownPermissions.RolesViewId, ScopeType.Enterprise, null);
         Guid roleId = await SeedRoleAsync();
         Authenticate(tokens.AccessToken);
 
@@ -343,10 +344,6 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Guid roleId = await SeedRoleAsync(context);
-        List<UserRoleScope> existingGrants = await context.UserRoleScopes
-            .Where(item => item.UserId == userId)
-            .ToListAsync();
-        context.UserRoleScopes.RemoveRange(existingGrants);
         context.RolePermissions.Add(RolePermission.Create(roleId, permissionId));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
         await context.SaveChangesAsync();

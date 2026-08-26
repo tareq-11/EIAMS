@@ -19,7 +19,15 @@ internal sealed class SiteConfiguration : IEntityTypeConfiguration<Site>
 
         builder.Property(s => s.Location).HasMaxLength(300);
 
+        builder.Property(s => s.GovernorateCode).HasMaxLength(Site.MaxGovernorateCodeLength);
+
+        builder.HasIndex(s => s.GovernorateCode).HasFilter("governorate_code IS NOT NULL");
+
         builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(20);
+
+        builder.ToTable(table => table.HasCheckConstraint(
+            "ck_sites_governorate_code_valid",
+            "governorate_code IS NULL OR governorate_code ~ '^[A-Z0-9_-]{1,20}$'"));
 
         builder.HasOne<Organization>().WithMany().HasForeignKey(s => s.OrganizationId);
     }

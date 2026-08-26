@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.MaterialCategories.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetMaterialCategoryByIdController(
     IQueryHandler<GetMaterialCategoryByIdQuery, MaterialCategoryResponse> handler) : ControllerBase
 {
     [HttpGet("{materialCategoryId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.Materials.View)]
     public async Task<IResult> Handle(Guid materialCategoryId, CancellationToken cancellationToken)
     {
         var query = new GetMaterialCategoryByIdQuery(materialCategoryId);

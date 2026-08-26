@@ -2,29 +2,42 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.MaterialFamilies;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.MaterialFamilies.GetById;
 
-internal sealed class GetMaterialFamilyByIdQueryHandler(IApplicationDbContext context)
+internal sealed class GetMaterialFamilyByIdQueryHandler(
+    IApplicationDbContext context,
+    HybridCache hybridCache)
     : IQueryHandler<GetMaterialFamilyByIdQuery, MaterialFamilyResponse>
 {
     public async Task<Result<MaterialFamilyResponse>> Handle(
         GetMaterialFamilyByIdQuery query,
         CancellationToken cancellationToken)
     {
-        MaterialFamilyResponse? family = await context.MaterialFamilies
-            .Where(f => f.Id == query.MaterialFamilyId)
-            .Select(f => new MaterialFamilyResponse
+        MaterialFamilyResponse? family = await hybridCache.GetOrCreateAsync(
+            $"families:by-id:{query.MaterialFamilyId}",
+            async ct => await context.MaterialFamilies
+                .AsNoTracking()
+                .Where(f => f.Id == query.MaterialFamilyId)
+                .Select(f => new MaterialFamilyResponse
+                {
+                    Id = f.Id,
+                    CategoryId = f.CategoryId,
+                    Name = f.Name,
+                    Code = f.Code,
+                    BaseUnitId = f.BaseUnitId,
+                    Status = f.Status.ToString()
+                })
+                .SingleOrDefaultAsync(ct),
+            new HybridCacheEntryOptions
             {
-                Id = f.Id,
-                CategoryId = f.CategoryId,
-                Name = f.Name,
-                Code = f.Code,
-                BaseUnitId = f.BaseUnitId,
-                Status = f.Status.ToString()
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+                Expiration = TimeSpan.FromMinutes(10),
+                LocalCacheExpiration = TimeSpan.FromMinutes(10)
+            },
+            tags: ["families"],
+            cancellationToken: cancellationToken);
 
         if (family is null)
         {

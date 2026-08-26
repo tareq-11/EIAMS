@@ -4,6 +4,10 @@ namespace Domain.Sites;
 
 public static class SiteErrors
 {
+    public static readonly Error GovernorateCodeInvalid = Error.Problem(
+        "Sites.GovernorateCodeInvalid",
+        "Governorate code must contain only A-Z, digits, underscore, or hyphen and be at most 20 characters.");
+
     public static Error NotFound(Guid siteId) => Error.NotFound(
         "Sites.NotFound",
         $"The site with the Id = '{siteId}' was not found");

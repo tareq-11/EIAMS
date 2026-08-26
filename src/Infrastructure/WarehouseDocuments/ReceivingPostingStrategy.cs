@@ -55,18 +55,15 @@ internal sealed class ReceivingPostingStrategy(
             .Distinct()
             .ToArray();
 
-        foreach (Guid materialDomainId in materialDomainIds)
-        {
-            Result capabilityResult = await capabilityCheckService.EnsureAllowedAsync(
-                context.Document.WarehouseId,
-                materialDomainId,
-                OperationType.Receiving,
-                cancellationToken);
+        Result capabilityResult = await capabilityCheckService.EnsureAllowedBatchAsync(
+            context.Document.WarehouseId,
+            materialDomainIds,
+            OperationType.Receiving,
+            cancellationToken);
 
-            if (capabilityResult.IsFailure)
-            {
-                return Result.Failure<PostingPlan>(capabilityResult.Error);
-            }
+        if (capabilityResult.IsFailure)
+        {
+            return Result.Failure<PostingPlan>(capabilityResult.Error);
         }
 
         var movements = context.Lines

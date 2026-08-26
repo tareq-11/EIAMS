@@ -24,15 +24,21 @@ internal sealed class GetInventoryCountByIdQueryHandler(
             return Result.Failure<InventoryCountDetailsResponse>(InventoryCountErrors.NotFound(query.CountId));
         }
 
-        IQueryable<InventoryCountLine> lines = context.InventoryCountLines.AsNoTracking()
-            .Where(item => item.CountId == count.Id);
-        int totalLines = await lines.CountAsync(cancellationToken);
-        int countedLines = await lines.CountAsync(item => item.ActualQuantity != null, cancellationToken);
-        int varianceLines = await lines.CountAsync(
-            item => item.Difference != null && item.Difference != 0, cancellationToken);
-        decimal totalAbsoluteDifference = await lines
-            .SumAsync(item => Math.Abs(item.Difference.GetValueOrDefault()),
-                cancellationToken);
+        var lineStats = await context.InventoryCountLines
+            .AsNoTracking()
+            .Where(item => item.CountId == count.Id)
+            .Select(item => new
+            {
+                IsCounted = item.ActualQuantity != null,
+                HasVariance = item.Difference != null && item.Difference != 0,
+                Diff = item.Difference
+            })
+            .ToListAsync(cancellationToken);
+
+        int totalLines = lineStats.Count;
+        int countedLines = lineStats.Count(x => x.IsCounted);
+        int varianceLines = lineStats.Count(x => x.HasVariance);
+        decimal totalAbsoluteDifference = lineStats.Sum(x => Math.Abs(x.Diff.GetValueOrDefault()));
         var summary = new InventoryCountSummaryResponse(
             totalLines, countedLines, varianceLines, totalAbsoluteDifference);
 

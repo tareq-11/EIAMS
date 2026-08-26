@@ -62,23 +62,19 @@ internal sealed class InventoryLedgerWriter(
 
         await inventoryKeyLock.AcquireAsync(keys, cancellationToken);
 
-        foreach ((Guid warehouseId, Guid materialId) in keys)
-        {
-            await EnsureBalanceRowExistsAsync(
-                warehouseId,
-                materialId,
-                postedBy,
-                postedAtUtc,
-                cancellationToken);
-        }
+        await EnsureBalancesExistAsync(keys, postedBy, postedAtUtc, cancellationToken);
 
-        var lockedBalances = new Dictionary<(Guid, Guid), InventoryBalance>();
+        Guid[] warehouseIds = keys.Select(k => k.WarehouseId).Distinct().ToArray();
+        Guid[] materialIds = keys.Select(k => k.MaterialId).Distinct().ToArray();
 
-        foreach ((Guid warehouseId, Guid materialId) in keys)
-        {
-            lockedBalances[(warehouseId, materialId)] =
-                await LockBalanceAsync(warehouseId, materialId, cancellationToken);
-        }
+        List<InventoryBalance> balances = await dbContext.InventoryBalances
+            .FromSqlInterpolated(
+                $"SELECT * FROM inventory_balances WHERE warehouse_id = ANY({warehouseIds}) AND material_id = ANY({materialIds}) FOR UPDATE")
+            .ToListAsync(cancellationToken);
+
+        var lockedBalances = balances
+            .Where(b => keys.Contains((b.WarehouseId, b.MaterialId)))
+            .ToDictionary(b => (b.WarehouseId, b.MaterialId));
 
         foreach (IGrouping<(Guid WarehouseId, Guid MaterialId), MovementDraft> movementGroup in movements
                      .GroupBy(movement => (movement.WarehouseId, movement.MaterialId)))
@@ -144,11 +140,17 @@ internal sealed class InventoryLedgerWriter(
                 movements.First().DocumentId));
         }
 
+        var totals = await dbContext.StockMovements
+            .Where(m => warehouseIds.Contains(m.WarehouseId) && materialIds.Contains(m.MaterialId))
+            .GroupBy(m => new { m.WarehouseId, m.MaterialId })
+            .Select(g => new { g.Key.WarehouseId, g.Key.MaterialId, Total = g.Sum(x => x.QuantityDelta) })
+            .ToListAsync(cancellationToken);
+
+        var totalsMap = totals.ToDictionary(x => (x.WarehouseId, x.MaterialId), x => x.Total);
+
         foreach ((Guid warehouseId, Guid materialId) in keys)
         {
-            decimal total = await dbContext.StockMovements
-                .Where(m => m.WarehouseId == warehouseId && m.MaterialId == materialId)
-                .SumAsync(m => m.QuantityDelta, cancellationToken);
+            decimal total = totalsMap.TryGetValue((warehouseId, materialId), out decimal sum) ? sum : 0m;
 
             Result updateResult = lockedBalances[(warehouseId, materialId)].SetQuantity(total, postedAtUtc);
 
@@ -163,30 +165,23 @@ internal sealed class InventoryLedgerWriter(
         return Result.Success();
     }
 
-    private async Task EnsureBalanceRowExistsAsync(
-        Guid warehouseId,
-        Guid materialId,
+    private async Task EnsureBalancesExistAsync(
+        IReadOnlyList<(Guid WarehouseId, Guid MaterialId)> keys,
         Guid postedBy,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
-        await dbContext.Database.ExecuteSqlInterpolatedAsync(
-            $"""
-              INSERT INTO public.inventory_balances
-                  (id, warehouse_id, material_id, quantity, last_updated_utc, row_version, created_at_utc, created_by)
-              VALUES
-                  ({Guid.NewGuid()}, {warehouseId}, {materialId}, {0m}, {nowUtc}, {1}, {nowUtc}, {postedBy})
-              ON CONFLICT (warehouse_id, material_id) DO NOTHING
-              """,
-            cancellationToken);
+        foreach ((Guid warehouseId, Guid materialId) in keys)
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                  INSERT INTO public.inventory_balances
+                      (id, warehouse_id, material_id, quantity, last_updated_utc, row_version, created_at_utc, created_by)
+                  VALUES
+                      ({Guid.NewGuid()}, {warehouseId}, {materialId}, {0m}, {nowUtc}, {1}, {nowUtc}, {postedBy})
+                  ON CONFLICT (warehouse_id, material_id) DO NOTHING
+                  """,
+                cancellationToken);
+        }
     }
-
-    private async Task<InventoryBalance> LockBalanceAsync(
-        Guid warehouseId,
-        Guid materialId,
-        CancellationToken cancellationToken) =>
-        await dbContext.InventoryBalances
-            .FromSqlInterpolated(
-                $"SELECT * FROM inventory_balances WHERE warehouse_id = {warehouseId} AND material_id = {materialId} FOR UPDATE")
-            .SingleAsync(cancellationToken);
 }

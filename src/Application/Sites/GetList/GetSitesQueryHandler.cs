@@ -22,6 +22,7 @@ internal sealed class GetSitesQueryHandler(IApplicationDbContext context)
                 Name = s.Name,
                 Code = s.Code,
                 Location = s.Location,
+                GovernorateCode = s.GovernorateCode,
                 Status = s.Status.ToString()
             })
             .OrderBy(s => s.Name)

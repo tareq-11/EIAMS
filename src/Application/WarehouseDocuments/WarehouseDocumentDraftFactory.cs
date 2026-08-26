@@ -2,8 +2,8 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Numbering;
 using Application.Abstractions.WarehouseDocuments;
 using Domain.Common;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 

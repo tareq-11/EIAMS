@@ -1,7 +1,9 @@
+using System.IO.Compression;
 using Application;
 using HealthChecks.UI.Client;
 using Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.ResponseCompression;
 using Serilog;
 using Web.Api;
 using Web.Api.Extensions;
@@ -24,7 +26,24 @@ builder.Services.AddRateLimitingInternal(builder.Configuration);
 
 builder.Services.AddCorsPolicy(builder.Configuration);
 
-builder.Services.AddResponseCompression();
+builder.Services.AddForwardedHeaders(builder.Configuration);
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
 
 WebApplication app = builder.Build();
 
@@ -39,6 +58,8 @@ app.MapHealthChecks("health", new HealthCheckOptions
 {
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
 });
+
+app.UseForwardedHeaders();
 
 app.UseRequestContextLogging();
 

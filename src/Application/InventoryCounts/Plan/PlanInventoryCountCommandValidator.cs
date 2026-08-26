@@ -1,5 +1,5 @@
-using FluentValidation;
 using Domain.Common;
+using FluentValidation;
 
 namespace Application.InventoryCounts.Plan;
 

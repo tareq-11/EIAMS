@@ -1,6 +1,6 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Organizations.GetById;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -14,7 +14,7 @@ public sealed class GetOrganizationByIdController(IQueryHandler<GetOrganizationB
     : ControllerBase
 {
     [HttpGet("{organizationId:guid}")]
-    [Authorize]
+    [HasPermission(PermissionCodes.Organizations.View)]
     public async Task<IResult> Handle(Guid organizationId, CancellationToken cancellationToken)
     {
         var query = new GetOrganizationByIdQuery(organizationId);

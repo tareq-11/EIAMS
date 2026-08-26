@@ -1,14 +1,15 @@
-using Domain.DocumentAttachments;
-using Domain.Assets;
 using Domain.AssetMovementHistories;
+using Domain.Assets;
+using Domain.AuditLogs;
 using Domain.Custodies;
 using Domain.CustodyHistories;
+using Domain.DocumentAttachments;
 using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
 using Domain.DocumentSequences;
 using Domain.Employees;
-using Domain.InventoryBalances;
 using Domain.InventoryAdjustments;
+using Domain.InventoryBalances;
 using Domain.InventoryCounts;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
@@ -19,20 +20,20 @@ using Domain.MaterialUnitConversions;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Permissions;
-using Domain.Roles;
 using Domain.ReceivingInfos;
 using Domain.ReturnInfos;
+using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
 using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
-using Domain.Users;
 using Domain.UserRoleScopes;
+using Domain.Users;
 using Domain.WarehouseCapabilities;
 using Domain.WarehouseCapabilityOperations;
-using Domain.Warehouses;
 using Domain.WarehouseDocuments;
 using Domain.WarehouseMaterialSettings;
+using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Abstractions.Data;
@@ -80,6 +81,8 @@ public interface IApplicationDbContext
     DbSet<InventoryCountLine> InventoryCountLines { get; }
     DbSet<InventoryAdjustment> InventoryAdjustments { get; }
     DbSet<AdjustmentLine> AdjustmentLines { get; }
+    DbSet<AuditLog> AuditLogs { get; }
+    DbSet<AuditLogEntry> AuditLogEntries { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

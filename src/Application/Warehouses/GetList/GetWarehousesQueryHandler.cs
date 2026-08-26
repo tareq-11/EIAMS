@@ -20,26 +20,18 @@ internal sealed class GetWarehousesQueryHandler(
         GetWarehousesQuery query,
         CancellationToken cancellationToken)
     {
-        bool authorized = query.SiteId is not null
-            ? await scopeAuthorizationService.HasPermissionInScopeAsync(
-                userContext.UserId,
-                PermissionCodes.Warehouses.Manage,
-                ScopeType.Site,
-                query.SiteId,
-                cancellationToken)
-            : await scopeAuthorizationService.HasPermissionInScopeAsync(
-                userContext.UserId,
-                PermissionCodes.Warehouses.Manage,
-                ScopeType.Enterprise,
-                scopeId: null,
-                cancellationToken);
+        WarehousePermissionScope access = await scopeAuthorizationService.GetWarehousePermissionScopeAsync(
+            userContext.UserId,
+            PermissionCodes.Warehouses.View,
+            cancellationToken);
 
-        if (!authorized)
+        if (!access.HasEnterpriseAccess && access.WarehouseIds.Count == 0)
         {
             return Result.Failure<PagedResult<WarehouseResponse>>(WarehouseErrors.Forbidden);
         }
 
         PagedResult<WarehouseResponse> warehouses = await context.Warehouses
+            .Where(w => access.HasEnterpriseAccess || access.WarehouseIds.Contains(w.Id))
             .Where(w => query.SiteId == null || w.SiteId == query.SiteId)
             .Where(w => query.Status == null || w.Status == query.Status)
             .Select(w => new WarehouseResponse

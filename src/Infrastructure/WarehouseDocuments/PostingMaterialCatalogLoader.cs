@@ -22,82 +22,79 @@ internal static class PostingMaterialCatalogLoader
     {
         Guid[] materialIds = lines.Select(line => line.MaterialId).Distinct().ToArray();
 
-        List<Material> materials = await context.Materials
-            .Where(material => materialIds.Contains(material.Id))
-            .ToListAsync(cancellationToken);
-        var materialById = materials.ToDictionary(material => material.Id);
+        var rows = await (
+            from material in context.Materials.AsNoTracking()
+            where materialIds.Contains(material.Id)
+            join family in context.MaterialFamilies.AsNoTracking() on material.FamilyId equals family.Id into fGroup
+            from family in fGroup.DefaultIfEmpty()
+            join category in context.MaterialCategories.AsNoTracking() on family.CategoryId equals category.Id into cGroup
+            from category in cGroup.DefaultIfEmpty()
+            join domain in context.MaterialDomains.AsNoTracking() on category.MaterialDomainId equals domain.Id into dGroup
+            from domain in dGroup.DefaultIfEmpty()
+            select new
+            {
+                Material = material,
+                Family = family,
+                Category = category,
+                Domain = domain
+            }
+        ).ToListAsync(cancellationToken);
 
-        Guid[] familyIds = materials.Select(material => material.FamilyId).Distinct().ToArray();
-        List<MaterialFamily> families = await context.MaterialFamilies
-            .Where(family => familyIds.Contains(family.Id))
-            .ToListAsync(cancellationToken);
-        var familyById = families.ToDictionary(family => family.Id);
-
-        Guid[] categoryIds = families.Select(family => family.CategoryId).Distinct().ToArray();
-        List<MaterialCategory> categories = await context.MaterialCategories
-            .Where(category => categoryIds.Contains(category.Id))
-            .ToListAsync(cancellationToken);
-        var categoryById = categories.ToDictionary(category => category.Id);
-
-        Guid[] domainIds = categories.Select(category => category.MaterialDomainId).Distinct().ToArray();
-        List<MaterialDomain> domains = await context.MaterialDomains
-            .Where(domain => domainIds.Contains(domain.Id))
-            .ToListAsync(cancellationToken);
-        var domainById = domains.ToDictionary(domain => domain.Id);
+        var rowByMaterialId = rows.ToDictionary(r => r.Material.Id);
 
         var result = new Dictionary<Guid, PostingMaterialInfo>();
 
         foreach (DocumentLine line in lines)
         {
-            if (!materialById.TryGetValue(line.MaterialId, out Material? material))
+            if (!rowByMaterialId.TryGetValue(line.MaterialId, out var row))
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
                     MaterialErrors.NotFound(line.MaterialId));
             }
 
-            if (material.Status != MaterialStatus.Active)
+            if (row.Material.Status != MaterialStatus.Active)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    DocumentLineErrors.MaterialNotActive(material.Id));
+                    DocumentLineErrors.MaterialNotActive(row.Material.Id));
             }
 
-            if (!familyById.TryGetValue(material.FamilyId, out MaterialFamily? family))
+            if (row.Family is null)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    MaterialFamilyErrors.NotFound(material.FamilyId));
+                    MaterialFamilyErrors.NotFound(row.Material.FamilyId));
             }
 
-            if (family.Status != Status.Active)
+            if (row.Family.Status != Status.Active)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    DocumentLineErrors.MaterialFamilyNotActive(family.Id));
+                    DocumentLineErrors.MaterialFamilyNotActive(row.Family.Id));
             }
 
-            if (!categoryById.TryGetValue(family.CategoryId, out MaterialCategory? category))
+            if (row.Category is null)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    MaterialCategoryErrors.NotFound(family.CategoryId));
+                    MaterialCategoryErrors.NotFound(row.Family.CategoryId));
             }
 
-            if (category.Status != Status.Active)
+            if (row.Category.Status != Status.Active)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    DocumentLineErrors.MaterialCategoryNotActive(category.Id));
+                    DocumentLineErrors.MaterialCategoryNotActive(row.Category.Id));
             }
 
-            if (!domainById.TryGetValue(category.MaterialDomainId, out MaterialDomain? domain))
+            if (row.Domain is null)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    MaterialDomainErrors.NotFound(category.MaterialDomainId));
+                    MaterialDomainErrors.NotFound(row.Category.MaterialDomainId));
             }
 
-            if (domain.Status != Status.Active)
+            if (row.Domain.Status != Status.Active)
             {
                 return Result.Failure<IReadOnlyDictionary<Guid, PostingMaterialInfo>>(
-                    DocumentLineErrors.MaterialDomainNotActive(domain.Id));
+                    DocumentLineErrors.MaterialDomainNotActive(row.Domain.Id));
             }
 
-            DocumentLineType expectedLineType = material.IsAssetTracked
+            DocumentLineType expectedLineType = row.Material.IsAssetTracked
                 ? DocumentLineType.Asset
                 : DocumentLineType.Normal;
 
@@ -111,7 +108,7 @@ internal static class PostingMaterialCatalogLoader
                         expectedLineType));
             }
 
-            result[material.Id] = new PostingMaterialInfo(material, domain.Id);
+            result[row.Material.Id] = new PostingMaterialInfo(row.Material, row.Domain.Id);
         }
 
         return result;

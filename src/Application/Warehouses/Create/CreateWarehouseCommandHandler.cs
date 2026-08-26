@@ -6,6 +6,7 @@ using Domain.Common;
 using Domain.Sites;
 using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.Warehouses.Create;
@@ -14,7 +15,8 @@ internal sealed class CreateWarehouseCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
-    IDatabaseExceptionClassifier databaseExceptionClassifier)
+    IDatabaseExceptionClassifier databaseExceptionClassifier,
+    HybridCache hybridCache)
     : ICommandHandler<CreateWarehouseCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(CreateWarehouseCommand command, CancellationToken cancellationToken)
@@ -67,6 +69,8 @@ internal sealed class CreateWarehouseCommandHandler(
         {
             return Result.Failure<Guid>(WarehouseErrors.CodeNotUnique(command.Code));
         }
+
+        await hybridCache.RemoveByTagAsync("warehouses", cancellationToken);
 
         return warehouse.Id;
     }

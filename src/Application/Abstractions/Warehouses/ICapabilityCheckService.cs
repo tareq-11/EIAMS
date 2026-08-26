@@ -16,4 +16,10 @@ public interface ICapabilityCheckService
         Guid materialDomainId,
         OperationType operationType,
         CancellationToken cancellationToken);
+
+    Task<Result> EnsureAllowedBatchAsync(
+        Guid warehouseId,
+        IEnumerable<Guid> materialDomainIds,
+        OperationType operationType,
+        CancellationToken cancellationToken);
 }
