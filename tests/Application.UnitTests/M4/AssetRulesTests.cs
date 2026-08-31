@@ -12,17 +12,17 @@ public sealed class AssetRulesTests
     [Fact]
     public void IsAssetTracked_Should_BeTrue_WhenMaterialKindIsAsset()
     {
-        Material material = CreateMaterial(MaterialKind.Asset, requiresAssetNumber: false);
+        Material material = CreateMaterial(MaterialKind.Asset);
 
         material.IsAssetTracked.ShouldBeTrue();
     }
 
     [Fact]
-    public void IsAssetTracked_Should_BeTrue_WhenAssetNumberIsRequired()
+    public void IsAssetTracked_Should_BeFalse_WhenMaterialKindIsDurable()
     {
-        Material material = CreateMaterial(MaterialKind.Durable, requiresAssetNumber: true);
+        Material material = CreateMaterial(MaterialKind.Durable);
 
-        material.IsAssetTracked.ShouldBeTrue();
+        material.IsAssetTracked.ShouldBeFalse();
     }
 
     [Fact]
@@ -123,16 +123,16 @@ public sealed class AssetRulesTests
         result.Error.ShouldBe(AssetErrors.WarrantyBeforeAcquisition);
     }
 
-    private static Material CreateMaterial(MaterialKind materialKind, bool requiresAssetNumber) =>
+    private static Material CreateMaterial(MaterialKind materialKind) =>
         Material.Create(
+            Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid(),
             "مادة",
             "Material",
             $"MAT-{Guid.NewGuid():N}",
             materialKind,
-            TrackingType.Quantity,
+            materialKind == MaterialKind.Asset ? TrackingType.Serial : TrackingType.Quantity,
             hasExpiry: false,
-            requiresAssetNumber,
             attributes: null);
 }

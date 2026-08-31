@@ -19,6 +19,6 @@ internal sealed class GrantUserRoleScopeCommandValidator : AbstractValidator<Gra
         RuleFor(c => c.ScopeId)
             .NotNull()
             .When(c => c.ScopeType != ScopeType.Enterprise)
-            .WithMessage("A scope id is required for Site and Warehouse scoped grants.");
+            .WithMessage("A scope id is required for Site, OrganizationalUnit, and Warehouse assignments.");
     }
 }

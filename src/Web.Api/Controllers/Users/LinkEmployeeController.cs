@@ -15,6 +15,7 @@ public sealed class LinkEmployeeController(ICommandHandler<LinkUserToEmployeeCom
     public sealed record RequestBody([property: JsonRequired] Guid EmployeeId);
 
     [HttpPut("{userId:guid}/employee")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Employees.Manage)]
     public async Task<IResult> Handle(Guid userId, RequestBody request, CancellationToken cancellationToken)
     {

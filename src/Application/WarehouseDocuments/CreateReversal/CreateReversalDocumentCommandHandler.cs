@@ -43,6 +43,18 @@ internal sealed class CreateReversalDocumentCommandHandler(
             return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
         }
 
+        bool canReverse = await scopeAuthorizationService.HasPermissionInScopeAsync(
+            userContext.UserId,
+            PermissionCodes.WarehouseDocuments.Reverse,
+            ScopeType.Warehouse,
+            source.WarehouseId,
+            cancellationToken);
+
+        if (!canReverse)
+        {
+            return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
+        }
+
         // Only a Posted, non-reversal document may be reversed (M3-PLAN.md §1.6): this single check
         // rules out Draft/Submitted/Rejected/Cancelled/Reversed sources and "reversing a reversal".
         if (source.DocumentStatus != DocumentStatus.Posted || source.ReversalOfDocumentId is not null)

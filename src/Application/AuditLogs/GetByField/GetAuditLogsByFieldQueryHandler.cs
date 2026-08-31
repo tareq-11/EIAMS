@@ -1,4 +1,7 @@
 using System.Text.RegularExpressions;
+using Application.Abstractions.Audit;
+using Application.Abstractions.Authentication;
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
@@ -8,7 +11,11 @@ using SharedKernel;
 
 namespace Application.AuditLogs.GetByField;
 
-internal sealed partial class GetAuditLogsByFieldQueryHandler(IApplicationDbContext context)
+internal sealed partial class GetAuditLogsByFieldQueryHandler(
+    IApplicationDbContext context,
+    IAuditRedactionService redactionService,
+    IUserContext userContext,
+    IScopeAuthorizationService scopeAuthorizationService)
     : IQueryHandler<GetAuditLogsByFieldQuery, PagedResult<AuditLogListItemResponse>>
 {
     [GeneratedRegex("^[a-z][a-z0-9_]{0,99}$", RegexOptions.CultureInvariant)]
@@ -22,7 +29,8 @@ internal sealed partial class GetAuditLogsByFieldQueryHandler(IApplicationDbCont
             query.EntityType is not null && !KnownAuditEntityTypes.IsKnown(query.EntityType) ||
             query.EntityId == Guid.Empty ||
             query.UserId == Guid.Empty ||
-            !AuditLogQuerySupport.AreFiltersValid(query.Action, query.FromUtc, query.ToUtc))
+            !AuditLogQuerySupport.AreFiltersValid(query.Action, query.FromUtc, query.ToUtc) ||
+            !AuditLogQuerySupport.ArePaginationParametersValid(query.Page, query.PageSize))
         {
             return Result.Failure<PagedResult<AuditLogListItemResponse>>(AuditLogErrors.FilterInvalid);
         }
@@ -49,7 +57,19 @@ internal sealed partial class GetAuditLogsByFieldQueryHandler(IApplicationDbCont
 
         source = AuditLogQuerySupport.ApplyFilters(source, query.Action, query.FromUtc, query.ToUtc);
 
+        Result<IQueryable<AuditLog>> scopeResult = await AuditLogQuerySupport.AuthorizeAndApplyScopeAsync(
+            source,
+            context,
+            scopeAuthorizationService,
+            userContext.UserId,
+            cancellationToken);
+
+        if (scopeResult.IsFailure)
+        {
+            return Result.Failure<PagedResult<AuditLogListItemResponse>>(scopeResult.Error);
+        }
+
         return await AuditLogQuerySupport.ToPagedResultAsync(
-            source, query.Page, query.PageSize, cancellationToken);
+            scopeResult.Value, query.Page, query.PageSize, cancellationToken, redactionService);
     }
 }

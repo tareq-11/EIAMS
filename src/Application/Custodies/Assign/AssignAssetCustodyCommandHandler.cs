@@ -7,6 +7,7 @@ using Application.Abstractions.Recipients;
 using Domain.Common;
 using Domain.Custodies;
 using Domain.CustodyHistories;
+using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -99,6 +100,17 @@ internal sealed class AssignAssetCustodyCommandHandler(
         if (employeeError is not null)
         {
             return Result.Failure<Guid>(employeeError);
+        }
+
+        bool employeeInsideScope = await scopeAuthorizationService.CanAccessPartyAsync(
+            userContext.UserId,
+            PartyType.Employee,
+            command.EmployeeId,
+            cancellationToken);
+
+        if (!employeeInsideScope)
+        {
+            return Result.Failure<Guid>(UserRoleScopeErrors.ResourceOutsideScope);
         }
 
         DateTime nowUtc = dateTimeProvider.UtcNow;

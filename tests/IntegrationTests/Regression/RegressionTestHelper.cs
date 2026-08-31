@@ -65,12 +65,16 @@ public static class RegressionTestHelper
         var site = Site.Create(Guid.NewGuid(), org.Id, $"Regression Site {Guid.NewGuid():N}", $"SITE-{Guid.NewGuid():N}"[..12], "Test Location");
         context.Sites.Add(site);
 
-        var wh1 = Warehouse.Create(Guid.NewGuid(), site.Id, $"Warehouse 1 {Guid.NewGuid():N}", $"WH1-{Guid.NewGuid():N}"[..12], "Central", true);
-        var wh2 = Warehouse.Create(Guid.NewGuid(), site.Id, $"Warehouse 2 {Guid.NewGuid():N}", $"WH2-{Guid.NewGuid():N}"[..12], "Branch", true);
-        context.Warehouses.AddRange(wh1, wh2);
-
         var orgUnit = OrganizationalUnit.Create(Guid.NewGuid(), site.Id, null, "IT Department", "Department");
         context.OrganizationalUnits.Add(orgUnit);
+
+        var wh1 = Warehouse.Create(
+            Guid.NewGuid(), site.Id, $"Warehouse 1 {Guid.NewGuid():N}",
+            $"WH1-{Guid.NewGuid():N}"[..12], "Central", true, orgUnit.Id);
+        var wh2 = Warehouse.Create(
+            Guid.NewGuid(), site.Id, $"Warehouse 2 {Guid.NewGuid():N}",
+            $"WH2-{Guid.NewGuid():N}"[..12], "Branch", true, orgUnit.Id);
+        context.Warehouses.AddRange(wh1, wh2);
 
         var emp = Employee.Create(Guid.NewGuid(), orgUnit.Id, "John Doe", $"EMP-{Guid.NewGuid():N}"[..12], "Engineer");
         context.Employees.Add(emp);
@@ -90,25 +94,25 @@ public static class RegressionTestHelper
         var normalMat = Material.Create(
             Guid.NewGuid(),
             family.Id,
+            uom.Id,
             "Mouse Pad",
             "Mouse Pad EN",
             $"MAT-N-{Guid.NewGuid():N}"[..12],
             MaterialKind.Consumable,
             TrackingType.Quantity,
             false,
-            false,
             null);
 
         var assetMat = Material.Create(
             Guid.NewGuid(),
             family.Id,
+            uom.Id,
             "Laptop Core i7",
             "Laptop Core i7 EN",
             $"MAT-A-{Guid.NewGuid():N}"[..12],
             MaterialKind.Asset,
             TrackingType.Serial,
             false,
-            true,
             null);
 
         context.Materials.AddRange(normalMat, assetMat);
@@ -140,11 +144,20 @@ public static class RegressionTestHelper
         context.Users.AddRange(keeperUser, managerUser, adminUser);
 
         // Setup roles & scopes
-        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), keeperUser.Id, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, wh1.Id));
-        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), keeperUser.Id, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, wh2.Id));
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(),
+            keeperUser.Id,
+            WellKnownRoles.WarehouseKeeperId,
+            ScopeType.Warehouse,
+            wh1.Id));
 
-        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), managerUser.Id, WellKnownRoles.WarehouseManagerId, ScopeType.Warehouse, wh1.Id));
-        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), managerUser.Id, WellKnownRoles.WarehouseManagerId, ScopeType.Warehouse, wh2.Id));
+        // One hierarchical assignment covers both warehouses owned by this organizational unit.
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(),
+            managerUser.Id,
+            WellKnownRoles.WarehouseManagerId,
+            ScopeType.OrganizationalUnit,
+            orgUnit.Id));
 
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), adminUser.Id, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
 

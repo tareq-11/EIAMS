@@ -4,8 +4,9 @@ using SharedKernel;
 namespace Domain.UserRoleScopes;
 
 /// <summary>
-/// Grants a user a role within a scope (Enterprise/Site/Warehouse). ScopeId is null for Enterprise
-/// (org-wide) and required otherwise. There is no status column - a revoke deletes the row.
+/// The user's single role and fixed authorization scope. ScopeId is null for Enterprise and required
+/// otherwise. There is no status column: replacement mutates this one row atomically and revocation
+/// deletes it, while the immutable audit log preserves history.
 /// </summary>
 public sealed class UserRoleScope : Entity, IAuditableEntity
 {
@@ -40,5 +41,26 @@ public sealed class UserRoleScope : Entity, IAuditableEntity
     public void MarkAsRevoked()
     {
         Raise(new UserRoleScopeRevokedDomainEvent(Id, UserId, RoleId));
+    }
+
+    public void ReplaceAssignment(Guid roleId, ScopeType scopeType, Guid? scopeId)
+    {
+        Guid previousRoleId = RoleId;
+        ScopeType previousScopeType = ScopeType;
+        Guid? previousScopeId = ScopeId;
+
+        RoleId = roleId;
+        ScopeType = scopeType;
+        ScopeId = scopeId;
+
+        Raise(new UserRoleScopeReplacedDomainEvent(
+            Id,
+            UserId,
+            previousRoleId,
+            previousScopeType,
+            previousScopeId,
+            roleId,
+            scopeType,
+            scopeId));
     }
 }

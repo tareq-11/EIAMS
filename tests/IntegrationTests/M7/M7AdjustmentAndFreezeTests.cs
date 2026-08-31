@@ -402,9 +402,9 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         dbContext.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         dbContext.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
         dbContext.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
-        dbContext.Materials.Add(Material.Create(materialId, familyId, $"Material {suffix}", null,
+        dbContext.Materials.Add(Material.Create(materialId, familyId, unitId, $"Material {suffix}", null,
             $"M{suffix}", assetTracked ? MaterialKind.Asset : MaterialKind.Consumable,
-            assetTracked ? TrackingType.Serial : TrackingType.Quantity, false, assetTracked, null));
+            assetTracked ? TrackingType.Serial : TrackingType.Quantity, false, null));
         var capability = WarehouseCapability.Create(Guid.NewGuid(), warehouseId, domainId);
         dbContext.WarehouseCapabilities.Add(capability);
         dbContext.WarehouseCapabilityOperations.AddRange(
@@ -581,8 +581,9 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M7 reversal {roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(
-            roleId, WellKnownPermissions.WarehouseDocumentsCreateId));
+        context.RolePermissions.AddRange(
+            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsCreateId),
+            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsReverseId));
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();

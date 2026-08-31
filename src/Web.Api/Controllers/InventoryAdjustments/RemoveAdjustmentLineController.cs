@@ -13,6 +13,7 @@ namespace Web.Api.Controllers.InventoryAdjustments;
 public sealed class RemoveAdjustmentLineController(ICommandHandler<RemoveAdjustmentLineCommand> handler) : ControllerBase
 {
     [HttpDelete("{lineId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
     public async Task<IResult> Handle(
         Guid documentId, Guid lineId, [FromQuery] int expectedRowVersion, CancellationToken cancellationToken)

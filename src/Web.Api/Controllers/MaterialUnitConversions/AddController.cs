@@ -15,6 +15,7 @@ public sealed class AddController(ICommandHandler<AddMaterialUnitConversionComma
     public sealed record RequestBody([property: JsonRequired] Guid FromUnitId, [property: JsonRequired] Guid ToBaseUnitId, [property: JsonRequired] decimal Factor);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.Manage)]
     public async Task<IResult> Handle(Guid materialId, RequestBody request, CancellationToken cancellationToken)
     {

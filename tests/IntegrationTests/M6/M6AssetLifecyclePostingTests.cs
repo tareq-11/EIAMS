@@ -384,17 +384,24 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         context.OrganizationalUnits.Add(OrganizationalUnit.Create(
             organizationalUnitId, siteId, null, $"Operations {suffix}", "Department"));
         context.Employees.Add(Employee.Create(employeeId, organizationalUnitId, $"Employee {suffix}", $"E{suffix}", null));
-        context.Warehouses.Add(Warehouse.Create(warehouseId, siteId, $"Warehouse {suffix}", $"W{suffix}", "Main", true));
+        context.Warehouses.Add(Warehouse.Create(
+            warehouseId,
+            siteId,
+            $"Warehouse {suffix}",
+            $"W{suffix}",
+            "Main",
+            true,
+            organizationalUnitId));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, $"Piece {suffix}", $"P{suffix}", "Count"));
         context.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
         context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
         context.Materials.Add(Material.Create(
-            assetMaterialId, familyId, $"Asset {suffix}", null, $"A{suffix}", MaterialKind.Asset,
-            TrackingType.Serial, false, true, null));
+            assetMaterialId, familyId, unitId, $"Asset {suffix}", null, $"A{suffix}", MaterialKind.Asset,
+            TrackingType.Serial, false, null));
         context.Materials.Add(Material.Create(
-            normalMaterialId, familyId, $"Consumable {suffix}", null, $"M{suffix}", MaterialKind.Consumable,
-            TrackingType.Quantity, false, false, null));
+            normalMaterialId, familyId, unitId, $"Consumable {suffix}", null, $"M{suffix}", MaterialKind.Consumable,
+            TrackingType.Quantity, false, null));
         var capability = WarehouseCapability.Create(Guid.NewGuid(), warehouseId, domainId);
         context.WarehouseCapabilities.Add(capability);
         context.WarehouseCapabilityOperations.AddRange(
@@ -638,11 +645,15 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid organizationalUnitId = await context.Warehouses
+            .Where(item => item.Id == warehouseId)
+            .Select(item => item.OrganizationalUnitId!.Value)
+            .SingleAsync();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M6 edit {roleId:N}", null));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.CustodiesManageId));
         context.UserRoleScopes.Add(UserRoleScope.Create(
-            Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+            Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, organizationalUnitId));
         await context.SaveChangesAsync();
     }
 

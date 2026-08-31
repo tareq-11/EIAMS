@@ -27,6 +27,9 @@ internal sealed class CustodyConfiguration : IEntityTypeConfiguration<Custody>
             table.HasCheckConstraint(
                 "ck_custodies_personal_requires_employee",
                 "custody_kind <> 'Personal' OR holder_type = 'Employee'");
+            table.HasCheckConstraint(
+                "ck_custodies_operational_requires_non_employee",
+                "custody_kind <> 'Operational' OR holder_type <> 'Employee'");
             table.HasCheckConstraint("ck_custodies_status_valid", "status IN ('Active', 'Closed')");
             table.HasCheckConstraint("ck_custodies_row_version_positive", "row_version > 0");
             table.HasCheckConstraint(

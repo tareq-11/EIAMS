@@ -19,7 +19,7 @@ public sealed class AddDocumentLineAssetSelectionController(
 
     [HttpPost]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
-    [ProducesResponseType<ApiResponse<Guid>>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]

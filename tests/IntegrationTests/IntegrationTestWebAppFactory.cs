@@ -10,6 +10,10 @@ namespace IntegrationTests;
 
 public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private readonly string attachmentStoragePath = Path.Combine(
+        Path.GetTempPath(),
+        $"eiams-integration-attachments-{Guid.NewGuid():N}");
+
     private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder("postgres:17-alpine")
         .WithDatabase("clean-architecture-template")
         .WithUsername("postgres")
@@ -25,6 +29,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("Jwt:Issuer", "clean-architecture-template");
         builder.UseSetting("Jwt:Audience", "developers");
         builder.UseSetting("Jwt:ExpirationInMinutes", "60");
+        builder.UseSetting("AttachmentStorage:Local:RootPath", attachmentStoragePath);
 
         // Relax rate limiting so the test suite is not throttled.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
@@ -44,5 +49,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
     {
         await _dbContainer.DisposeAsync();
         await base.DisposeAsync();
+
+        if (Directory.Exists(attachmentStoragePath))
+        {
+            Directory.Delete(attachmentStoragePath, recursive: true);
+        }
     }
 }

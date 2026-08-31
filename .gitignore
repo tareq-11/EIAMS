@@ -10,6 +10,11 @@
 *.userosscache
 *.sln.docstates
 
+# Ignore Markdown documentation files from Git tracking
+*.md
+*.MD
+*.markdown
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -17,6 +22,7 @@
 mono_crash.*
 
 # Build results
+.dotnet_cli/
 attachment-storage/
 [Dd]ebug/
 [Dd]ebugPublic/
@@ -395,10 +401,23 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+*.md
 
 # JetBrains Rider
 *.sln.iml
 
 .containers/
-
-*.md
+----
+# Versioned architecture and API-contract governance artifacts.
+!AUTHORIZATION-SCOPE-DECISION.md
+!API-CONTRACT-RATIFICATION.md
+!FRONTEND-BACKEND-REMEDIATION-PLAN.md
+!AUTHORIZATION-MATRIX.md
+!prd_en.md
+!M0-ARCHITECTURE.md
+!M0-ARCHITECTURE.ar.md
+!V1-SIGNOFF-CHECKLIST.md
+!contracts/
+contracts/*
+!contracts/openapi/
+!contracts/openapi/README.md

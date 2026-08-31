@@ -603,6 +603,12 @@ public sealed class M6DomainAndHandlerTests : BaseHandlerTest
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(authorized);
+        authorization.CanAccessPartyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<PartyType>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(authorized);
         return authorization;
     }
 }

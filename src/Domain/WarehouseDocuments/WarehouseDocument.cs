@@ -25,6 +25,9 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
     public Guid? ReversalOfDocumentId { get; private set; }
     public int RowVersion { get; private set; }
 
+    /// <summary>Transient metadata consumed by the lifecycle interceptor; never persisted here.</summary>
+    public string? PendingLifecycleReason { get; private set; }
+
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
     public Guid? CreatedBy { get; set; }
@@ -154,13 +157,14 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
         return Result.Success();
     }
 
-    public Result Reject()
+    public Result Reject(string? reason = null)
     {
         if (DocumentStatus != DocumentStatus.Submitted)
         {
             return Result.Failure(WarehouseDocumentErrors.InvalidTransition(Id, DocumentStatus, DocumentStatus.Rejected));
         }
 
+        PendingLifecycleReason = NormalizeReason(reason);
         DocumentStatus = DocumentStatus.Rejected;
         RowVersion++;
 
@@ -169,13 +173,14 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
         return Result.Success();
     }
 
-    public Result ReturnToDraft()
+    public Result ReturnToDraft(string? reason = null)
     {
         if (DocumentStatus != DocumentStatus.Rejected)
         {
             return Result.Failure(WarehouseDocumentErrors.InvalidTransition(Id, DocumentStatus, DocumentStatus.Draft));
         }
 
+        PendingLifecycleReason = NormalizeReason(reason);
         DocumentStatus = DocumentStatus.Draft;
         RowVersion++;
 
@@ -184,13 +189,14 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
         return Result.Success();
     }
 
-    public Result Cancel()
+    public Result Cancel(string? reason = null)
     {
         if (DocumentStatus is not (DocumentStatus.Draft or DocumentStatus.Submitted or DocumentStatus.Rejected))
         {
             return Result.Failure(WarehouseDocumentErrors.InvalidTransition(Id, DocumentStatus, DocumentStatus.Cancelled));
         }
 
+        PendingLifecycleReason = NormalizeReason(reason);
         DocumentStatus = DocumentStatus.Cancelled;
         RowVersion++;
 
@@ -247,4 +253,9 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
 
         return Result.Success();
     }
+
+    public void ClearPendingLifecycleReason() => PendingLifecycleReason = null;
+
+    private static string? NormalizeReason(string? reason) =>
+        string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
 }

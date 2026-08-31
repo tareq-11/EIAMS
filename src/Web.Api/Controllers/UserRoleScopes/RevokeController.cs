@@ -13,6 +13,7 @@ namespace Web.Api.Controllers.UserRoleScopes;
 public sealed class RevokeController(ICommandHandler<RevokeUserRoleScopeCommand> handler) : ControllerBase
 {
     [HttpDelete("{userRoleScopeId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Roles.Manage)]
     public async Task<IResult> Handle(Guid userRoleScopeId, CancellationToken cancellationToken)
     {

@@ -1,3 +1,5 @@
+using Application.Abstractions.Authentication;
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.OrganizationalUnits;
@@ -6,13 +8,30 @@ using SharedKernel;
 
 namespace Application.OrganizationalUnits.GetById;
 
-internal sealed class GetOrganizationalUnitByIdQueryHandler(IApplicationDbContext context)
+internal sealed class GetOrganizationalUnitByIdQueryHandler(
+    IApplicationDbContext context,
+    IUserContext userContext,
+    IScopeAuthorizationService scopeAuthorizationService)
     : IQueryHandler<GetOrganizationalUnitByIdQuery, OrganizationalUnitResponse>
 {
     public async Task<Result<OrganizationalUnitResponse>> Handle(
         GetOrganizationalUnitByIdQuery query,
         CancellationToken cancellationToken)
     {
+        bool authorized = await scopeAuthorizationService.HasPermissionAsync(
+            userContext.UserId,
+            PermissionCodes.OrganizationalUnits.View,
+            cancellationToken) && await scopeAuthorizationService.CanAccessOrganizationalUnitAsync(
+            userContext.UserId,
+            query.OrganizationalUnitId,
+            cancellationToken);
+
+        if (!authorized)
+        {
+            return Result.Failure<OrganizationalUnitResponse>(
+                OrganizationalUnitErrors.NotFound(query.OrganizationalUnitId));
+        }
+
         OrganizationalUnitResponse? unit = await context.OrganizationalUnits
             .Where(u => u.Id == query.OrganizationalUnitId)
             .Select(u => new OrganizationalUnitResponse

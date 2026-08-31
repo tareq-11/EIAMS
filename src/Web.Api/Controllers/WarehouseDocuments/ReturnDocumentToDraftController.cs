@@ -13,7 +13,7 @@ namespace Web.Api.Controllers.WarehouseDocuments;
 public sealed class ReturnDocumentToDraftController(ICommandHandler<ReturnDocumentToDraftCommand> handler)
     : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion);
+    public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion, string? Reason = null);
 
     [HttpPost("{documentId:guid}/return-to-draft")]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
@@ -25,7 +25,7 @@ public sealed class ReturnDocumentToDraftController(ICommandHandler<ReturnDocume
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     public async Task<IResult> Handle(Guid documentId, RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new ReturnDocumentToDraftCommand(documentId, request.ExpectedRowVersion);
+        var command = new ReturnDocumentToDraftCommand(documentId, request.ExpectedRowVersion, request.Reason);
 
         Result result = await handler.Handle(command, cancellationToken);
 

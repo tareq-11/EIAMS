@@ -22,6 +22,7 @@ public sealed class PlanInventoryCountController(ICommandHandler<PlanInventoryCo
         [property: JsonRequired] FreezePolicy FreezePolicy);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [HasPermission(PermissionCodes.InventoryCounts.Plan)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

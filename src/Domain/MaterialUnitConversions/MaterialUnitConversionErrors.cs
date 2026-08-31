@@ -18,7 +18,11 @@ public static class MaterialUnitConversionErrors
 
     public static readonly Error BaseUnitMismatch = Error.Problem(
         "MaterialUnitConversions.BaseUnitMismatch",
-        "The target unit must be the material family's base unit");
+        "The target unit must be the material's base unit");
+
+    public static readonly Error FactorMustBePositive = Error.Problem(
+        "MaterialUnitConversions.FactorMustBePositive",
+        "Conversion factor must be greater than zero");
 
     public static readonly Error SameUnit = Error.Problem(
         "MaterialUnitConversions.SameUnit",

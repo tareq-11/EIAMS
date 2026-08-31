@@ -15,6 +15,7 @@ public sealed class UpdateSiteController(ICommandHandler<UpdateSiteCommand> hand
     public sealed record RequestBody(string Name, string? Location, string? GovernorateCode);
 
     [HttpPut("{siteId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Sites.Manage)]
     public async Task<IResult> Handle(Guid siteId, RequestBody request, CancellationToken cancellationToken)
     {

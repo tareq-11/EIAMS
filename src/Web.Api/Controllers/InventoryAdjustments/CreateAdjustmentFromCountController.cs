@@ -13,6 +13,7 @@ namespace Web.Api.Controllers.InventoryAdjustments;
 public sealed class CreateAdjustmentFromCountController(ICommandHandler<CreateAdjustmentFromCountCommand, Guid> handler) : ControllerBase
 {
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [HasPermission(PermissionCodes.WarehouseDocuments.Create)]
     public async Task<IResult> Handle(Guid countId, CancellationToken cancellationToken)
     {

@@ -20,6 +20,7 @@ public sealed class RegisterController(ICommandHandler<RegisterUserCommand, Guid
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     [ProducesResponseType<ApiResponse<RegisterUserResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status429TooManyRequests)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)

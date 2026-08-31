@@ -34,6 +34,21 @@ internal sealed class CreateMaterialCommandHandler(
             return Result.Failure<Guid>(MaterialErrors.FamilyNotFound(command.FamilyId));
         }
 
+        if (!await context.UnitsOfMeasure.AnyAsync(u => u.Id == command.BaseUnitId, cancellationToken))
+        {
+            return Result.Failure<Guid>(MaterialErrors.UnitNotFound(command.BaseUnitId));
+        }
+
+        if (command.MaterialKind == MaterialKind.Consumable && command.TrackingType != TrackingType.Quantity)
+        {
+            return Result.Failure<Guid>(MaterialErrors.ConsumableMustBeQuantityTracked);
+        }
+
+        if (command.MaterialKind == MaterialKind.Asset && command.TrackingType != TrackingType.Serial)
+        {
+            return Result.Failure<Guid>(MaterialErrors.AssetMustBeSerialTracked);
+        }
+
         if (await context.Materials.AnyAsync(m => m.Code == command.Code, cancellationToken))
         {
             return Result.Failure<Guid>(MaterialErrors.CodeNotUnique);
@@ -42,13 +57,13 @@ internal sealed class CreateMaterialCommandHandler(
         var material = Material.Create(
             Guid.NewGuid(),
             command.FamilyId,
+            command.BaseUnitId,
             command.NameAr,
             command.NameEn,
             command.Code,
             command.MaterialKind,
             command.TrackingType,
             command.HasExpiry,
-            command.RequiresAssetNumber,
             command.Attributes);
 
         context.Materials.Add(material);

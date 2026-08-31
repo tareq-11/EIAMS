@@ -40,7 +40,13 @@ public sealed class AuditValuePolicyTests
 
     [Theory]
     [InlineData("User", "password_hash")]
+    [InlineData("User", "database_password")]
     [InlineData("RefreshToken", "token")]
+    [InlineData("RefreshToken", "refresh_token_hash")]
+    [InlineData("SystemConfig", "jwt_secret")]
+    [InlineData("SystemConfig", "client_api_key")]
+    [InlineData("SystemConfig", "connection_string")]
+    [InlineData("SystemConfig", "private_key")]
     [InlineData("DocumentAttachment", "storage_key")]
     public void IsForbidden_Should_ReturnTrue_WhenFieldHoldsSecretMaterial(string entityType, string field)
     {
@@ -49,6 +55,30 @@ public sealed class AuditValuePolicyTests
 
         // Assert
         forbidden.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void SanitizeSummary_Should_ReturnNull_WhenNestedJsonContainsSensitiveProperty()
+    {
+        // Act
+        string? sanitized = policy.SanitizeSummary(
+            """{"request":{"credentials":{"api_key":"do-not-store"}}}""");
+
+        // Assert
+        sanitized.ShouldBeNull();
+    }
+
+    [Fact]
+    public void SanitizeSummary_Should_PreserveJson_WhenItContainsOnlySafeProperties()
+    {
+        // Arrange
+        const string Summary = """{"document_id":"abc","result":"posted"}""";
+
+        // Act
+        string? sanitized = policy.SanitizeSummary(Summary);
+
+        // Assert
+        sanitized.ShouldBe(Summary);
     }
 
     [Fact]

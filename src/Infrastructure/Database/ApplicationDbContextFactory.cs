@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Infrastructure.DomainEvents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -7,16 +6,20 @@ using SharedKernel;
 
 namespace Infrastructure.Database;
 
-[SuppressMessage("Security", "S2068:Credentials should not be hard-coded", Justification = "Design-time fallback connection string for local development migrations")]
 public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<ApplicationDbContext>
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
+        string connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Database")
+            ?? throw new InvalidOperationException(
+                "Design-time database connection is not configured. " +
+                "Set the ConnectionStrings__Database environment variable before running dotnet ef.");
+
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
         optionsBuilder
             .UseNpgsql(
-                "Host=localhost;Port=5432;Database=clean-architecture-template;Username=postgres;Password=postgres",
+                connectionString,
                 npgsqlOptions => npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
             .UseSnakeCaseNamingConvention();
 

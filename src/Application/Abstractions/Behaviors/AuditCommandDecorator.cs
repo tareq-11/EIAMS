@@ -30,7 +30,7 @@ internal static class AuditCommandDecorator
             if (requestId is null)
             {
                 return new AuditOperationDescriptor(
-                    Guid.NewGuid(),
+                    requestAudit.GetOperationId() ?? Guid.NewGuid(),
                     requestId,
                     userId,
                     requestAudit.GetClientIpAddress(),
@@ -39,7 +39,7 @@ internal static class AuditCommandDecorator
             }
 
             return new AuditOperationDescriptor(
-                Guid.NewGuid(),
+                requestAudit.GetOperationId() ?? Guid.NewGuid(),
                 requestId,
                 userId,
                 requestAudit.GetClientIpAddress(),
@@ -71,7 +71,7 @@ internal static class AuditCommandDecorator
             if (requestId is null)
             {
                 return new AuditOperationDescriptor(
-                    Guid.NewGuid(),
+                    requestAudit.GetOperationId() ?? Guid.NewGuid(),
                     requestId,
                     userId,
                     requestAudit.GetClientIpAddress(),
@@ -80,7 +80,7 @@ internal static class AuditCommandDecorator
             }
 
             return new AuditOperationDescriptor(
-                Guid.NewGuid(),
+                requestAudit.GetOperationId() ?? Guid.NewGuid(),
                 requestId,
                 userId,
                 requestAudit.GetClientIpAddress(),

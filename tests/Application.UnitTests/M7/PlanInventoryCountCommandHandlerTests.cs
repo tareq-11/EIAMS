@@ -10,6 +10,7 @@ using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
 using Domain.Materials;
+using Domain.UnitsOfMeasure;
 using Domain.Warehouses;
 using SharedKernel;
 
@@ -33,11 +34,13 @@ public sealed class PlanInventoryCountCommandHandlerTests : BaseHandlerTest
         context.MaterialDomains.Add(MaterialDomain.Create(domainId, "Medical", "MED"));
         context.MaterialCategories.Add(MaterialCategory.Create(
             categoryId, domainId, null, "Category", "CAT"));
+        var baseUnitId = Guid.NewGuid();
+        context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
         context.MaterialFamilies.Add(MaterialFamily.Create(
-            familyId, categoryId, "Family", "FAM", Guid.NewGuid()));
+            familyId, categoryId, "Family", "FAM", baseUnitId));
         context.Materials.Add(Material.Create(
-            materialId, familyId, "مادة", "Material", "MAT-COUNT",
-            MaterialKind.Consumable, TrackingType.Quantity, false, false, null));
+            materialId, familyId, baseUnitId, "مادة", "Material", "MAT-COUNT",
+            MaterialKind.Consumable, TrackingType.Quantity, false, null));
         await context.SaveChangesAsync();
 
         IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();

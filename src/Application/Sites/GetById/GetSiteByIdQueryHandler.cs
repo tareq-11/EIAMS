@@ -1,3 +1,5 @@
+using Application.Abstractions.Authentication;
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Sites;
@@ -9,11 +11,26 @@ namespace Application.Sites.GetById;
 
 internal sealed class GetSiteByIdQueryHandler(
     IApplicationDbContext context,
+    IUserContext userContext,
+    IScopeAuthorizationService scopeAuthorizationService,
     HybridCache hybridCache)
     : IQueryHandler<GetSiteByIdQuery, SiteResponse>
 {
     public async Task<Result<SiteResponse>> Handle(GetSiteByIdQuery query, CancellationToken cancellationToken)
     {
+        bool authorized = await scopeAuthorizationService.HasPermissionAsync(
+            userContext.UserId,
+            PermissionCodes.Sites.View,
+            cancellationToken) && await scopeAuthorizationService.CanAccessSiteAsync(
+            userContext.UserId,
+            query.SiteId,
+            cancellationToken);
+
+        if (!authorized)
+        {
+            return Result.Failure<SiteResponse>(SiteErrors.NotFound(query.SiteId));
+        }
+
         SiteResponse? site = await hybridCache.GetOrCreateAsync(
             $"sites:by-id:{query.SiteId}",
             async ct => await context.Sites

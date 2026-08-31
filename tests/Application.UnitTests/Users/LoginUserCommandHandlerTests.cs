@@ -75,6 +75,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
         tokenProvider.Create(Arg.Any<User>()).Returns("access-token");
         tokenProvider.GenerateRefreshToken().Returns("refresh-token");
+        tokenProvider.HashRefreshToken("refresh-token").Returns("hash:refresh-token");
 
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
@@ -97,7 +98,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         result.Value.RefreshToken.ShouldBe("refresh-token");
 
         RefreshToken refreshToken = await context.RefreshTokens.SingleAsync();
-        refreshToken.Token.ShouldBe("refresh-token");
+        refreshToken.Token.ShouldBe("hash:refresh-token");
         refreshToken.ExpiresOnUtc.ShouldBeGreaterThan(dateTimeProvider.UtcNow);
     }
 

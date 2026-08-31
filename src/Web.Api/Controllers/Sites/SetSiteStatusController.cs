@@ -16,6 +16,7 @@ public sealed class SetSiteStatusController(ICommandHandler<SetSiteStatusCommand
     public sealed record RequestBody([property: JsonRequired] int Status);
 
     [HttpPut("{siteId:guid}/status")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Sites.Manage)]
     public async Task<IResult> Handle(Guid siteId, RequestBody request, CancellationToken cancellationToken)
     {

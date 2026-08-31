@@ -16,6 +16,7 @@ public sealed class CreateOrganizationalUnitController(ICommandHandler<CreateOrg
     public sealed record RequestBody([property: JsonRequired] Guid SiteId, Guid? ParentId, string Name, string UnitType);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.OrganizationalUnits.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

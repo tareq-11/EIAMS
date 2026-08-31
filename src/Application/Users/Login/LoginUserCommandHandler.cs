@@ -18,9 +18,9 @@ internal sealed class LoginUserCommandHandler(
 {
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
+        string email = User.NormalizeEmail(command.Email);
         User? user = await context.Users
-            .AsNoTracking()
-            .SingleOrDefaultAsync(u => u.Email == command.Email, cancellationToken);
+            .SingleOrDefaultAsync(u => u.Email == email, cancellationToken);
 
         if (user is null)
         {
@@ -34,14 +34,23 @@ internal sealed class LoginUserCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }
 
+        if (user.Status == UserStatus.Suspended)
+        {
+            return Result.Failure<AccessTokensResponse>(UserErrors.Suspended);
+        }
+
         string accessToken = tokenProvider.Create(user);
         string refreshToken = tokenProvider.GenerateRefreshToken();
+        string tokenHash = tokenProvider.HashRefreshToken(refreshToken);
+        DateTime nowUtc = dateTimeProvider.UtcNow;
+        user.RecordSuccessfulLogin(nowUtc);
 
         var refreshTokenEntity = RefreshToken.Create(
             Guid.NewGuid(),
-            refreshToken,
+            tokenHash,
             user.Id,
-            dateTimeProvider.UtcNow.AddDays(RefreshTokenExpirationInDays));
+            nowUtc.AddDays(RefreshTokenExpirationInDays),
+            nowUtc);
 
         context.RefreshTokens.Add(refreshTokenEntity);
 

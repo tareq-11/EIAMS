@@ -12,7 +12,12 @@ namespace Web.Api.Controllers.Warehouses;
 [Tags(Tags.Warehouses)]
 public sealed class UpdateWarehouseController(ICommandHandler<UpdateWarehouseCommand> handler) : ControllerBase
 {
-    public sealed record RequestBody(string Name, string WarehouseType, [property: JsonRequired] bool CanHoldStock, [property: JsonRequired] int ExpectedRowVersion);
+    public sealed record RequestBody(
+        [property: JsonRequired] Guid OrganizationalUnitId,
+        string Name,
+        string WarehouseType,
+        [property: JsonRequired] bool CanHoldStock,
+        [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPut("{warehouseId:guid}")]
     [HasPermission(PermissionCodes.Warehouses.Manage)]
@@ -26,6 +31,7 @@ public sealed class UpdateWarehouseController(ICommandHandler<UpdateWarehouseCom
     {
         var command = new UpdateWarehouseCommand(
             warehouseId,
+            request.OrganizationalUnitId,
             request.Name,
             request.WarehouseType,
             request.CanHoldStock,

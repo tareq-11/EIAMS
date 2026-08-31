@@ -1,3 +1,4 @@
+using Domain.OrganizationalUnits;
 using Domain.Sites;
 using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
@@ -30,5 +31,12 @@ internal sealed class WarehouseConfiguration : IEntityTypeConfiguration<Warehous
         });
 
         builder.HasOne<Site>().WithMany().HasForeignKey(w => w.SiteId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<OrganizationalUnit>()
+            .WithMany()
+            .HasForeignKey(w => w.OrganizationalUnitId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(w => w.OrganizationalUnitId);
     }
 }

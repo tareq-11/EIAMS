@@ -10,8 +10,10 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
     [Fact]
     public async Task SuccessfulResponse_Should_ContainDataAndRequestMetadata()
     {
+        await AuthenticateAsAdministratorAsync();
+
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/register",
+            "users",
             new
             {
                 email = UniqueEmail(),
@@ -34,8 +36,10 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
     [Fact]
     public async Task InvalidRequest_Should_ReturnStructuredValidationDetails()
     {
+        await AuthenticateAsAdministratorAsync();
+
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/register",
+            "users",
             new
             {
                 email = "not-an-email",
@@ -93,7 +97,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         await RegisterUserAsync(email);
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/register",
+            "users",
             new
             {
                 email,

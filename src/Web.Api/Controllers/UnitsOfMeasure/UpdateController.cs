@@ -15,6 +15,7 @@ public sealed class UpdateController(ICommandHandler<UpdateUnitOfMeasureCommand>
     public sealed record RequestBody(string Name, string Symbol, string UnitType);
 
     [HttpPut("{unitOfMeasureId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.UnitsOfMeasure.Manage)]
     public async Task<IResult> Handle(Guid unitOfMeasureId, RequestBody request, CancellationToken cancellationToken)
     {

@@ -103,7 +103,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         M5IssueSeed seed = await SeedAsync();
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -131,13 +131,13 @@ public sealed class M5IssueTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task UpsertIssueTo_Should_ReturnExternalNotSupportedAndNotPersist()
+    public async Task UpsertIssueTo_Should_ReturnRecipientNotFoundAndNotPersist_WhenExternalPartyDoesNotExist()
     {
         // Arrange
         M5IssueSeed seed = await SeedAsync();
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -156,7 +156,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         ApiErrorEnvelope? body = await response.Content.ReadFromJsonAsync<ApiErrorEnvelope>();
         body.ShouldNotBeNull();
         body.Success.ShouldBeFalse();
-        body.Error.Code.ShouldBe("ISSUE_TOS_EXTERNAL_RECIPIENT_NOT_SUPPORTED");
+        body.Error.Code.ShouldBe("ISSUE_TOS_RECIPIENT_NOT_FOUND");
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await context.IssueTos.AnyAsync(item => item.Id == document.Id)).ShouldBeFalse();
@@ -169,7 +169,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         M5IssueSeed seed = await SeedAsync();
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -195,7 +195,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         await SetEmployeeInactiveAsync(seed.EmployeeId);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -230,7 +230,8 @@ public sealed class M5IssueTests : BaseIntegrationTest
                 "Transfer destination",
                 $"TD{Guid.NewGuid():N}"[..12],
                 "Main",
-                true));
+                true,
+                source.OrganizationalUnitId));
             document = WarehouseDocument.CreateDraft(
                 Guid.NewGuid(),
                 source.Id,
@@ -241,7 +242,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         }
 
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -288,7 +289,14 @@ public sealed class M5IssueTests : BaseIntegrationTest
         context.OrganizationalUnits.Add(Domain.OrganizationalUnits.OrganizationalUnit.Create(
             organizationalUnitId, siteId, null, "Operations", "Department"));
         context.Employees.Add(Employee.Create(employeeId, organizationalUnitId, "Issue Recipient", $"E{suffix}", null));
-        context.Warehouses.Add(Warehouse.Create(warehouseId, siteId, $"Warehouse {suffix}", $"W{suffix}", "Main", true));
+        context.Warehouses.Add(Warehouse.Create(
+            warehouseId,
+            siteId,
+            $"Warehouse {suffix}",
+            $"W{suffix}",
+            "Main",
+            true,
+            organizationalUnitId));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, $"Piece {suffix}", $"P{suffix}", "Count"));
         context.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
@@ -296,12 +304,12 @@ public sealed class M5IssueTests : BaseIntegrationTest
         context.Materials.Add(Material.Create(
             materialId,
             familyId,
+            unitId,
             $"Material {suffix}",
             null,
             $"M{suffix}",
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             null));
         var capability = WarehouseCapability.Create(Guid.NewGuid(), warehouseId, domainId);
@@ -310,7 +318,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
             Guid.NewGuid(), capability.Id, OperationType.Issue));
         await context.SaveChangesAsync();
 
-        return new M5IssueSeed(userId, warehouseId, employeeId, unitId, materialId);
+        return new M5IssueSeed(userId, warehouseId, organizationalUnitId, employeeId, unitId, materialId);
     }
 
     private async Task<WarehouseDocument> CreateDraftIssueAsync(M5IssueSeed seed)
@@ -394,7 +402,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
             : result.Value.DocumentId;
     }
 
-    private async Task GrantWarehouseDocumentPermissionsAsync(Guid userId, Guid warehouseId)
+    private async Task GrantWarehouseDocumentPermissionsAsync(Guid userId, Guid organizationalUnitId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -407,7 +415,8 @@ public sealed class M5IssueTests : BaseIntegrationTest
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId));
-        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, organizationalUnitId));
         await context.SaveChangesAsync();
     }
 
@@ -417,7 +426,13 @@ public sealed class M5IssueTests : BaseIntegrationTest
             .Select(balance => balance.Quantity)
             .SingleAsync();
 
-    private sealed record M5IssueSeed(Guid UserId, Guid WarehouseId, Guid EmployeeId, Guid UnitId, Guid MaterialId);
+    private sealed record M5IssueSeed(
+        Guid UserId,
+        Guid WarehouseId,
+        Guid OrganizationalUnitId,
+        Guid EmployeeId,
+        Guid UnitId,
+        Guid MaterialId);
     private sealed record SubmittedIssue(Guid DocumentId, int RowVersion);
     private sealed record DocumentDetails(IssueToDetails? IssueTo, TransferInfoDetails? TransferInfo);
     private sealed record IssueToDetails(string RecipientType, Guid RecipientId, string IssueReason);

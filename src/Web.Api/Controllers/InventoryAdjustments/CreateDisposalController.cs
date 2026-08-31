@@ -18,6 +18,7 @@ public sealed class CreateDisposalController(ICommandHandler<CreateDisposalComma
         [property: JsonRequired] string Reason);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [HasPermission(PermissionCodes.WarehouseDocuments.Create)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

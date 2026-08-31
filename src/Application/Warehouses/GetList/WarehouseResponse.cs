@@ -6,6 +6,8 @@ public sealed class WarehouseResponse
 
     public Guid SiteId { get; init; }
 
+    public Guid? OrganizationalUnitId { get; init; }
+
     public string Name { get; init; }
 
     public string Code { get; init; }

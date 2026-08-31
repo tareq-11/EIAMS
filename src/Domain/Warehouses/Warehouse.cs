@@ -12,6 +12,7 @@ public sealed class Warehouse : Entity, IAuditableEntity
     private Warehouse() { }
 
     public Guid SiteId { get; private set; }
+    public Guid? OrganizationalUnitId { get; private set; }
     public string Name { get; private set; }
     public string Code { get; private set; }
     public string WarehouseType { get; private set; }
@@ -30,12 +31,14 @@ public sealed class Warehouse : Entity, IAuditableEntity
         string name,
         string code,
         string warehouseType,
-        bool canHoldStock)
+        bool canHoldStock,
+        Guid? organizationalUnitId = null)
     {
         var warehouse = new Warehouse
         {
             Id = id,
             SiteId = siteId,
+            OrganizationalUnitId = organizationalUnitId,
             Name = name,
             Code = code,
             WarehouseType = warehouseType,
@@ -59,6 +62,31 @@ public sealed class Warehouse : Entity, IAuditableEntity
         Raise(new WarehouseUpdatedDomainEvent(Id));
     }
 
+    public void UpdateDetailsAndAdministrativeOwner(
+        string name,
+        string warehouseType,
+        bool canHoldStock,
+        Guid organizationalUnitId)
+    {
+        Guid? previousOrganizationalUnitId = OrganizationalUnitId;
+
+        Name = name;
+        WarehouseType = warehouseType;
+        CanHoldStock = canHoldStock;
+        OrganizationalUnitId = organizationalUnitId;
+        RowVersion++;
+
+        Raise(new WarehouseUpdatedDomainEvent(Id));
+
+        if (previousOrganizationalUnitId != organizationalUnitId)
+        {
+            Raise(new WarehouseAdministrativeOwnerChangedDomainEvent(
+                Id,
+                previousOrganizationalUnitId,
+                organizationalUnitId));
+        }
+    }
+
     public void SetStatus(Status status)
     {
         if (Status == status)
@@ -70,5 +98,22 @@ public sealed class Warehouse : Entity, IAuditableEntity
         RowVersion++;
 
         Raise(new WarehouseStatusChangedDomainEvent(Id, status));
+    }
+
+    public void ReassignAdministrativeOwner(Guid organizationalUnitId)
+    {
+        if (OrganizationalUnitId == organizationalUnitId)
+        {
+            return;
+        }
+
+        Guid? previousOrganizationalUnitId = OrganizationalUnitId;
+        OrganizationalUnitId = organizationalUnitId;
+        RowVersion++;
+
+        Raise(new WarehouseAdministrativeOwnerChangedDomainEvent(
+            Id,
+            previousOrganizationalUnitId,
+            organizationalUnitId));
     }
 }

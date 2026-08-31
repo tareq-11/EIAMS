@@ -14,15 +14,34 @@ namespace Web.Api.Controllers.Users;
 public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler)
     : ControllerBase
 {
-    public sealed record RequestBody(string RefreshToken);
+    public sealed record RequestBody(string? RefreshToken);
 
     [HttpPost("refresh-token")]
+    [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
-    public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RequestBody? request,
+        CancellationToken cancellationToken)
     {
-        var command = new RefreshTokenCommand(request.RefreshToken);
+        string? token = AuthCookies.GetRefreshTokenFromCookieOrBody(HttpContext, request?.RefreshToken);
+
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return ApiResults.Error(
+                HttpContext,
+                StatusCodes.Status400BadRequest,
+                Domain.Users.UserErrors.InvalidRefreshToken.Code,
+                Domain.Users.UserErrors.InvalidRefreshToken.Description);
+        }
+
+        var command = new RefreshTokenCommand(token);
 
         Result<AccessTokensResponse> result = await handler.Handle(command, cancellationToken);
+
+        if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Value.RefreshToken))
+        {
+            AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
+        }
 
         return result.ToApiResponse(HttpContext);
     }

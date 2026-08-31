@@ -75,17 +75,13 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             return Result.Failure<Guid>(DocumentAttachmentErrors.MimeTypeNotAllowed(command.MimeType));
         }
 
-        if (command.AttachmentType == AttachmentType.SignedOriginal)
-        {
-            bool alreadyHasSignedOriginal = await context.DocumentAttachments.AnyAsync(
-                a => a.DocumentId == command.DocumentId && a.AttachmentType == AttachmentType.SignedOriginal,
-                cancellationToken);
-
-            if (alreadyHasSignedOriginal)
-            {
-                return Result.Failure<Guid>(DocumentAttachmentErrors.SignedOriginalAlreadyExists(command.DocumentId));
-            }
-        }
+        DocumentAttachment? activeSignedOriginal = command.AttachmentType == AttachmentType.SignedOriginal
+            ? await context.DocumentAttachments.SingleOrDefaultAsync(
+                a => a.DocumentId == command.DocumentId &&
+                     a.AttachmentType == AttachmentType.SignedOriginal &&
+                     a.IsActive,
+                cancellationToken)
+            : null;
 
         Result<StoredFile> storageResult = await fileStorage.SaveAsync(command.Content, cancellationToken);
 
@@ -107,13 +103,35 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             storedFile.FileSize,
             storedFile.Checksum,
             userContext.UserId,
-            nowUtc);
+            nowUtc,
+            activeSignedOriginal?.Id);
 
         context.DocumentAttachments.Add(attachment);
 
-        Result detailMutationResult = command.AttachmentType == AttachmentType.SignedOriginal
-            ? document.SetSignedCopy(attachment.Id)
-            : document.RegisterDetailMutation();
+        Result detailMutationResult;
+
+        if (command.AttachmentType == AttachmentType.SignedOriginal)
+        {
+            if (activeSignedOriginal is not null)
+            {
+                Result archiveResult = activeSignedOriginal.ArchiveAsReplacedBy(
+                    attachment.Id,
+                    userContext.UserId,
+                    nowUtc);
+
+                if (archiveResult.IsFailure)
+                {
+                    await fileCleanup.DeleteOrEnqueueAsync(storedFile.StorageKey, CancellationToken.None);
+                    return Result.Failure<Guid>(archiveResult.Error);
+                }
+            }
+
+            detailMutationResult = document.SetSignedCopy(attachment.Id);
+        }
+        else
+        {
+            detailMutationResult = document.RegisterDetailMutation();
+        }
 
         if (detailMutationResult.IsFailure)
         {

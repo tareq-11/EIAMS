@@ -23,9 +23,13 @@ public sealed class PostDocumentController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
-    public async Task<IResult> Handle(Guid documentId, RequestBody request, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(
+        Guid documentId,
+        RequestBody request,
+        [FromHeader(Name = "Idempotency-Key")] Guid? idempotencyKey,
+        CancellationToken cancellationToken)
     {
-        var command = new PostDocumentCommand(documentId, request.ExpectedRowVersion);
+        var command = new PostDocumentCommand(documentId, request.ExpectedRowVersion, idempotencyKey);
 
         Result<PostDocumentResponse> result = await handler.Handle(command, cancellationToken);
 

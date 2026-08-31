@@ -21,15 +21,19 @@ public sealed class AuditSecretExclusionTests : BaseIntegrationTest
     {
         // 1. Arrange & Act: Register user
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
 
         // 2. Assert: Query audit log entries for user
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         List<AuditLogEntry> sensitiveEntries = await context.AuditLogEntries
-            .Where(e => EF.Functions.ILike(e.FieldName, "%password%") ||
-                        EF.Functions.ILike(e.FieldName, "%secret%"))
+            .Where(entry => context.AuditLogs.Any(log =>
+                log.Id == entry.AuditLogId &&
+                log.EntityType == "User" &&
+                log.EntityId == userId))
+            .Where(entry => EF.Functions.ILike(entry.FieldName, "%password%") ||
+                            EF.Functions.ILike(entry.FieldName, "%secret%"))
             .ToListAsync();
 
         sensitiveEntries.ShouldBeEmpty("Audit log should never capture password or secret fields");

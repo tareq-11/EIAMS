@@ -1,3 +1,4 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Users.GetById;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +12,12 @@ namespace Web.Api.Controllers.Users;
 [Tags(Tags.Users)]
 public sealed class GetUserByIdController(IQueryHandler<GetUserByIdQuery, UserResponse> handler) : ControllerBase
 {
-    [HttpGet("{userId}")]
-    [HasPermission(Permissions.UsersAccess)]
+    [HttpGet("{userId:guid}")]
+    [HasPermission(PermissionCodes.Users.Access)]
+    [ProducesResponseType<ApiResponse<UserResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(Guid userId, CancellationToken cancellationToken)
     {
         var query = new GetUserByIdQuery(userId);

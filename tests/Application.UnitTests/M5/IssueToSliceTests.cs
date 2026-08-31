@@ -288,6 +288,12 @@ public sealed class IssueToSliceTests : BaseHandlerTest
                 Arg.Any<Guid?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(authorized));
+        authorization.CanAccessPartyAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<PartyType>(),
+                Arg.Any<Guid>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(authorized));
         IActivePartyLookup lookup = Substitute.For<IActivePartyLookup>();
         lookup.GetStatusAsync(
                 Arg.Any<PartyType>(),

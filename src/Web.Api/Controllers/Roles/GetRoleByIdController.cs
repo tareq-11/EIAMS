@@ -13,6 +13,7 @@ namespace Web.Api.Controllers.Roles;
 public sealed class GetRoleByIdController(IQueryHandler<GetRoleByIdQuery, RoleResponse> handler) : ControllerBase
 {
     [HttpGet("{roleId:guid}")]
+    [ProducesResponseType<ApiResponse<RoleResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Roles.View)]
     public async Task<IResult> Handle(Guid roleId, CancellationToken cancellationToken)
     {

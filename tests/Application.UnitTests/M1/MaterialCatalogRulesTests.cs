@@ -64,7 +64,7 @@ public sealed class MaterialCatalogRulesTests
     [Fact]
     public void Material_SetStatus_Should_TreatArchivedAsTerminal()
     {
-        Material material = CreateMaterial(MaterialKind.Consumable, false);
+        Material material = CreateMaterial(MaterialKind.Consumable);
         material.SetStatus(MaterialStatus.Archived).IsSuccess.ShouldBeTrue();
         material.ClearDomainEvents();
 
@@ -79,7 +79,7 @@ public sealed class MaterialCatalogRulesTests
     [Fact]
     public void Material_SetStatus_Should_IgnoreNoOpChange()
     {
-        Material material = CreateMaterial(MaterialKind.Consumable, false);
+        Material material = CreateMaterial(MaterialKind.Consumable);
         material.ClearDomainEvents();
 
         Result result = material.SetStatus(MaterialStatus.Active);
@@ -89,17 +89,17 @@ public sealed class MaterialCatalogRulesTests
     }
 
     [Theory]
-    [InlineData(MaterialKind.Asset, false, true)]
-    [InlineData(MaterialKind.Consumable, true, true)]
-    [InlineData(MaterialKind.Consumable, false, false)]
-    public void Material_IsAssetTracked_Should_UseKindOrAssetNumberRequirement(
+    [InlineData(MaterialKind.Asset, true)]
+    [InlineData(MaterialKind.Durable, false)]
+    [InlineData(MaterialKind.Consumable, false)]
+    public void Material_IsAssetTracked_Should_DeriveFromAssetKind(
         MaterialKind materialKind,
-        bool requiresAssetNumber,
         bool expected)
     {
-        Material material = CreateMaterial(materialKind, requiresAssetNumber);
+        Material material = CreateMaterial(materialKind);
 
         material.IsAssetTracked.ShouldBe(expected);
+        material.RequiresAssetNumber.ShouldBe(expected);
     }
 
     [Fact]
@@ -115,6 +115,21 @@ public sealed class MaterialCatalogRulesTests
         conversion.Factor.ShouldBe(12.5m);
         conversion.DomainEvents.ShouldContain(
             domainEvent => domainEvent is MaterialUnitConversionCreatedDomainEvent);
+    }
+
+    [Fact]
+    public void MaterialUnitConversion_UpdateFactor_Should_ChangeFactor()
+    {
+        var conversion = MaterialUnitConversion.Create(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            12.5m);
+
+        conversion.UpdateFactor(15.75m);
+
+        conversion.Factor.ShouldBe(15.75m);
     }
 
     [Fact]
@@ -190,16 +205,16 @@ public sealed class MaterialCatalogRulesTests
         result.Error.ShouldBe(Domain.DocumentLines.DocumentLineErrors.QuantityPrecisionInvalid);
     }
 
-    private static Material CreateMaterial(MaterialKind materialKind, bool requiresAssetNumber) =>
+    private static Material CreateMaterial(MaterialKind materialKind) =>
         Material.Create(
+            Guid.NewGuid(),
             Guid.NewGuid(),
             Guid.NewGuid(),
             "مادة",
             "Material",
             $"MAT-{Guid.NewGuid():N}",
             materialKind,
-            TrackingType.Quantity,
+            materialKind == MaterialKind.Asset ? TrackingType.Serial : TrackingType.Quantity,
             false,
-            requiresAssetNumber,
             null);
 }

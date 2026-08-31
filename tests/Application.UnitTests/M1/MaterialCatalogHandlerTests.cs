@@ -100,16 +100,18 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
     {
         await using TestDbContext context = CreateDbContext();
         var familyId = Guid.NewGuid();
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, Guid.NewGuid(), "Family", "FAM", Guid.NewGuid()));
+        var baseUnitId = Guid.NewGuid();
+        context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, Guid.NewGuid(), "Family", "FAM", baseUnitId));
         context.Materials.Add(Material.Create(
             Guid.NewGuid(),
             familyId,
+            baseUnitId,
             "مادة",
             "Material",
             "MAT-1",
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             null));
         await context.SaveChangesAsync();
@@ -117,12 +119,12 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
         var handler = new CreateMaterialCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
         var command = new CreateMaterialCommand(
             familyId,
+            baseUnitId,
             "مادة أخرى",
             "Other material",
             "MAT-1",
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             null);
 
@@ -139,12 +141,12 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
     {
         var command = new CreateMaterialCommand(
             Guid.NewGuid(),
+            Guid.NewGuid(),
             "مادة",
             null,
             "MAT-1",
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             attributes);
 
@@ -246,12 +248,12 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
         context.Materials.Add(Material.Create(
             materialId,
             familyId,
+            baseUnitId,
             "مادة",
             "Material",
             $"MAT-{materialId:N}",
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             null));
         await context.SaveChangesAsync();

@@ -405,7 +405,7 @@ internal sealed class AuditSaveChangesInterceptor(
             aggregateId,
             action,
             commandName,
-            summary,
+            valuePolicy.SanitizeSummary(summary),
             descriptor.IpAddress,
             dateTimeProvider.UtcNow);
 

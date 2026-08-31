@@ -7,5 +7,6 @@ internal sealed class CreateRoleCommandValidator : AbstractValidator<CreateRoleC
     public CreateRoleCommandValidator()
     {
         RuleFor(c => c.Name).NotEmpty().MaximumLength(100);
+        RuleForEach(c => c.AllowedScopeTypes).IsInEnum();
     }
 }

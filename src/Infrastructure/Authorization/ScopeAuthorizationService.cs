@@ -1,15 +1,47 @@
 using Application.Abstractions.Authorization;
-using Application.Abstractions.Data;
 using Domain.Common;
+using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 
 namespace Infrastructure.Authorization;
 
 internal sealed class ScopeAuthorizationService(
-    IApplicationDbContext context,
+    ApplicationDbContext context,
     HybridCache hybridCache) : IScopeAuthorizationService
 {
+    public async Task<UserAuthorizationAssignment?> GetUserAssignmentAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        await hybridCache.GetOrCreateAsync(
+            $"auth:user-assignment:{userId}",
+            async ct => await context.UserRoleScopes
+                .AsNoTracking()
+                .Where(assignment => assignment.UserId == userId)
+                .Select(assignment => new UserAuthorizationAssignment(
+                    assignment.Id,
+                    assignment.UserId,
+                    assignment.RoleId,
+                    assignment.ScopeType,
+                    assignment.ScopeId))
+                .SingleOrDefaultAsync(ct),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(10),
+                LocalCacheExpiration = TimeSpan.FromMinutes(10)
+            },
+            tags: [$"user:{userId}", "auth-roles"],
+            cancellationToken: cancellationToken);
+
+    public async Task<bool> HasPermissionAsync(
+        Guid userId,
+        string permission,
+        CancellationToken cancellationToken)
+    {
+        List<UserPermissionScopeGrant> grants = await GetAllGrantsAsync(userId, cancellationToken);
+        return grants.Any(grant => grant.PermissionCode == permission);
+    }
+
     public async Task<bool> HasPermissionInScopeAsync(
         Guid userId,
         string permission,
@@ -17,54 +49,207 @@ internal sealed class ScopeAuthorizationService(
         Guid? scopeId,
         CancellationToken cancellationToken)
     {
-        List<UserPermissionScopeGrant> allGrants = await GetAllGrantsAsync(userId, cancellationToken);
+        UserPermissionScopeGrant? grant = await GetGrantAsync(userId, permission, cancellationToken);
 
-        var grants = allGrants
-            .Where(g => g.PermissionCode == permission)
-            .ToList();
+        return grant is not null && await AssignmentContainsAsync(
+            grant.ScopeType,
+            grant.ScopeId,
+            scopeType,
+            scopeId,
+            cancellationToken);
+    }
 
-        if (grants.Count == 0)
+    public async Task<bool> CanAccessSiteAsync(
+        Guid userId,
+        Guid siteId,
+        CancellationToken cancellationToken)
+    {
+        UserAuthorizationAssignment? assignment = await GetUserAssignmentAsync(userId, cancellationToken);
+
+        if (assignment is null)
         {
             return false;
         }
 
-        if (grants.Any(grant => grant.ScopeType == ScopeType.Enterprise))
+        return assignment.ScopeType switch
         {
-            // Enterprise is org-wide - it satisfies every scoped request.
+            ScopeType.Enterprise => true,
+            ScopeType.Site => assignment.ScopeId == siteId,
+            ScopeType.OrganizationalUnit => await context.OrganizationalUnits
+                .AsNoTracking()
+                .AnyAsync(unit => unit.Id == assignment.ScopeId && unit.SiteId == siteId, cancellationToken),
+            ScopeType.Warehouse => await context.Warehouses
+                .AsNoTracking()
+                .AnyAsync(warehouse => warehouse.Id == assignment.ScopeId && warehouse.SiteId == siteId, cancellationToken),
+            _ => false
+        };
+    }
+
+    public async Task<bool> CanAccessOrganizationalUnitAsync(
+        Guid userId,
+        Guid organizationalUnitId,
+        CancellationToken cancellationToken)
+    {
+        UserAuthorizationAssignment? assignment = await GetUserAssignmentAsync(userId, cancellationToken);
+
+        return assignment is not null && await AssignmentContainsAsync(
+            assignment.ScopeType,
+            assignment.ScopeId,
+            ScopeType.OrganizationalUnit,
+            organizationalUnitId,
+            cancellationToken);
+    }
+
+    public async Task<bool> CanAccessWarehouseAsync(
+        Guid userId,
+        Guid warehouseId,
+        CancellationToken cancellationToken)
+    {
+        UserAuthorizationAssignment? assignment = await GetUserAssignmentAsync(userId, cancellationToken);
+
+        return assignment is not null && await AssignmentContainsAsync(
+            assignment.ScopeType,
+            assignment.ScopeId,
+            ScopeType.Warehouse,
+            warehouseId,
+            cancellationToken);
+    }
+
+    public async Task<bool> CanAccessPartyAsync(
+        Guid userId,
+        PartyType partyType,
+        Guid partyId,
+        CancellationToken cancellationToken)
+    {
+        UserAuthorizationAssignment? assignment = await GetUserAssignmentAsync(userId, cancellationToken);
+
+        if (assignment is null)
+        {
+            return false;
+        }
+
+        if (assignment.ScopeType == ScopeType.Enterprise)
+        {
             return true;
         }
 
-        if (grants.Any(grant => grant.ScopeType == scopeType && grant.ScopeId == scopeId))
+        if (partyType == PartyType.External)
         {
             return true;
         }
 
-        if (scopeType == ScopeType.Warehouse && scopeId is not null)
+        if (partyType == PartyType.Site)
         {
-            // A Site-scoped grant also covers every Warehouse within that site.
-            Guid? warehouseSiteId = await hybridCache.GetOrCreateAsync(
-                $"warehouse:site-id:{scopeId}",
-                async ct => await context.Warehouses
-                    .AsNoTracking()
-                    .Where(w => w.Id == scopeId)
-                    .Select(w => (Guid?)w.SiteId)
-                    .SingleOrDefaultAsync(ct),
-                new HybridCacheEntryOptions
-                {
-                    Expiration = TimeSpan.FromMinutes(30),
-                    LocalCacheExpiration = TimeSpan.FromMinutes(30)
-                },
-                tags: ["warehouses"],
-                cancellationToken: cancellationToken);
-
-            if (warehouseSiteId is not null &&
-                grants.Any(grant => grant.ScopeType == ScopeType.Site && grant.ScopeId == warehouseSiteId))
-            {
-                return true;
-            }
+            return await CanAccessSiteAsync(userId, partyId, cancellationToken);
         }
 
-        return false;
+        Guid? organizationalUnitId = partyType switch
+        {
+            PartyType.OrganizationalUnit => partyId,
+            PartyType.Employee => await context.Employees
+                .AsNoTracking()
+                .Where(employee => employee.Id == partyId)
+                .Select(employee => (Guid?)employee.OrgUnitId)
+                .SingleOrDefaultAsync(cancellationToken),
+            _ => null
+        };
+
+        if (!organizationalUnitId.HasValue)
+        {
+            return false;
+        }
+
+        if (assignment.ScopeType == ScopeType.Warehouse && assignment.ScopeId.HasValue)
+        {
+            Guid? owningOrganizationalUnitId = await context.Warehouses
+                .AsNoTracking()
+                .Where(warehouse => warehouse.Id == assignment.ScopeId.Value)
+                .Select(warehouse => warehouse.OrganizationalUnitId)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            return owningOrganizationalUnitId.HasValue &&
+                   await IsOrganizationalUnitDescendantAsync(
+                       owningOrganizationalUnitId.Value,
+                       organizationalUnitId.Value,
+                       cancellationToken);
+        }
+
+        return await AssignmentContainsAsync(
+            assignment.ScopeType,
+            assignment.ScopeId,
+            ScopeType.OrganizationalUnit,
+            organizationalUnitId,
+            cancellationToken);
+    }
+
+    public async Task<SitePermissionScope> GetSitePermissionScopeAsync(
+        Guid userId,
+        string permission,
+        CancellationToken cancellationToken)
+    {
+        UserPermissionScopeGrant? grant = await GetGrantAsync(userId, permission, cancellationToken);
+
+        if (grant is null)
+        {
+            return new SitePermissionScope(false, new HashSet<Guid>());
+        }
+
+        if (grant.ScopeType == ScopeType.Enterprise)
+        {
+            return new SitePermissionScope(true, new HashSet<Guid>());
+        }
+
+        Guid? siteId = grant.ScopeType switch
+        {
+            ScopeType.Site => grant.ScopeId,
+            ScopeType.OrganizationalUnit => await context.OrganizationalUnits
+                .AsNoTracking()
+                .Where(unit => unit.Id == grant.ScopeId)
+                .Select(unit => (Guid?)unit.SiteId)
+                .SingleOrDefaultAsync(cancellationToken),
+            ScopeType.Warehouse => await context.Warehouses
+                .AsNoTracking()
+                .Where(warehouse => warehouse.Id == grant.ScopeId)
+                .Select(warehouse => (Guid?)warehouse.SiteId)
+                .SingleOrDefaultAsync(cancellationToken),
+            _ => null
+        };
+
+        return new SitePermissionScope(
+            false,
+            siteId.HasValue ? new HashSet<Guid> { siteId.Value } : new HashSet<Guid>());
+    }
+
+    public async Task<OrganizationalUnitPermissionScope> GetOrganizationalUnitPermissionScopeAsync(
+        Guid userId,
+        string permission,
+        CancellationToken cancellationToken)
+    {
+        UserPermissionScopeGrant? grant = await GetGrantAsync(userId, permission, cancellationToken);
+
+        if (grant is null)
+        {
+            return new OrganizationalUnitPermissionScope(false, new HashSet<Guid>());
+        }
+
+        if (grant.ScopeType == ScopeType.Enterprise)
+        {
+            return new OrganizationalUnitPermissionScope(true, new HashSet<Guid>());
+        }
+
+        Guid[] unitIds = grant.ScopeType switch
+        {
+            ScopeType.Site when grant.ScopeId.HasValue => await context.OrganizationalUnits
+                .AsNoTracking()
+                .Where(unit => unit.SiteId == grant.ScopeId.Value)
+                .Select(unit => unit.Id)
+                .ToArrayAsync(cancellationToken),
+            ScopeType.OrganizationalUnit when grant.ScopeId.HasValue =>
+                await GetDescendantOrganizationalUnitIdsAsync(grant.ScopeId.Value, cancellationToken),
+            _ => []
+        };
+
+        return new OrganizationalUnitPermissionScope(false, unitIds.ToHashSet());
     }
 
     public async Task<WarehousePermissionScope> GetWarehousePermissionScopeAsync(
@@ -72,38 +257,162 @@ internal sealed class ScopeAuthorizationService(
         string permission,
         CancellationToken cancellationToken)
     {
-        List<UserPermissionScopeGrant> allGrants = await GetAllGrantsAsync(userId, cancellationToken);
-        var grants = allGrants
-            .Where(grant => grant.PermissionCode == permission)
-            .ToList();
+        UserPermissionScopeGrant? grant = await GetGrantAsync(userId, permission, cancellationToken);
 
-        if (grants.Any(grant => grant.ScopeType == ScopeType.Enterprise))
+        if (grant is null)
+        {
+            return new WarehousePermissionScope(false, new HashSet<Guid>());
+        }
+
+        if (grant.ScopeType == ScopeType.Enterprise)
         {
             return new WarehousePermissionScope(true, new HashSet<Guid>());
         }
 
-        Guid[] siteIds = grants
-            .Where(grant => grant.ScopeType == ScopeType.Site && grant.ScopeId.HasValue)
-            .Select(grant => grant.ScopeId!.Value)
-            .Distinct()
-            .ToArray();
-
-        Guid[] siteWarehouseIds = siteIds.Length == 0
-            ? []
-            : await context.Warehouses
+        Guid[] warehouseIds = grant.ScopeType switch
+        {
+            ScopeType.Site when grant.ScopeId.HasValue => await context.Warehouses
                 .AsNoTracking()
-                .Where(warehouse => siteIds.Contains(warehouse.SiteId))
+                .Where(warehouse => warehouse.SiteId == grant.ScopeId.Value)
                 .Select(warehouse => warehouse.Id)
-                .ToArrayAsync(cancellationToken);
+                .ToArrayAsync(cancellationToken),
+            ScopeType.OrganizationalUnit when grant.ScopeId.HasValue => await GetOrganizationalUnitWarehouseIdsAsync(
+                grant.ScopeId.Value,
+                cancellationToken),
+            ScopeType.Warehouse when grant.ScopeId.HasValue => [grant.ScopeId.Value],
+            _ => []
+        };
 
-        var warehouseIds = grants
-            .Where(grant => grant.ScopeType == ScopeType.Warehouse && grant.ScopeId.HasValue)
-            .Select(grant => grant.ScopeId!.Value)
-            .Concat(siteWarehouseIds)
-            .ToHashSet();
-
-        return new WarehousePermissionScope(false, warehouseIds);
+        return new WarehousePermissionScope(false, warehouseIds.ToHashSet());
     }
+
+    private async Task<bool> AssignmentContainsAsync(
+        ScopeType assignmentType,
+        Guid? assignmentScopeId,
+        ScopeType resourceType,
+        Guid? resourceId,
+        CancellationToken cancellationToken)
+    {
+        if (assignmentType == ScopeType.Enterprise)
+        {
+            return true;
+        }
+
+        if (resourceType == ScopeType.Enterprise || resourceId is null || assignmentScopeId is null)
+        {
+            return false;
+        }
+
+        if (assignmentType == resourceType)
+        {
+            return assignmentType == ScopeType.OrganizationalUnit
+                ? await IsOrganizationalUnitDescendantAsync(
+                    assignmentScopeId.Value,
+                    resourceId.Value,
+                    cancellationToken)
+                : assignmentScopeId == resourceId;
+        }
+
+        if (assignmentType == ScopeType.Site && resourceType == ScopeType.OrganizationalUnit)
+        {
+            return await context.OrganizationalUnits
+                .AsNoTracking()
+                .AnyAsync(
+                    unit => unit.Id == resourceId.Value && unit.SiteId == assignmentScopeId.Value,
+                    cancellationToken);
+        }
+
+        if (resourceType != ScopeType.Warehouse)
+        {
+            return false;
+        }
+
+        var warehouse = await context.Warehouses
+            .AsNoTracking()
+            .Where(item => item.Id == resourceId.Value)
+            .Select(item => new { item.SiteId, item.OrganizationalUnitId })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (warehouse is null)
+        {
+            return false;
+        }
+
+        if (assignmentType == ScopeType.Site)
+        {
+            return warehouse.SiteId == assignmentScopeId.Value;
+        }
+
+        return assignmentType == ScopeType.OrganizationalUnit &&
+               warehouse.OrganizationalUnitId.HasValue &&
+               await IsOrganizationalUnitDescendantAsync(
+                   assignmentScopeId.Value,
+                   warehouse.OrganizationalUnitId.Value,
+                   cancellationToken);
+    }
+
+    private async Task<UserPermissionScopeGrant?> GetGrantAsync(
+        Guid userId,
+        string permission,
+        CancellationToken cancellationToken)
+    {
+        List<UserPermissionScopeGrant> grants = await GetAllGrantsAsync(userId, cancellationToken);
+        return grants.FirstOrDefault(grant => grant.PermissionCode == permission);
+    }
+
+    private async Task<Guid[]> GetOrganizationalUnitWarehouseIdsAsync(
+        Guid organizationalUnitId,
+        CancellationToken cancellationToken)
+    {
+        Guid[] unitIds = await GetDescendantOrganizationalUnitIdsAsync(
+            organizationalUnitId,
+            cancellationToken);
+
+        return await context.Warehouses
+            .AsNoTracking()
+            .Where(warehouse => warehouse.OrganizationalUnitId.HasValue &&
+                                unitIds.Contains(warehouse.OrganizationalUnitId.Value))
+            .Select(warehouse => warehouse.Id)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    private async Task<bool> IsOrganizationalUnitDescendantAsync(
+        Guid ancestorId,
+        Guid candidateId,
+        CancellationToken cancellationToken)
+    {
+        Guid[] descendantIds = await GetDescendantOrganizationalUnitIdsAsync(ancestorId, cancellationToken);
+        return descendantIds.Contains(candidateId);
+    }
+
+    private async Task<Guid[]> GetDescendantOrganizationalUnitIdsAsync(
+        Guid organizationalUnitId,
+        CancellationToken cancellationToken) =>
+        await hybridCache.GetOrCreateAsync(
+            $"org-units:descendants:{organizationalUnitId}",
+            async ct => await context.Database.SqlQuery<Guid>($$"""
+                    WITH RECURSIVE descendants AS (
+                        SELECT id
+                        FROM public.organizational_units
+                        WHERE id = {{organizationalUnitId}}
+
+                        UNION ALL
+
+                        SELECT child.id
+                        FROM public.organizational_units AS child
+                        INNER JOIN descendants AS parent ON child.parent_id = parent.id
+                    )
+                    SELECT id AS "Value"
+                    FROM descendants
+                    """)
+                .ToArrayAsync(ct),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(10),
+                LocalCacheExpiration = TimeSpan.FromMinutes(10)
+            },
+            tags: ["organizational-units"],
+            cancellationToken: cancellationToken);
 
     private async Task<List<UserPermissionScopeGrant>> GetAllGrantsAsync(
         Guid userId,
@@ -111,17 +420,16 @@ internal sealed class ScopeAuthorizationService(
         await hybridCache.GetOrCreateAsync(
             $"auth:user-grants:{userId}",
             async ct => await (
-                from userRoleScope in context.UserRoleScopes.AsNoTracking()
-                where userRoleScope.UserId == userId
+                from assignment in context.UserRoleScopes.AsNoTracking()
+                where assignment.UserId == userId
                 join rolePermission in context.RolePermissions.AsNoTracking()
-                    on userRoleScope.RoleId equals rolePermission.RoleId
-                join grantedPermission in context.Permissions.AsNoTracking()
-                    on rolePermission.PermissionId equals grantedPermission.Id
+                    on assignment.RoleId equals rolePermission.RoleId
+                join permission in context.Permissions.AsNoTracking()
+                    on rolePermission.PermissionId equals permission.Id
                 select new UserPermissionScopeGrant(
-                    grantedPermission.Code,
-                    userRoleScope.ScopeType,
-                    userRoleScope.ScopeId))
-                .Distinct()
+                    permission.Code,
+                    assignment.ScopeType,
+                    assignment.ScopeId))
                 .ToListAsync(ct),
             new HybridCacheEntryOptions
             {
@@ -131,5 +439,8 @@ internal sealed class ScopeAuthorizationService(
             tags: [$"user:{userId}", "auth-roles"],
             cancellationToken: cancellationToken);
 
-    public sealed record UserPermissionScopeGrant(string PermissionCode, ScopeType ScopeType, Guid? ScopeId);
+    private sealed record UserPermissionScopeGrant(
+        string PermissionCode,
+        ScopeType ScopeType,
+        Guid? ScopeId);
 }

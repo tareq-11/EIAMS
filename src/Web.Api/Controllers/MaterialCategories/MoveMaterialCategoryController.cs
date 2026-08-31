@@ -16,6 +16,7 @@ public sealed class MoveMaterialCategoryController(ICommandHandler<MoveMaterialC
     public sealed record RequestBody(Guid? ParentCategoryId);
 
     [HttpPut("{materialCategoryId:guid}/parent")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.MaterialCategories.Manage)]
     public async Task<IResult> Handle(Guid materialCategoryId, RequestBody request, CancellationToken cancellationToken)
     {

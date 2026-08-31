@@ -14,6 +14,7 @@ public sealed class GetEmployeeByIdController(IQueryHandler<GetEmployeeByIdQuery
     : ControllerBase
 {
     [HttpGet("{employeeId:guid}")]
+    [ProducesResponseType<ApiResponse<EmployeeResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Employees.View)]
     public async Task<IResult> Handle(Guid employeeId, CancellationToken cancellationToken)
     {

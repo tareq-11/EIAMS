@@ -356,7 +356,7 @@ public sealed class AuditLogRulesTests
     }
 
     [Fact]
-    public void AuditActions_Should_ExposeExactlyTwentyThreeActions_WhenVocabularyIsClosed()
+    public void AuditActions_Should_ExposeExactlyTwentyFourActions_WhenVocabularyIsClosed()
     {
         // Arrange
 
@@ -364,7 +364,7 @@ public sealed class AuditLogRulesTests
         int count = AuditActions.All.Count;
 
         // Assert
-        count.ShouldBe(23);
+        count.ShouldBe(24);
     }
 
     [Theory]
@@ -391,6 +391,7 @@ public sealed class AuditLogRulesTests
     [InlineData(AuditActions.Revoke)]
     [InlineData(AuditActions.Authenticate)]
     [InlineData(AuditActions.TokenRefresh)]
+    [InlineData(AuditActions.Logout)]
     public void AuditActions_Should_ContainRegisteredAction_WhenActionBelongsToTheVocabulary(string action)
     {
         // Arrange
@@ -418,7 +419,7 @@ public sealed class AuditLogRulesTests
     }
 
     [Fact]
-    public void KnownAuditEntityTypes_Should_ExposeThirtySevenStableNames_WhenRegistryIsSealed()
+    public void KnownAuditEntityTypes_Should_ExposeStableNames_WhenRegistryIsSealed()
     {
         // Arrange
 
@@ -426,12 +427,13 @@ public sealed class AuditLogRulesTests
         int count = KnownAuditEntityTypes.All.Count;
 
         // Assert
-        count.ShouldBe(37);
+        count.ShouldBe(43);
     }
 
     [Theory]
     [InlineData("User")]
     [InlineData("Role")]
+    [InlineData("RoleAllowedScopeType")]
     [InlineData("Organization")]
     [InlineData("Material")]
     [InlineData("WarehouseDocument")]

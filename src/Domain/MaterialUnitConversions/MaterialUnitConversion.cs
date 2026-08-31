@@ -37,6 +37,11 @@ public sealed class MaterialUnitConversion : Entity, IAuditableEntity
         return conversion;
     }
 
+    public void UpdateFactor(decimal factor)
+    {
+        Factor = factor;
+    }
+
     public void MarkAsRemoved()
     {
         Raise(new MaterialUnitConversionRemovedDomainEvent(Id, MaterialId));

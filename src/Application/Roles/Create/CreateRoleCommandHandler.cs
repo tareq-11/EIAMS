@@ -38,6 +38,13 @@ internal sealed class CreateRoleCommandHandler(
 
         context.Roles.Add(role);
 
+        ScopeType[] allowedScopeTypes = command.AllowedScopeTypes is { Count: > 0 }
+            ? command.AllowedScopeTypes.Distinct().ToArray()
+            : [ScopeType.Enterprise];
+
+        context.RoleAllowedScopeTypes.AddRange(
+            allowedScopeTypes.Select(scopeType => RoleAllowedScopeType.Create(role.Id, scopeType)));
+
         await context.SaveChangesAsync(cancellationToken);
 
         return role.Id;

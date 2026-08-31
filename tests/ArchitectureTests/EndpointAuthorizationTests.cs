@@ -11,7 +11,13 @@ public sealed class EndpointAuthorizationTests : BaseTest
     [
         "Web.Api.Controllers.Users.RegisterController",
         "Web.Api.Controllers.Users.LoginController",
-        "Web.Api.Controllers.Users.RefreshTokenController"
+        "Web.Api.Controllers.Users.RefreshTokenController",
+        "Web.Api.Controllers.Users.LogoutController"
+    ];
+
+    private static readonly HashSet<string> AuthenticatedUserAllowlist =
+    [
+        "Web.Api.Controllers.Users.GetSessionController"
     ];
 
     [Fact]
@@ -27,7 +33,8 @@ public sealed class EndpointAuthorizationTests : BaseTest
         // Act
         foreach (Type controller in controllerTypes)
         {
-            if (AnonymousAllowlist.Contains(controller.FullName ?? string.Empty))
+            if (AnonymousAllowlist.Contains(controller.FullName ?? string.Empty) ||
+                AuthenticatedUserAllowlist.Contains(controller.FullName ?? string.Empty))
             {
                 continue;
             }
@@ -56,5 +63,25 @@ public sealed class EndpointAuthorizationTests : BaseTest
         // Assert
         unauthorizedEndpoints.ShouldBeEmpty(
             $"The following controller actions do not require a specific permission: {string.Join(", ", unauthorizedEndpoints)}");
+    }
+
+    [Fact]
+    public void Authenticated_User_Allowlist_Controllers_Should_Require_Authentication()
+    {
+        // Arrange
+        var controllerTypes = PresentationAssembly.GetTypes()
+            .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
+            .Where(t => AuthenticatedUserAllowlist.Contains(t.FullName ?? string.Empty))
+            .ToList();
+
+        // Act & Assert
+        foreach (Type controller in controllerTypes)
+        {
+            bool hasAuthorize = controller
+                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true)
+                .Length != 0;
+
+            hasAuthorize.ShouldBeTrue($"Controller {controller.FullName} must have [Authorize] attribute");
+        }
     }
 }

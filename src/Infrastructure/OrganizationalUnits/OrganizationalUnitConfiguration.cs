@@ -22,5 +22,9 @@ internal sealed class OrganizationalUnitConfiguration : IEntityTypeConfiguration
         builder.HasOne<OrganizationalUnit>().WithMany()
             .HasForeignKey(u => u.ParentId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(u => u.SiteId);
+
+        builder.HasIndex(u => u.ParentId);
     }
 }

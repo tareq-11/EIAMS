@@ -16,12 +16,18 @@ public sealed class LoginController(ICommandHandler<LoginUserCommand, AccessToke
     public sealed record RequestBody(string Email, string Password);
 
     [HttpPost("login")]
+    [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
         var command = new LoginUserCommand(request.Email, request.Password);
 
         Result<AccessTokensResponse> result = await handler.Handle(command, cancellationToken);
+
+        if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Value.RefreshToken))
+        {
+            AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
+        }
 
         return result.ToApiResponse(HttpContext);
     }

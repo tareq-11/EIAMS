@@ -295,14 +295,14 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         Custody first = CreateCustody(
             seed.AssetId,
             seed.OriginalIssueDocumentId,
-            PartyType.Employee,
-            seed.EmployeeId,
+            PartyType.OrganizationalUnit,
+            seed.OrganizationalUnitId,
             CustodyKind.Operational);
         Custody second = CreateCustody(
             seed.AssetId,
             seed.OriginalIssueDocumentId,
-            PartyType.Employee,
-            seed.EmployeeId,
+            PartyType.OrganizationalUnit,
+            seed.OrganizationalUnitId,
             CustodyKind.Operational);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -462,8 +462,12 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         context.AddRange(
             Organization.Create(organizationId, $"M6 organization {suffix}", $"M6O{suffix}"),
             Site.Create(siteId, organizationId, $"M6 site {suffix}", $"M6S{suffix}", null),
-            Warehouse.Create(warehouseId, siteId, $"M6 warehouse {suffix}", $"M6W{suffix}", "Main", true),
-            Warehouse.Create(otherWarehouseId, siteId, $"M6 other {suffix}", $"M6X{suffix}", "Other", true),
+            Warehouse.Create(
+                warehouseId, siteId, $"M6 warehouse {suffix}", $"M6W{suffix}",
+                "Main", true, organizationalUnitId),
+            Warehouse.Create(
+                otherWarehouseId, siteId, $"M6 other {suffix}", $"M6X{suffix}",
+                "Other", true, organizationalUnitId),
             OrganizationalUnit.Create(organizationalUnitId, siteId, null, "M6 Operations", "Department"),
             Employee.Create(employeeId, organizationalUnitId, "M6 Employee", $"M6E{suffix}", null),
             UnitOfMeasure.Create(unitId, $"M6 piece {suffix}", $"M6P{suffix}", "Count"),
@@ -473,13 +477,13 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
             Material.Create(
                 materialId,
                 familyId,
+                unitId,
                 $"M6 asset material {suffix}",
                 null,
                 $"M6M{suffix}",
                 MaterialKind.Asset,
                 TrackingType.Serial,
                 false,
-                true,
                 null),
             User.Create(seedUserId, $"m6-seed-{suffix}@example.com", "M6", "Seed", "hash"));
 
@@ -534,6 +538,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         return new M6Seed(
             warehouseId,
             otherWarehouseId,
+            organizationalUnitId,
             employeeId,
             materialId,
             unitId,
@@ -589,13 +594,11 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        (await context.Employees.AnyAsync(item =>
-            item.Id == seed.EmployeeId && item.Status == Status.Active)).ShouldBeTrue();
         context.Custodies.Add(CreateCustody(
             assetId,
             seed.OriginalIssueDocumentId,
-            PartyType.Employee,
-            seed.EmployeeId,
+            PartyType.OrganizationalUnit,
+            seed.OrganizationalUnitId,
             CustodyKind.Operational,
             fromUtc));
         await context.SaveChangesAsync();
@@ -655,6 +658,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
     private sealed record M6Seed(
         Guid WarehouseId,
         Guid OtherWarehouseId,
+        Guid OrganizationalUnitId,
         Guid EmployeeId,
         Guid MaterialId,
         Guid UnitId,

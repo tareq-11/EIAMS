@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Web.Api.Infrastructure;
 
 public sealed record ApiResponse<T>(
@@ -10,7 +12,10 @@ public sealed record ApiPagination(
     int Page,
     [property: JsonPropertyName("page_size")] int PageSize,
     [property: JsonPropertyName("total_items")] int TotalItems,
-    [property: JsonPropertyName("total_pages")] int TotalPages);
+    [property: JsonPropertyName("total_pages")] int TotalPages,
+    [property: JsonPropertyName("has_previous_page")] bool HasPreviousPage = false,
+    [property: JsonPropertyName("has_next_page")] bool HasNextPage = false,
+    [property: JsonPropertyName("total_count")] int? TotalCount = null);
 
 public sealed record ApiResponseMeta(
     [property: JsonPropertyName("request_id")] string RequestId,

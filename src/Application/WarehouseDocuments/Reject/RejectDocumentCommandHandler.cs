@@ -45,7 +45,7 @@ internal sealed class RejectDocumentCommandHandler(
                 document.RowVersion));
         }
 
-        Result rejectResult = document.Reject();
+        Result rejectResult = document.Reject(command.Reason);
 
         if (rejectResult.IsFailure)
         {

@@ -12,7 +12,13 @@ namespace Web.Api.Controllers.Warehouses;
 [Tags(Tags.Warehouses)]
 public sealed class CreateWarehouseController(ICommandHandler<CreateWarehouseCommand, Guid> handler) : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] Guid SiteId, string Name, string Code, string WarehouseType, [property: JsonRequired] bool CanHoldStock);
+    public sealed record RequestBody(
+        [property: JsonRequired] Guid SiteId,
+        [property: JsonRequired] Guid OrganizationalUnitId,
+        string Name,
+        string Code,
+        string WarehouseType,
+        [property: JsonRequired] bool CanHoldStock);
 
     [HttpPost]
     [HasPermission(PermissionCodes.Warehouses.Manage)]
@@ -26,6 +32,7 @@ public sealed class CreateWarehouseController(ICommandHandler<CreateWarehouseCom
     {
         var command = new CreateWarehouseCommand(
             request.SiteId,
+            request.OrganizationalUnitId,
             request.Name,
             request.Code,
             request.WarehouseType,

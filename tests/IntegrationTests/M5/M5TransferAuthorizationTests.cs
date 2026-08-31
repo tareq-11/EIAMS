@@ -70,8 +70,8 @@ public sealed class M5TransferAuthorizationTests : BaseIntegrationTest
         var category = MaterialCategory.Create(Guid.NewGuid(), domain.Id, null, $"Category {suffix}", $"C{suffix}");
         var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}", unit.Id);
         var material = Material.Create(
-            Guid.NewGuid(), family.Id, $"Material {suffix}", null, $"M{suffix}", MaterialKind.Consumable,
-            TrackingType.Quantity, false, false, null);
+            Guid.NewGuid(), family.Id, unit.Id, $"Material {suffix}", null, $"M{suffix}", MaterialKind.Consumable,
+            TrackingType.Quantity, false, null);
         var document = WarehouseDocument.CreateDraft(
             Guid.NewGuid(), source.Id, DocumentType.Transfer, $"TR-{suffix}");
         Result<DocumentLine> line = DocumentLine.Create(

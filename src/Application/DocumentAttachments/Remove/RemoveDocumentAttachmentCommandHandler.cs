@@ -62,6 +62,11 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
             return Result.Failure(DocumentAttachmentErrors.NotFound(command.AttachmentId));
         }
 
+        if (!attachment.IsActive)
+        {
+            return Result.Failure(DocumentAttachmentErrors.ArchivedCannotBeRemoved(attachment.Id));
+        }
+
         if (document.SignedCopyAttachmentId == attachment.Id)
         {
             Result clearResult = document.RemoveSignedCopy();

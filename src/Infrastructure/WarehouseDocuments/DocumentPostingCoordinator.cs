@@ -77,7 +77,8 @@ internal sealed class DocumentPostingCoordinator(
         bool hasValidSignedOriginal = await context.DocumentAttachments.AnyAsync(
             a => a.Id == document.SignedCopyAttachmentId &&
                  a.DocumentId == document.Id &&
-                 a.AttachmentType == AttachmentType.SignedOriginal,
+                 a.AttachmentType == AttachmentType.SignedOriginal &&
+                 a.IsActive,
             cancellationToken);
 
         if (!hasValidSignedOriginal)

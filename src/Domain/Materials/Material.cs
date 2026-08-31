@@ -5,12 +5,14 @@ namespace Domain.Materials;
 /// <summary>
 /// A material, defined once centrally. Domain is derived via FamilyId -> Category -> MaterialDomain
 /// (D-CAT-01) - there is deliberately no direct MaterialDomainId on this entity.
+/// BaseUnitId directly specifies the stock and inventory base unit of measure for this material.
 /// </summary>
 public sealed class Material : Entity, IAuditableEntity
 {
     private Material() { }
 
     public Guid FamilyId { get; private set; }
+    public Guid BaseUnitId { get; private set; }
     public string NameAr { get; private set; }
     public string? NameEn { get; private set; }
     public string Code { get; private set; }
@@ -22,8 +24,8 @@ public sealed class Material : Entity, IAuditableEntity
     public MaterialStatus Status { get; private set; }
 
     /// <summary>
-    /// True when each received base unit must become an individually numbered Asset. Both fields
-    /// are authoritative according to PRD 6.1/12.2; callers must not inspect MaterialKind alone.
+    /// True when each received base unit must become an individually numbered Asset.
+    /// Derived from MaterialKind == Asset according to Phase 4 classification rules.
     /// </summary>
     public bool IsAssetTracked => MaterialKind == MaterialKind.Asset || RequiresAssetNumber;
 
@@ -35,26 +37,27 @@ public sealed class Material : Entity, IAuditableEntity
     public static Material Create(
         Guid id,
         Guid familyId,
+        Guid baseUnitId,
         string nameAr,
         string? nameEn,
         string code,
         MaterialKind materialKind,
         TrackingType trackingType,
         bool hasExpiry,
-        bool requiresAssetNumber,
         string? attributes)
     {
         var material = new Material
         {
             Id = id,
             FamilyId = familyId,
+            BaseUnitId = baseUnitId,
             NameAr = nameAr,
             NameEn = nameEn,
             Code = code,
             MaterialKind = materialKind,
             TrackingType = trackingType,
             HasExpiry = hasExpiry,
-            RequiresAssetNumber = requiresAssetNumber,
+            RequiresAssetNumber = materialKind == MaterialKind.Asset,
             Attributes = attributes,
             Status = MaterialStatus.Active
         };
@@ -70,7 +73,6 @@ public sealed class Material : Entity, IAuditableEntity
         MaterialKind materialKind,
         TrackingType trackingType,
         bool hasExpiry,
-        bool requiresAssetNumber,
         string? attributes)
     {
         NameAr = nameAr;
@@ -78,7 +80,7 @@ public sealed class Material : Entity, IAuditableEntity
         MaterialKind = materialKind;
         TrackingType = trackingType;
         HasExpiry = hasExpiry;
-        RequiresAssetNumber = requiresAssetNumber;
+        RequiresAssetNumber = materialKind == MaterialKind.Asset;
         Attributes = attributes;
         Raise(new MaterialUpdatedDomainEvent(Id));
     }

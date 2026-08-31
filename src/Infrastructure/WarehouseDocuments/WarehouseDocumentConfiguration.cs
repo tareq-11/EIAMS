@@ -31,6 +31,8 @@ internal sealed class WarehouseDocumentConfiguration : IEntityTypeConfiguration<
 
         builder.Property(d => d.RowVersion).IsConcurrencyToken();
 
+        builder.Ignore(d => d.PendingLifecycleReason);
+
         builder.ToTable(tableBuilder =>
         {
             tableBuilder.HasCheckConstraint(

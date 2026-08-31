@@ -19,6 +19,7 @@ using Infrastructure.Authentication;
 using Infrastructure.Authorization;
 using Infrastructure.Database;
 using Infrastructure.DomainEvents;
+using Infrastructure.DocumentLifecycleEvents;
 using Infrastructure.InventoryCounts;
 using Infrastructure.Ledger;
 using Infrastructure.Numbering;
@@ -64,6 +65,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IAuditValuePolicy, AuditValuePolicy>();
 
+        services.AddSingleton<IAuditRedactionService, AuditRedactionService>();
+
         services.AddTransient<IDomainEventsDispatcher, DomainEventsDispatcher>();
 
         services.AddSingleton<IDatabaseExceptionClassifier, PostgresDatabaseExceptionClassifier>();
@@ -85,6 +88,8 @@ public static class DependencyInjection
         services.AddScoped<IDocumentPostingScopeResolver, DocumentPostingScopeResolver>();
 
         services.AddScoped<IActivePartyLookup, ActivePartyLookup>();
+
+        services.AddScoped<ICounterpartResolver, CounterpartResolver>();
 
         services.AddScoped<IReversalPostingStrategy, ReversalPostingStrategy>();
 
@@ -230,6 +235,8 @@ public static class DependencyInjection
 
         services.AddScoped<AuditSaveChangesInterceptor>();
 
+        services.AddScoped<DocumentLifecycleSaveChangesInterceptor>();
+
         services.AddDbContext<ApplicationDbContext>(
             (sp, options) => options
                 .UseNpgsql(connectionString, npgsqlOptions =>
@@ -237,6 +244,7 @@ public static class DependencyInjection
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<AuditableEntityInterceptor>(),
+                    sp.GetRequiredService<DocumentLifecycleSaveChangesInterceptor>(),
                     sp.GetRequiredService<AuditSaveChangesInterceptor>()));
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());

@@ -8,6 +8,7 @@ using Domain.Permissions;
 using Domain.Roles;
 using Domain.UserRoleScopes;
 using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedKernel;
 
@@ -167,6 +168,12 @@ public sealed class AuditLogApiTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        if (await context.UserRoleScopes.AnyAsync(assignment => assignment.UserId == userId))
+        {
+            return;
+        }
+
         var roleId = Guid.NewGuid();
 
         context.Roles.Add(Role.Create(roleId, $"AuditViewer-{roleId:N}", null));

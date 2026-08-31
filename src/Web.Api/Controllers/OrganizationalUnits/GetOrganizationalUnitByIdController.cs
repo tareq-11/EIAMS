@@ -14,6 +14,7 @@ public sealed class GetOrganizationalUnitByIdController(
     IQueryHandler<GetOrganizationalUnitByIdQuery, OrganizationalUnitResponse> handler) : ControllerBase
 {
     [HttpGet("{organizationalUnitId:guid}")]
+    [ProducesResponseType<ApiResponse<OrganizationalUnitResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.OrganizationalUnits.View)]
     public async Task<IResult> Handle(Guid organizationalUnitId, CancellationToken cancellationToken)
     {

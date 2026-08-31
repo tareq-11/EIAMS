@@ -45,7 +45,7 @@ internal sealed class ReturnDocumentToDraftCommandHandler(
                 document.RowVersion));
         }
 
-        Result returnResult = document.ReturnToDraft();
+        Result returnResult = document.ReturnToDraft(command.Reason);
 
         if (returnResult.IsFailure)
         {

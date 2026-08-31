@@ -80,7 +80,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         context.OrganizationalUnits.Add(OrganizationalUnit.Create(parentId, otherSiteId, null, "Parent", "Department"));
         await context.SaveChangesAsync();
 
-        var handler = new CreateOrganizationalUnitCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        var handler = new CreateOrganizationalUnitCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
         var command = new CreateOrganizationalUnitCommand(requestedSiteId, parentId, "Child", "Department");
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
@@ -170,6 +170,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         var missingSiteId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "User", "One", "hash"));
         context.Roles.Add(Role.Create(roleId, "Reader", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Site));
         await context.SaveChangesAsync();
 
         var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
@@ -190,6 +191,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         var roleId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "User", "One", "hash"));
         context.Roles.Add(Role.Create(roleId, "Reader", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         await context.SaveChangesAsync();
 
         var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
@@ -200,7 +202,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
 
         created.IsSuccess.ShouldBeTrue();
         duplicate.IsFailure.ShouldBeTrue();
-        duplicate.Error.ShouldBe(UserRoleScopeErrors.AlreadyGranted);
+        duplicate.Error.ShouldBe(UserRoleScopeErrors.UserAlreadyAssigned);
         (await context.UserRoleScopes.CountAsync()).ShouldBe(1);
     }
 

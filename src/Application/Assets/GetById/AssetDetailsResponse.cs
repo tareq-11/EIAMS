@@ -1,0 +1,26 @@
+namespace Application.Assets.GetById;
+
+public sealed record AssetDetailsResponse(
+    Guid Id,
+    string AssetNumber,
+    string? SerialNumber,
+    Guid MaterialId,
+    string MaterialCode,
+    string MaterialNameAr,
+    string? MaterialNameEn,
+    Guid WarehouseId,
+    string WarehouseCode,
+    string WarehouseName,
+    string CurrentStatus,
+    Guid? ActiveCustodyId,
+    string? HolderType,
+    Guid? HolderId,
+    string? CustodyKind,
+    string? LatestMovementType,
+    DateTime? LatestMovementAtUtc,
+    Guid? ReceiptLineId,
+    Guid? ReceiptDocumentId,
+    string? ReceiptDocumentReference,
+    DateOnly AcquisitionDate,
+    DateOnly? WarrantyExpiry,
+    int RowVersion);

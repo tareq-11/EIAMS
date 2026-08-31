@@ -7,4 +7,6 @@ public sealed class RoleResponse
     public string Name { get; init; }
 
     public string? Description { get; init; }
+
+    public IReadOnlyCollection<string> AllowedScopeTypes { get; init; } = [];
 }

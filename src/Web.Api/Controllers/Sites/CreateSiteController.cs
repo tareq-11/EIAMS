@@ -20,6 +20,7 @@ public sealed class CreateSiteController(ICommandHandler<CreateSiteCommand, Guid
         string? GovernorateCode);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Sites.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

@@ -14,6 +14,7 @@ public sealed class GetByIdController(IQueryHandler<GetUnitOfMeasureByIdQuery, U
     : ControllerBase
 {
     [HttpGet("{unitOfMeasureId:guid}")]
+    [ProducesResponseType<ApiResponse<UnitOfMeasureResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.UnitsOfMeasure.View)]
     public async Task<IResult> Handle(Guid unitOfMeasureId, CancellationToken cancellationToken)
     {

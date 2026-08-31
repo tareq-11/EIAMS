@@ -15,6 +15,7 @@ public sealed class UpdateEmployeeController(ICommandHandler<UpdateEmployeeComma
     public sealed record RequestBody(string FullName, string? JobTitle);
 
     [HttpPut("{employeeId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Employees.Manage)]
     public async Task<IResult> Handle(Guid employeeId, RequestBody request, CancellationToken cancellationToken)
     {

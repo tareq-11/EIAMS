@@ -15,6 +15,7 @@ public sealed class CreateEmployeeController(ICommandHandler<CreateEmployeeComma
     public sealed record RequestBody([property: JsonRequired] Guid OrgUnitId, string FullName, string EmployeeNumber, string? JobTitle);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Employees.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

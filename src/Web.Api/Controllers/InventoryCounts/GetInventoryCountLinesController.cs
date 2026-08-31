@@ -15,6 +15,7 @@ public sealed class GetInventoryCountLinesController(
     IQueryHandler<GetInventoryCountLinesQuery, PagedResult<InventoryCountLineResponse>> handler) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<InventoryCountLineResponse>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.InventoryCounts.View)]
     public async Task<IResult> Handle(
         Guid countId,

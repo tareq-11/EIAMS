@@ -19,10 +19,10 @@ public sealed class UpdateMaterialController(ICommandHandler<UpdateMaterialComma
         [property: JsonRequired] int MaterialKind,
         [property: JsonRequired] int TrackingType,
         [property: JsonRequired] bool HasExpiry,
-        [property: JsonRequired] bool RequiresAssetNumber,
         string? Attributes);
 
     [HttpPut("{materialId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.Manage)]
     public async Task<IResult> Handle(Guid materialId, RequestBody request, CancellationToken cancellationToken)
     {
@@ -33,7 +33,6 @@ public sealed class UpdateMaterialController(ICommandHandler<UpdateMaterialComma
             (MaterialKind)request.MaterialKind,
             (TrackingType)request.TrackingType,
             request.HasExpiry,
-            request.RequiresAssetNumber,
             request.Attributes);
 
         Result result = await handler.Handle(command, cancellationToken);

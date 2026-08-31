@@ -19,6 +19,7 @@ public sealed class UpdateAdjustmentLineController(ICommandHandler<UpdateAdjustm
         [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPut("{lineId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
     public async Task<IResult> Handle(
         Guid documentId, Guid lineId, RequestBody request, CancellationToken cancellationToken)

@@ -21,9 +21,12 @@ public sealed class CreateReversalDocumentController(ICommandHandler<CreateRever
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
-    public async Task<IResult> Handle(Guid documentId, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(
+        Guid documentId,
+        [FromHeader(Name = "Idempotency-Key")] Guid? idempotencyKey,
+        CancellationToken cancellationToken)
     {
-        var command = new CreateReversalDocumentCommand(documentId);
+        var command = new CreateReversalDocumentCommand(documentId, idempotencyKey);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 

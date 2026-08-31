@@ -9,4 +9,6 @@ public interface IRequestAuditContext
     string? GetRequestId();
 
     string? GetClientIpAddress();
+
+    Guid? GetOperationId() => null;
 }

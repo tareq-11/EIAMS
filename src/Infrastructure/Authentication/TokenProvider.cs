@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Application.Abstractions.Authentication;
@@ -43,5 +43,13 @@ internal sealed class TokenProvider(IConfiguration configuration) : ITokenProvid
         byte[] randomBytes = RandomNumberGenerator.GetBytes(32);
 
         return Convert.ToBase64String(randomBytes);
+    }
+
+    public string HashRefreshToken(string refreshToken)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(refreshToken);
+        byte[] hash = SHA256.HashData(bytes);
+
+        return Convert.ToHexString(hash);
     }
 }

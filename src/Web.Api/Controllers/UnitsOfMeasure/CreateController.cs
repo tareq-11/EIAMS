@@ -15,6 +15,7 @@ public sealed class CreateController(ICommandHandler<CreateUnitOfMeasureCommand,
     public sealed record RequestBody(string Name, string Symbol, string UnitType);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.UnitsOfMeasure.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

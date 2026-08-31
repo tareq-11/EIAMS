@@ -12,7 +12,7 @@ namespace Web.Api.Controllers.WarehouseDocuments;
 [Tags(Tags.WarehouseDocuments)]
 public sealed class CancelDocumentController(ICommandHandler<CancelDocumentCommand> handler) : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion);
+    public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion, string? Reason = null);
 
     [HttpPost("{documentId:guid}/cancel")]
     [HasPermission(PermissionCodes.WarehouseDocuments.Cancel)]
@@ -24,7 +24,7 @@ public sealed class CancelDocumentController(ICommandHandler<CancelDocumentComma
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     public async Task<IResult> Handle(Guid documentId, RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new CancelDocumentCommand(documentId, request.ExpectedRowVersion);
+        var command = new CancelDocumentCommand(documentId, request.ExpectedRowVersion, request.Reason);
 
         Result result = await handler.Handle(command, cancellationToken);
 

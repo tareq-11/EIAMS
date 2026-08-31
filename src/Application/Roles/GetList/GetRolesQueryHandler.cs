@@ -17,7 +17,12 @@ internal sealed class GetRolesQueryHandler(IApplicationDbContext context)
             {
                 Id = r.Id,
                 Name = r.Name,
-                Description = r.Description
+                Description = r.Description,
+                AllowedScopeTypes = context.RoleAllowedScopeTypes
+                    .Where(item => item.RoleId == r.Id)
+                    .OrderBy(item => item.ScopeType)
+                    .Select(item => item.ScopeType.ToString())
+                    .ToArray()
             })
             .OrderBy(r => r.Name)
             .ThenBy(r => r.Id)

@@ -142,8 +142,8 @@ public sealed class InventoryAdjustmentMutationTests : BaseHandlerTest
         context.MaterialFamilies.Add(MaterialFamily.Create(
             familyId, Guid.NewGuid(), "Family", "FAMILY", unitId));
         context.Materials.Add(Material.Create(
-            materialId, familyId, "Asset", null, "ASSET", MaterialKind.Asset,
-            TrackingType.Serial, false, true, null));
+            materialId, familyId, unitId, "Asset", null, "ASSET", MaterialKind.Asset,
+            TrackingType.Serial, false, null));
         context.Assets.AddRange(
             Asset.CreateReceived(firstAssetId, materialId, warehouseId, Guid.NewGuid(), "A-1", new DateOnly(2026, 8, 21)).Value,
             Asset.CreateReceived(secondAssetId, materialId, warehouseId, Guid.NewGuid(), "A-2", new DateOnly(2026, 8, 21)).Value);

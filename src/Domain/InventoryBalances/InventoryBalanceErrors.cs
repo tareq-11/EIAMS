@@ -4,6 +4,10 @@ namespace Domain.InventoryBalances;
 
 public static class InventoryBalanceErrors
 {
+    public static readonly Error Forbidden = Error.Forbidden(
+        "InventoryBalances.Forbidden",
+        "The current user cannot view inventory balances in any warehouse.");
+
     public static Error NegativeQuantity(Guid warehouseId, Guid materialId, decimal quantity) => Error.Problem(
         "InventoryBalances.NegativeQuantity",
         "InventoryBalance quantity cannot become negative.",

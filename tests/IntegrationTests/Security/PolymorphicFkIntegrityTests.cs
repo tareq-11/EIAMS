@@ -2,9 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using Domain.Common;
 using Domain.Employees;
+using Domain.ExternalParties;
 using Domain.IssueTos;
 using Domain.WarehouseDocuments;
 using Infrastructure.Database;
+using Application.Abstractions.Recipients;
 using IntegrationTests.Regression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,5 +68,33 @@ public sealed class PolymorphicFkIntegrityTests : BaseIntegrationTest
             Employee emp = await context.Employees.SingleAsync(e => e.Id == seed.EmployeeId);
             emp.Status.ShouldBe(Status.Inactive);
         }
+    }
+
+    [Fact]
+    public async Task ExternalParty_Should_Be_Resolvable_And_Respect_Active_State()
+    {
+        var externalParty = ExternalParty.Create(
+            Guid.NewGuid(), "شركة اختبار خارجية", "EXT-TEST", null, null);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        ICounterpartResolver resolver = scope.ServiceProvider.GetRequiredService<ICounterpartResolver>();
+        IActivePartyLookup activeLookup = scope.ServiceProvider.GetRequiredService<IActivePartyLookup>();
+
+        context.ExternalParties.Add(externalParty);
+        await context.SaveChangesAsync();
+
+        CounterpartResolution? resolved = await resolver.ResolveAsync(
+            PartyType.External, externalParty.Id, CancellationToken.None);
+        resolved.ShouldNotBeNull();
+        resolved.DisplayName.ShouldBe("شركة اختبار خارجية");
+        resolved.Status.ShouldBe(Status.Active);
+
+        externalParty.SetStatus(Status.Inactive);
+        await context.SaveChangesAsync();
+
+        ActivePartyLookupStatus status = await activeLookup.GetStatusAsync(
+            PartyType.External, externalParty.Id, CancellationToken.None);
+        status.ShouldBe(ActivePartyLookupStatus.Inactive);
     }
 }

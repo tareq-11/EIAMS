@@ -2,4 +2,4 @@ using Application.Abstractions.Messaging;
 
 namespace Application.WarehouseDocuments.Reject;
 
-public sealed record RejectDocumentCommand(Guid DocumentId, int ExpectedRowVersion) : ICommand;
+public sealed record RejectDocumentCommand(Guid DocumentId, int ExpectedRowVersion, string? Reason = null) : ICommand;

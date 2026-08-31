@@ -16,6 +16,7 @@ public sealed class CreateOrganizationController(ICommandHandler<CreateOrganizat
     public sealed record RequestBody(string Name, string Code);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Organizations.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

@@ -54,6 +54,8 @@ public sealed class IssueToResponse
     public string RecipientType { get; init; }
     public Guid RecipientId { get; init; }
     public string IssueReason { get; init; }
+    public string? RecipientDisplayName { get; set; }
+    public string? RecipientStatus { get; set; }
 }
 
 public sealed class TransferInfoResponse
@@ -66,6 +68,10 @@ public sealed class ReturnInfoResponse
 {
     public Guid OriginalIssueDocumentId { get; init; }
     public string ReturnReason { get; init; }
+    public string? OriginalRecipientType { get; set; }
+    public Guid? OriginalRecipientId { get; set; }
+    public string? OriginalRecipientDisplayName { get; set; }
+    public string? OriginalRecipientStatus { get; set; }
 }
 
 public sealed class InventoryAdjustmentResponse

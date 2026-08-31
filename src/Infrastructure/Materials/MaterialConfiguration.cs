@@ -1,5 +1,6 @@
 using Domain.MaterialFamilies;
 using Domain.Materials;
+using Domain.UnitsOfMeasure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,6 +13,8 @@ internal sealed class MaterialConfiguration : IEntityTypeConfiguration<Material>
         builder.HasKey(m => m.Id);
 
         builder.HasIndex(m => m.Code).IsUnique();
+        builder.HasIndex(m => m.FamilyId);
+        builder.HasIndex(m => m.BaseUnitId);
 
         builder.Property(m => m.NameAr).HasMaxLength(500);
 
@@ -28,5 +31,7 @@ internal sealed class MaterialConfiguration : IEntityTypeConfiguration<Material>
         builder.Property(m => m.Status).HasConversion<string>().HasMaxLength(20);
 
         builder.HasOne<MaterialFamily>().WithMany().HasForeignKey(m => m.FamilyId);
+
+        builder.HasOne<UnitOfMeasure>().WithMany().HasForeignKey(m => m.BaseUnitId);
     }
 }

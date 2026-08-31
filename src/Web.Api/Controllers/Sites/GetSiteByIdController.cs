@@ -13,6 +13,7 @@ namespace Web.Api.Controllers.Sites;
 public sealed class GetSiteByIdController(IQueryHandler<GetSiteByIdQuery, SiteResponse> handler) : ControllerBase
 {
     [HttpGet("{siteId:guid}")]
+    [ProducesResponseType<ApiResponse<SiteResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Sites.View)]
     public async Task<IResult> Handle(Guid siteId, CancellationToken cancellationToken)
     {

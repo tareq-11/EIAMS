@@ -6,8 +6,12 @@ using Domain.CustodyHistories;
 using Domain.DocumentAttachments;
 using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
+using Domain.DocumentLifecycleEvents;
 using Domain.DocumentSequences;
+using Domain.DurableCustodies;
+using Domain.DurableCustodyAllocations;
 using Domain.Employees;
+using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
@@ -25,6 +29,7 @@ using Domain.ReturnInfos;
 using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
+using Domain.TrackedMaterialUnits;
 using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
 using Domain.UserRoleScopes;
@@ -63,6 +68,8 @@ internal sealed class AuditEntityRegistry
                 "Audit sink itself; excluded unconditionally to prevent recursive capture.",
             [typeof(AuditLogEntry)] =
                 "Audit sink itself; excluded unconditionally to prevent recursive capture.",
+            [typeof(DocumentLifecycleEvent)] =
+                "Dedicated immutable document lifecycle ledger; field-audit capture would duplicate the same evidence.",
             [typeof(RefreshToken)] =
                 "Holds bearer token secrets; login/refresh are captured as synthetic User-root Authenticate/TokenRefresh headers instead.",
             [typeof(PendingFileDeletion)] =
@@ -91,6 +98,7 @@ internal sealed class AuditEntityRegistry
         [typeof(Site)] = Self<Site>(),
         [typeof(OrganizationalUnit)] = Self<OrganizationalUnit>(),
         [typeof(Employee)] = Self<Employee>(),
+        [typeof(ExternalParty)] = Self<ExternalParty>(),
         [typeof(UnitOfMeasure)] = Self<UnitOfMeasure>(),
         [typeof(MaterialDomain)] = Self<MaterialDomain>(),
         [typeof(MaterialCategory)] = Self<MaterialCategory>(),
@@ -105,6 +113,13 @@ internal sealed class AuditEntityRegistry
         [typeof(InventoryBalance)] = Self<InventoryBalance>(),
         [typeof(Asset)] = Self<Asset>(),
         [typeof(Custody)] = Self<Custody>(),
+        [typeof(TrackedMaterialUnit)] = Self<TrackedMaterialUnit>(),
+        [typeof(DurableCustodyAllocation)] = Self<DurableCustodyAllocation>(),
+        [typeof(DurableCustodyHistory)] = new(
+            "DurableCustodyHistory",
+            "DurableCustody",
+            e => ((DurableCustodyHistory)e).Id,
+            e => ((DurableCustodyHistory)e).SubjectId),
         [typeof(InventoryCount)] = Self<InventoryCount>(),
         [typeof(InventoryAdjustment)] = Self<InventoryAdjustment>(),
 
@@ -155,7 +170,13 @@ internal sealed class AuditEntityRegistry
             "RolePermission",
             "Role",
             e => ((RolePermission)e).RoleId,
-            e => ((RolePermission)e).RoleId)
+            e => ((RolePermission)e).RoleId),
+
+        [typeof(RoleAllowedScopeType)] = new(
+            "RoleAllowedScopeType",
+            "Role",
+            e => ((RoleAllowedScopeType)e).RoleId,
+            e => ((RoleAllowedScopeType)e).RoleId)
     };
 
     private static Mapping Self<TEntity>() where TEntity : Entity =>

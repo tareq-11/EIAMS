@@ -45,6 +45,31 @@ internal sealed class UpdateRoleCommandHandler(
 
         role.UpdateDetails(command.Name, command.Description);
 
+        if (command.AllowedScopeTypes is not null)
+        {
+            ScopeType[] allowedScopeTypes = command.AllowedScopeTypes.Distinct().ToArray();
+
+            bool invalidatesExistingAssignments = await context.UserRoleScopes
+                .AsNoTracking()
+                .AnyAsync(
+                    assignment => assignment.RoleId == command.RoleId &&
+                                  !allowedScopeTypes.Contains(assignment.ScopeType),
+                    cancellationToken);
+
+            if (invalidatesExistingAssignments)
+            {
+                return Result.Failure(RoleErrors.AllowedScopeTypesConflictWithAssignments(command.RoleId));
+            }
+
+            List<RoleAllowedScopeType> existingAllowedScopeTypes = await context.RoleAllowedScopeTypes
+                .Where(item => item.RoleId == command.RoleId)
+                .ToListAsync(cancellationToken);
+
+            context.RoleAllowedScopeTypes.RemoveRange(existingAllowedScopeTypes);
+            context.RoleAllowedScopeTypes.AddRange(
+                allowedScopeTypes.Select(scopeType => RoleAllowedScopeType.Create(command.RoleId, scopeType)));
+        }
+
         await context.SaveChangesAsync(cancellationToken);
 
         await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);

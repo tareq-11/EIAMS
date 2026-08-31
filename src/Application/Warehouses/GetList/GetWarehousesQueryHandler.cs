@@ -38,6 +38,7 @@ internal sealed class GetWarehousesQueryHandler(
             {
                 Id = w.Id,
                 SiteId = w.SiteId,
+                OrganizationalUnitId = w.OrganizationalUnitId,
                 Name = w.Name,
                 Code = w.Code,
                 WarehouseType = w.WarehouseType,

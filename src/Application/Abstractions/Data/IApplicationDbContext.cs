@@ -6,8 +6,12 @@ using Domain.CustodyHistories;
 using Domain.DocumentAttachments;
 using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
+using Domain.DocumentLifecycleEvents;
 using Domain.DocumentSequences;
+using Domain.DurableCustodies;
+using Domain.DurableCustodyAllocations;
 using Domain.Employees;
+using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
@@ -25,6 +29,7 @@ using Domain.ReturnInfos;
 using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
+using Domain.TrackedMaterialUnits;
 using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
 using Domain.UserRoleScopes;
@@ -46,7 +51,9 @@ public interface IApplicationDbContext
     DbSet<Site> Sites { get; }
     DbSet<OrganizationalUnit> OrganizationalUnits { get; }
     DbSet<Employee> Employees { get; }
+    DbSet<ExternalParty> ExternalParties { get; }
     DbSet<Role> Roles { get; }
+    DbSet<RoleAllowedScopeType> RoleAllowedScopeTypes { get; }
     DbSet<Permission> Permissions { get; }
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserRoleScope> UserRoleScopes { get; }
@@ -63,6 +70,7 @@ public interface IApplicationDbContext
     DbSet<DocumentSequence> DocumentSequences { get; }
     DbSet<WarehouseDocument> WarehouseDocuments { get; }
     DbSet<DocumentLine> DocumentLines { get; }
+    DbSet<DocumentLifecycleEvent> DocumentLifecycleEvents { get; }
     DbSet<DocumentAttachment> DocumentAttachments { get; }
     DbSet<StockMovement> StockMovements { get; }
     DbSet<InventoryBalance> InventoryBalances { get; }
@@ -73,6 +81,9 @@ public interface IApplicationDbContext
     DbSet<AssetMovementHistory> AssetMovementHistories { get; }
     DbSet<Custody> Custodies { get; }
     DbSet<CustodyHistory> CustodyHistories { get; }
+    DbSet<TrackedMaterialUnit> TrackedMaterialUnits { get; }
+    DbSet<DurableCustodyAllocation> DurableCustodyAllocations { get; }
+    DbSet<DurableCustodyHistory> DurableCustodyHistories { get; }
     DbSet<DocumentLineAssetSelection> DocumentLineAssetSelections { get; }
     DbSet<ReturnInfo> ReturnInfos { get; }
     DbSet<AssetCurrentStatusView> AssetCurrentStatuses { get; }

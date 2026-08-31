@@ -17,6 +17,7 @@ public sealed class RecordInventoryCountActualController(ICommandHandler<RecordI
         [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPut]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.InventoryCounts.EnterActual)]
     public async Task<IResult> Handle(Guid countId, Guid lineId, RequestBody request, CancellationToken cancellationToken)
     {

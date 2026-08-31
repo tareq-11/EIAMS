@@ -13,4 +13,7 @@ public interface IUserContext
     /// (e.g. anonymous endpoints, background/seeding work). Use this for audit stamping.
     /// </summary>
     Guid? UserIdOrDefault { get; }
+
+    /// <summary>A stable display snapshot for immutable historical records.</summary>
+    string? ActorDisplayName => null;
 }

@@ -5,6 +5,7 @@ using Application.Abstractions.Messaging;
 using Domain.Common;
 using Domain.OrganizationalUnits;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.OrganizationalUnits.Create;
@@ -12,7 +13,8 @@ namespace Application.OrganizationalUnits.Create;
 internal sealed class CreateOrganizationalUnitCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService)
+    IScopeAuthorizationService scopeAuthorizationService,
+    HybridCache hybridCache)
     : ICommandHandler<CreateOrganizationalUnitCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(CreateOrganizationalUnitCommand command, CancellationToken cancellationToken)
@@ -55,6 +57,7 @@ internal sealed class CreateOrganizationalUnitCommandHandler(
         context.OrganizationalUnits.Add(unit);
 
         await context.SaveChangesAsync(cancellationToken);
+        await hybridCache.RemoveByTagAsync("organizational-units", cancellationToken);
 
         return unit.Id;
     }

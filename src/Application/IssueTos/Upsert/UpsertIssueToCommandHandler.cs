@@ -5,6 +5,7 @@ using Application.Abstractions.Messaging;
 using Application.Abstractions.Recipients;
 using Domain.Common;
 using Domain.IssueTos;
+using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -82,6 +83,17 @@ internal sealed class UpsertIssueToCommandHandler(
         if (recipientResult.IsFailure)
         {
             return recipientResult;
+        }
+
+        bool recipientInsideScope = await scopeAuthorizationService.CanAccessPartyAsync(
+            userContext.UserId,
+            command.RecipientType,
+            command.RecipientId,
+            cancellationToken);
+
+        if (!recipientInsideScope)
+        {
+            return Result.Failure(UserRoleScopeErrors.ResourceOutsideScope);
         }
 
         IssueTo? issueTo = await context.IssueTos

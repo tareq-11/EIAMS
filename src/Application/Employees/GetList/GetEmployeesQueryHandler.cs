@@ -1,3 +1,5 @@
+using Application.Abstractions.Authentication;
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
@@ -5,14 +7,25 @@ using SharedKernel;
 
 namespace Application.Employees.GetList;
 
-internal sealed class GetEmployeesQueryHandler(IApplicationDbContext context)
+internal sealed class GetEmployeesQueryHandler(
+    IApplicationDbContext context,
+    IUserContext userContext,
+    IScopeAuthorizationService scopeAuthorizationService)
     : IQueryHandler<GetEmployeesQuery, PagedResult<EmployeeResponse>>
 {
     public async Task<Result<PagedResult<EmployeeResponse>>> Handle(
         GetEmployeesQuery query,
         CancellationToken cancellationToken)
     {
+        OrganizationalUnitPermissionScope permissionScope =
+            await scopeAuthorizationService.GetOrganizationalUnitPermissionScopeAsync(
+                userContext.UserId,
+                PermissionCodes.Employees.View,
+                cancellationToken);
+
         PagedResult<EmployeeResponse> employees = await context.Employees
+            .Where(employee => permissionScope.HasEnterpriseAccess ||
+                               permissionScope.OrganizationalUnitIds.Contains(employee.OrgUnitId))
             .Where(e => query.OrgUnitId == null || e.OrgUnitId == query.OrgUnitId)
             .Where(e => query.Status == null || e.Status == query.Status)
             .Select(e => new EmployeeResponse

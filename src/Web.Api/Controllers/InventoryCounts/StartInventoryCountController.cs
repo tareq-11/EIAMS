@@ -17,6 +17,7 @@ public sealed class StartInventoryCountController(
     public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.InventoryCounts.Review)]
     public async Task<IResult> Handle(Guid countId, RequestBody request, CancellationToken cancellationToken)
     {

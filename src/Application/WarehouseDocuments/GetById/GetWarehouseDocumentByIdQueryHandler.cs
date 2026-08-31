@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Recipients;
 using Domain.Common;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,8 @@ namespace Application.WarehouseDocuments.GetById;
 internal sealed class GetWarehouseDocumentByIdQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService)
+    IScopeAuthorizationService scopeAuthorizationService,
+    ICounterpartResolver counterpartResolver)
     : IQueryHandler<GetWarehouseDocumentByIdQuery, WarehouseDocumentDetailsResponse>
 {
     public async Task<Result<WarehouseDocumentDetailsResponse>> Handle(
@@ -87,6 +89,17 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
                         IssueReason = info.IssueReason
                     })
                     .SingleOrDefaultAsync(cancellationToken);
+
+                if (document.IssueTo is not null &&
+                    Enum.TryParse(document.IssueTo.RecipientType, out PartyType issueRecipientType))
+                {
+                    CounterpartResolution? recipient = await counterpartResolver.ResolveAsync(
+                        issueRecipientType,
+                        document.IssueTo.RecipientId,
+                        cancellationToken);
+                    document.IssueTo.RecipientDisplayName = recipient?.DisplayName;
+                    document.IssueTo.RecipientStatus = recipient?.Status.ToString();
+                }
                 break;
             case "Transfer":
                 document.TransferInfo = await context.TransferInfos
@@ -109,6 +122,27 @@ internal sealed class GetWarehouseDocumentByIdQueryHandler(
                         ReturnReason = info.ReturnReason
                     })
                     .SingleOrDefaultAsync(cancellationToken);
+
+                if (document.ReturnInfo is not null)
+                {
+                    var originalRecipient = await context.IssueTos
+                        .AsNoTracking()
+                        .Where(info => info.Id == document.ReturnInfo.OriginalIssueDocumentId)
+                        .Select(info => new { info.RecipientType, info.RecipientId })
+                        .SingleOrDefaultAsync(cancellationToken);
+
+                    if (originalRecipient is not null)
+                    {
+                        CounterpartResolution? recipient = await counterpartResolver.ResolveAsync(
+                            originalRecipient.RecipientType,
+                            originalRecipient.RecipientId,
+                            cancellationToken);
+                        document.ReturnInfo.OriginalRecipientType = originalRecipient.RecipientType.ToString();
+                        document.ReturnInfo.OriginalRecipientId = originalRecipient.RecipientId;
+                        document.ReturnInfo.OriginalRecipientDisplayName = recipient?.DisplayName;
+                        document.ReturnInfo.OriginalRecipientStatus = recipient?.Status.ToString();
+                    }
+                }
                 break;
             case "Adjustment":
                 document.InventoryAdjustment = await context.InventoryAdjustments

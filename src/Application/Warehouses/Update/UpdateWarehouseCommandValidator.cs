@@ -7,6 +7,7 @@ internal sealed class UpdateWarehouseCommandValidator : AbstractValidator<Update
     public UpdateWarehouseCommandValidator()
     {
         RuleFor(c => c.WarehouseId).NotEmpty();
+        RuleFor(c => c.OrganizationalUnitId).NotEmpty();
         RuleFor(c => c.Name).NotEmpty().MaximumLength(200);
         RuleFor(c => c.WarehouseType).NotEmpty().MaximumLength(50);
         RuleFor(c => c.ExpectedRowVersion).GreaterThan(0);

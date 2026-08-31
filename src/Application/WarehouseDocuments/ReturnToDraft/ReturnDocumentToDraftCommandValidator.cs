@@ -8,5 +8,6 @@ internal sealed class ReturnDocumentToDraftCommandValidator : AbstractValidator<
     {
         RuleFor(c => c.DocumentId).NotEmpty();
         RuleFor(c => c.ExpectedRowVersion).GreaterThan(0);
+        RuleFor(c => c.Reason).MaximumLength(1000);
     }
 }

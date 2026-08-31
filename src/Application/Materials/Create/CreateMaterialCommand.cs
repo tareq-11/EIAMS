@@ -5,11 +5,11 @@ namespace Application.Materials.Create;
 
 public sealed record CreateMaterialCommand(
     Guid FamilyId,
+    Guid BaseUnitId,
     string NameAr,
     string? NameEn,
     string Code,
     MaterialKind MaterialKind,
     TrackingType TrackingType,
     bool HasExpiry,
-    bool RequiresAssetNumber,
     string? Attributes) : ICommand<Guid>;

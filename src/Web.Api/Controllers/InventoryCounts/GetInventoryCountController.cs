@@ -13,6 +13,7 @@ namespace Web.Api.Controllers.InventoryCounts;
 public sealed class GetInventoryCountController(IQueryHandler<GetInventoryCountByIdQuery, InventoryCountDetailsResponse> handler) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<ApiResponse<InventoryCountDetailsResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.InventoryCounts.View)]
     public async Task<IResult> Handle(Guid countId, CancellationToken cancellationToken)
     {

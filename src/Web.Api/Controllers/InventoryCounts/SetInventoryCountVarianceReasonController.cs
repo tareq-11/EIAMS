@@ -15,6 +15,7 @@ public sealed class SetInventoryCountVarianceReasonController(ICommandHandler<Se
     public sealed record RequestBody(string? Reason, [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPut]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.InventoryCounts.Review)]
     public async Task<IResult> Handle(Guid countId, Guid lineId, RequestBody request, CancellationToken cancellationToken)
     {

@@ -7,6 +7,7 @@ internal sealed class CreateWarehouseCommandValidator : AbstractValidator<Create
     public CreateWarehouseCommandValidator()
     {
         RuleFor(c => c.SiteId).NotEmpty();
+        RuleFor(c => c.OrganizationalUnitId).NotEmpty();
         RuleFor(c => c.Name).NotEmpty().MaximumLength(200);
         RuleFor(c => c.Code).NotEmpty().MaximumLength(50);
         RuleFor(c => c.WarehouseType).NotEmpty().MaximumLength(50);

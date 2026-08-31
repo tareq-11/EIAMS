@@ -7,6 +7,11 @@ namespace Application.Abstractions.Authorization;
 /// </summary>
 public static class PermissionCodes
 {
+    public static class Users
+    {
+        public const string Access = "users:access";
+    }
+
     public static class Organizations
     {
         public const string View = "organizations:view";

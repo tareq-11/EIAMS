@@ -16,6 +16,18 @@ public static class MaterialErrors
         "Materials.FamilyNotFound",
         $"The material family with the Id = '{familyId}' was not found");
 
+    public static Error UnitNotFound(Guid unitId) => Error.NotFound(
+        "Materials.UnitNotFound",
+        $"The unit of measure with the Id = '{unitId}' was not found");
+
+    public static readonly Error ConsumableMustBeQuantityTracked = Error.Problem(
+        "Materials.ConsumableMustBeQuantityTracked",
+        "Consumable materials must use Quantity tracking type");
+
+    public static readonly Error AssetMustBeSerialTracked = Error.Problem(
+        "Materials.AssetMustBeSerialTracked",
+        "Asset materials must use Serial tracking type");
+
     public static readonly Error Forbidden = Error.Forbidden(
         "Materials.Forbidden",
         "You are not authorized to manage materials.");

@@ -24,6 +24,21 @@ public static class WarehouseErrors
         $"The site with the Id = '{siteId}' is inactive and cannot receive a new warehouse.",
         new { site_id = siteId });
 
+    public static Error OrganizationalUnitNotFound(Guid organizationalUnitId) => Error.NotFound(
+        "Warehouses.OrganizationalUnitNotFound",
+        $"The organizational unit with the Id = '{organizationalUnitId}' was not found",
+        new { organizational_unit_id = organizationalUnitId });
+
+    public static Error OrganizationalUnitInactive(Guid organizationalUnitId) => Error.Problem(
+        "Warehouses.OrganizationalUnitInactive",
+        $"The organizational unit with the Id = '{organizationalUnitId}' is inactive.",
+        new { organizational_unit_id = organizationalUnitId });
+
+    public static Error OrganizationalUnitInDifferentSite(Guid organizationalUnitId, Guid siteId) => Error.Conflict(
+        "Warehouses.OrganizationalUnitInDifferentSite",
+        "The warehouse administrative owner must belong to the same site as the warehouse.",
+        new { organizational_unit_id = organizationalUnitId, site_id = siteId });
+
     public static Error Inactive(Guid warehouseId) => Error.Problem(
         "Warehouses.Inactive",
         $"The warehouse with the Id = '{warehouseId}' is inactive.",

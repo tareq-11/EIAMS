@@ -16,6 +16,7 @@ public sealed class UpdateOrganizationalUnitController(ICommandHandler<UpdateOrg
     public sealed record RequestBody(string Name, string UnitType);
 
     [HttpPut("{organizationalUnitId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.OrganizationalUnits.Manage)]
     public async Task<IResult> Handle(
         Guid organizationalUnitId,

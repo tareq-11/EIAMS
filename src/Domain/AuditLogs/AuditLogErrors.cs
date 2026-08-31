@@ -13,6 +13,14 @@ public static class AuditLogErrors
         "AuditLogs.FilterInvalid",
         "One or more audit log filters are invalid.");
 
+    public static readonly Error Unauthorized = Error.Forbidden(
+        "AuditLogs.Unauthorized",
+        "You do not have permission to view audit logs.");
+
+    public static readonly Error NoScopeAssigned = Error.Forbidden(
+        "AuditLogs.NoScopeAssigned",
+        "User has no active authorization scope.");
+
     public static readonly Error OperationIdRequired = Error.Problem("AuditLogs.OperationIdRequired", "Audit log id and operation id values are required.");
     public static readonly Error EntityIdRequired = Error.Problem("AuditLogs.EntityIdRequired", "A non-empty entity id is required.");
     public static readonly Error EntityTypeInvalid = Error.Problem("AuditLogs.EntityTypeInvalid", "Entity type must be a non-blank canonical name of at most 100 characters.");

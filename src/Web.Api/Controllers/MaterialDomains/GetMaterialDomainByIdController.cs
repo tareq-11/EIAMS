@@ -14,6 +14,7 @@ public sealed class GetMaterialDomainByIdController(
     IQueryHandler<GetMaterialDomainByIdQuery, MaterialDomainResponse> handler) : ControllerBase
 {
     [HttpGet("{materialDomainId:guid}")]
+    [ProducesResponseType<ApiResponse<MaterialDomainResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.View)]
     public async Task<IResult> Handle(Guid materialDomainId, CancellationToken cancellationToken)
     {

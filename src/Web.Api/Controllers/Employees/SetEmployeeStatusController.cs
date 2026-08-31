@@ -16,6 +16,7 @@ public sealed class SetEmployeeStatusController(ICommandHandler<SetEmployeeStatu
     public sealed record RequestBody([property: JsonRequired] int Status);
 
     [HttpPut("{employeeId:guid}/status")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Employees.Manage)]
     public async Task<IResult> Handle(Guid employeeId, RequestBody request, CancellationToken cancellationToken)
     {

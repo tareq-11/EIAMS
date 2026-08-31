@@ -429,24 +429,24 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
         dbContext.Materials.Add(Material.Create(
             assetMaterialId,
             familyId,
+            unitId,
             $"أصل {suffix}",
             $"Asset {suffix}",
             $"A{suffix}",
             MaterialKind.Asset,
             TrackingType.Serial,
             hasExpiry: false,
-            requiresAssetNumber: true,
             attributes: null));
         dbContext.Materials.Add(Material.Create(
             normalMaterialId,
             familyId,
+            unitId,
             $"مادة {suffix}",
             $"Material {suffix}",
             $"M{suffix}",
             MaterialKind.Consumable,
             TrackingType.Quantity,
             hasExpiry: false,
-            requiresAssetNumber: false,
             attributes: null));
 
         if (includeReceivingCapability)

@@ -22,7 +22,7 @@ internal sealed class GetMaterialByIdQueryHandler(
                 join family in context.MaterialFamilies.AsNoTracking() on m.FamilyId equals family.Id
                 join category in context.MaterialCategories.AsNoTracking() on family.CategoryId equals category.Id
                 join domain in context.MaterialDomains.AsNoTracking() on category.MaterialDomainId equals domain.Id
-                join unit in context.UnitsOfMeasure.AsNoTracking() on family.BaseUnitId equals unit.Id
+                join unit in context.UnitsOfMeasure.AsNoTracking() on m.BaseUnitId equals unit.Id
                 select new MaterialResponse
                 {
                     Id = m.Id,

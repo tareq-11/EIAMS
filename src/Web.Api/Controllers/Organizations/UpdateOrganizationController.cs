@@ -15,6 +15,7 @@ public sealed class UpdateOrganizationController(ICommandHandler<UpdateOrganizat
     public sealed record RequestBody(string Name);
 
     [HttpPut("{organizationId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Organizations.Manage)]
     public async Task<IResult> Handle(Guid organizationId, RequestBody request, CancellationToken cancellationToken)
     {

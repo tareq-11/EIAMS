@@ -1,6 +1,9 @@
 using Application.Abstractions.Authentication;
 using Application.UnitTests.Abstractions;
 using Application.Users.Register;
+using Domain.Common;
+using Domain.Roles;
+using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -13,7 +16,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         new("test@example.com", "Test", "User", "Password123");
 
     [Fact]
-    public async Task Handle_Should_ReturnConflict_WhenEmailIsNotUnique()
+    public async Task Handle_Should_ReturnForbidden_WhenSystemIsAlreadyInitialized()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -32,7 +35,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.EmailNotUnique);
+        result.Error.ShouldBe(UserErrors.RegistrationClosed);
     }
 
     [Fact]
@@ -56,5 +59,11 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         user.Email.ShouldBe(Command.Email);
         user.PasswordHash.ShouldBe("hashed-password");
         user.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRegisteredDomainEvent);
+
+        UserRoleScope assignment = await context.UserRoleScopes.SingleAsync(
+            item => item.UserId == user.Id);
+        assignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
+        assignment.ScopeType.ShouldBe(ScopeType.Enterprise);
+        assignment.ScopeId.ShouldBeNull();
     }
 }

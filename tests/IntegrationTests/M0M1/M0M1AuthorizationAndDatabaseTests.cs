@@ -59,7 +59,14 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
             $"warehouses/{seed.WarehouseId}",
-            new { name = "Updated warehouse", warehouseType = "Main", canHoldStock = true, expectedRowVersion = 1 });
+            new
+            {
+                organizationalUnitId = seed.OrganizationalUnitId,
+                name = "Updated warehouse",
+                warehouseType = "Main",
+                canHoldStock = true,
+                expectedRowVersion = 1
+            });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -83,7 +90,14 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync(
             $"warehouses/{seed.WarehouseId}",
-            new { name = "Should not update", warehouseType = "Main", canHoldStock = true, expectedRowVersion = 1 });
+            new
+            {
+                organizationalUnitId = seed.OrganizationalUnitId,
+                name = "Should not update",
+                warehouseType = "Main",
+                canHoldStock = true,
+                expectedRowVersion = 1
+            });
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
@@ -121,8 +135,12 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownPermissions.RolesManageId, ScopeType.Enterprise, null);
-        await GrantPermissionAsync(userId, WellKnownPermissions.RolesViewId, ScopeType.Enterprise, null);
+        await GrantPermissionsAsync(
+            userId,
+            ScopeType.Enterprise,
+            null,
+            WellKnownPermissions.RolesManageId,
+            WellKnownPermissions.RolesViewId);
         Guid roleId = await SeedRoleAsync();
         Authenticate(tokens.AccessToken);
 
@@ -263,24 +281,24 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         context.Materials.Add(Material.Create(
             Guid.NewGuid(),
             seed.FamilyId,
+            seed.BaseUnitId,
             "المادة الأولى",
             null,
             code,
             MaterialKind.Consumable,
             TrackingType.Quantity,
             false,
-            false,
             null));
         await context.SaveChangesAsync();
         context.Materials.Add(Material.Create(
             Guid.NewGuid(),
             seed.FamilyId,
+            seed.BaseUnitId,
             "المادة الثانية",
             null,
             code,
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             null));
 
@@ -301,12 +319,12 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         context.Materials.Add(Material.Create(
             Guid.NewGuid(),
             seed.FamilyId,
+            seed.BaseUnitId,
             "مادة غير صالحة",
             null,
             $"MAT-{Guid.NewGuid():N}",
             MaterialKind.Consumable,
             TrackingType.Quantity,
-            false,
             false,
             "not-json"));
 
@@ -341,10 +359,20 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
 
     private async Task GrantPermissionAsync(Guid userId, Guid permissionId, ScopeType scopeType, Guid? scopeId)
     {
+        await GrantPermissionsAsync(userId, scopeType, scopeId, permissionId);
+    }
+
+    private async Task GrantPermissionsAsync(
+        Guid userId,
+        ScopeType scopeType,
+        Guid? scopeId,
+        params Guid[] permissionIds)
+    {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Guid roleId = await SeedRoleAsync(context);
-        context.RolePermissions.Add(RolePermission.Create(roleId, permissionId));
+        context.RolePermissions.AddRange(permissionIds.Select(permissionId =>
+            RolePermission.Create(roleId, permissionId)));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
         await context.SaveChangesAsync();
     }
@@ -376,11 +404,21 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         var organizationId = Guid.NewGuid();
         var siteId = Guid.NewGuid();
         var warehouseId = Guid.NewGuid();
+        var organizationalUnitId = Guid.NewGuid();
         context.Organizations.Add(Organization.Create(organizationId, $"Organization-{organizationId:N}", $"ORG-{organizationId:N}"));
         context.Sites.Add(Site.Create(siteId, organizationId, $"Site-{siteId:N}", $"SITE-{siteId:N}", null));
-        context.Warehouses.Add(Warehouse.Create(warehouseId, siteId, $"Warehouse-{warehouseId:N}", $"WH-{warehouseId:N}", "Main", true));
+        context.OrganizationalUnits.Add(Domain.OrganizationalUnits.OrganizationalUnit.Create(
+            organizationalUnitId, siteId, null, $"Unit-{organizationalUnitId:N}", "Directorate"));
+        context.Warehouses.Add(Warehouse.Create(
+            warehouseId,
+            siteId,
+            $"Warehouse-{warehouseId:N}",
+            $"WH-{warehouseId:N}",
+            "Main",
+            true,
+            organizationalUnitId));
         await context.SaveChangesAsync();
-        return new WarehouseSeed(organizationId, siteId, warehouseId);
+        return new WarehouseSeed(organizationId, siteId, organizationalUnitId, warehouseId);
     }
 
     private async Task<Guid> SeedSiteAsync(Guid organizationId)
@@ -417,19 +455,23 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         context.Materials.Add(Material.Create(
             materialId,
             familyId,
+            baseUnitId,
             "مادة",
             "Material",
             $"MAT-{materialId:N}",
             MaterialKind.Consumable,
             TrackingType.Quantity,
             false,
-            false,
             "{}"));
         await context.SaveChangesAsync();
         return new MaterialSeed(familyId, materialId, baseUnitId, sourceUnitId);
     }
 
-    private sealed record WarehouseSeed(Guid OrganizationId, Guid SiteId, Guid WarehouseId);
+    private sealed record WarehouseSeed(
+        Guid OrganizationId,
+        Guid SiteId,
+        Guid OrganizationalUnitId,
+        Guid WarehouseId);
 
     private sealed record MaterialSeed(Guid FamilyId, Guid MaterialId, Guid BaseUnitId, Guid SourceUnitId);
 

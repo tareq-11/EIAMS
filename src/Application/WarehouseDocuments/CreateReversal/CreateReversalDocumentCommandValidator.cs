@@ -7,5 +7,8 @@ internal sealed class CreateReversalDocumentCommandValidator : AbstractValidator
     public CreateReversalDocumentCommandValidator()
     {
         RuleFor(c => c.SourceDocumentId).NotEmpty();
+        RuleFor(c => c.IdempotencyKey)
+            .NotEqual(Guid.Empty)
+            .When(c => c.IdempotencyKey.HasValue);
     }
 }

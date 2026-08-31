@@ -11,8 +11,28 @@ public static class DocumentAttachmentErrors
 
     public static Error SignedOriginalAlreadyExists(Guid documentId) => Error.Conflict(
         "DocumentAttachments.SignedOriginalAlreadyExists",
-        $"The document with the Id = '{documentId}' already has a SignedOriginal attachment; remove it before uploading a new one.",
+        $"The document with the Id = '{documentId}' already has an active SignedOriginal attachment.",
         new { document_id = documentId });
+
+    public static Error AlreadyArchived(Guid attachmentId) => Error.Conflict(
+        "DocumentAttachments.AlreadyArchived",
+        $"The document attachment with the Id = '{attachmentId}' is already archived.",
+        new { attachment_id = attachmentId });
+
+    public static Error OnlySignedOriginalCanBeArchived(Guid attachmentId) => Error.Problem(
+        "DocumentAttachments.OnlySignedOriginalCanBeArchived",
+        "Only a SignedOriginal attachment can be archived during replacement.",
+        new { attachment_id = attachmentId });
+
+    public static Error InvalidReplacement(Guid attachmentId) => Error.Problem(
+        "DocumentAttachments.InvalidReplacement",
+        "A SignedOriginal attachment cannot replace itself.",
+        new { attachment_id = attachmentId });
+
+    public static Error ArchivedCannotBeRemoved(Guid attachmentId) => Error.Conflict(
+        "DocumentAttachments.ArchivedCannotBeRemoved",
+        "An archived SignedOriginal is immutable and cannot be removed.",
+        new { attachment_id = attachmentId });
 
     public static readonly Error FileEmpty = Error.Problem(
         "DocumentAttachments.FileEmpty",

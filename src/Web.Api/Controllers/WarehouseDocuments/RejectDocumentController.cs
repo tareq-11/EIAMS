@@ -12,7 +12,7 @@ namespace Web.Api.Controllers.WarehouseDocuments;
 [Tags(Tags.WarehouseDocuments)]
 public sealed class RejectDocumentController(ICommandHandler<RejectDocumentCommand> handler) : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion);
+    public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion, string? Reason = null);
 
     [HttpPost("{documentId:guid}/reject")]
     [HasPermission(PermissionCodes.WarehouseDocuments.Review)]
@@ -24,7 +24,7 @@ public sealed class RejectDocumentController(ICommandHandler<RejectDocumentComma
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     public async Task<IResult> Handle(Guid documentId, RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new RejectDocumentCommand(documentId, request.ExpectedRowVersion);
+        var command = new RejectDocumentCommand(documentId, request.ExpectedRowVersion, request.Reason);
 
         Result result = await handler.Handle(command, cancellationToken);
 

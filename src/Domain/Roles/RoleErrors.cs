@@ -4,6 +4,9 @@ namespace Domain.Roles;
 
 public static class RoleErrors
 {
+    public static Error AllowedScopeTypesConflictWithAssignments(Guid roleId) => Error.Conflict(
+        "Roles.AllowedScopeTypesConflictWithAssignments",
+        $"The allowed scope types for role '{roleId}' would invalidate an existing user assignment");
     public static Error NotFound(Guid roleId) => Error.NotFound(
         "Roles.NotFound",
         $"The role with the Id = '{roleId}' was not found");

@@ -23,6 +23,14 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.PasswordHash).HasMaxLength(500);
 
+        builder.Property(u => u.Status)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasSentinel((UserStatus)0)
+            .HasDefaultValue(UserStatus.Active);
+
+        builder.HasIndex(u => new { u.Status, u.Email });
+
         builder.HasOne<Employee>().WithMany().HasForeignKey(u => u.EmployeeId);
     }
 }

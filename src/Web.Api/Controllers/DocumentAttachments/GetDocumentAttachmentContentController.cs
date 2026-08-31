@@ -18,7 +18,8 @@ public sealed class GetDocumentAttachmentContentController(
     // is the raw file content, with Content-Type/Content-Disposition set from the stored metadata.
     [HttpGet("{attachmentId:guid}/content")]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [Produces("application/octet-stream")]
+    [ProducesResponseType<Stream>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]

@@ -20,6 +20,7 @@ public sealed class AddAdjustmentLineController(ICommandHandler<AddAdjustmentLin
         [property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
     public async Task<IResult> Handle(Guid documentId, RequestBody request, CancellationToken cancellationToken)
     {

@@ -19,6 +19,7 @@ public static class CustodyErrors
     public static readonly Error CustodyKindInvalid = Error.Problem("Custodies.CustodyKindInvalid", "CustodyKind must be a known value.");
     public static readonly Error StatusInvalid = Error.Problem("Custodies.StatusInvalid", "CustodyStatus must be a known value.");
     public static readonly Error PersonalRequiresEmployee = Error.Problem("Custodies.PersonalRequiresEmployee", "Personal custody requires an Employee holder.");
+    public static readonly Error OperationalRequiresNonEmployee = Error.Problem("Custodies.OperationalRequiresNonEmployee", "Operational custody requires an OrganizationalUnit, Site, or External holder.");
     public static readonly Error NotActive = Error.Problem("Custodies.NotActive", "Only an active custody can be closed.");
     public static readonly Error CloseTimeInvalid = Error.Problem("Custodies.CloseTimeInvalid", "Custody close time must be after its open time.");
     public static readonly Error ReturnDocumentRequired = Error.Problem("Custodies.ReturnDocumentRequired", "A return document is required when closing custody for a return.");

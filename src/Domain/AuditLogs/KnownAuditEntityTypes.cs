@@ -12,11 +12,13 @@ public static class KnownAuditEntityTypes
         "User",
         "Role",
         "RolePermission",
+        "RoleAllowedScopeType",
         "UserRoleScope",
         "Organization",
         "Site",
         "OrganizationalUnit",
         "Employee",
+        "ExternalParty",
         "UnitOfMeasure",
         "MaterialDomain",
         "MaterialCategory",
@@ -45,7 +47,11 @@ public static class KnownAuditEntityTypes
         "InventoryCountLine",
         "InventoryCountScopeMaterial",
         "InventoryAdjustment",
-        "AdjustmentLine"
+        "AdjustmentLine",
+        "TrackedMaterialUnit",
+        "DurableCustodyAllocation",
+        "DurableCustodyHistory",
+        "DurableCustody"
     };
 
     public static bool IsKnown(string entityType) => All.Contains(entityType);

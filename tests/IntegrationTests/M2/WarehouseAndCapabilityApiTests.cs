@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Domain.Common;
 using Domain.MaterialDomains;
+using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Sites;
 using Domain.UserRoleScopes;
@@ -26,12 +27,13 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
     public async Task CreateWarehouse_Should_ReturnUnauthorized_WhenRequestHasNoToken()
     {
         // Arrange
-        Guid siteId = await SeedSiteAsync();
+        WarehouseParent parent = await SeedWarehouseParentAsync();
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouses", new
         {
-            siteId,
+            siteId = parent.SiteId,
+            organizationalUnitId = parent.OrganizationalUnitId,
             name = "Main",
             code = $"WH{Guid.NewGuid():N}",
             warehouseType = "General",
@@ -49,13 +51,14 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
         await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
-        Guid siteId = await SeedSiteAsync();
+        WarehouseParent parent = await SeedWarehouseParentAsync();
         string code = $"WH{Guid.NewGuid():N}";
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouses", new
         {
-            siteId,
+            siteId = parent.SiteId,
+            organizationalUnitId = parent.OrganizationalUnitId,
             name = "Main warehouse",
             code,
             warehouseType = "General",
@@ -79,12 +82,14 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
         await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
-        Guid warehouseId = await CreateWarehouseAsync(await SeedSiteAsync());
+        WarehouseParent parent = await SeedWarehouseParentAsync();
+        Guid warehouseId = await CreateWarehouseAsync(parent);
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"warehouses/{warehouseId}", new
         {
             name = "Updated warehouse",
+            organizationalUnitId = parent.OrganizationalUnitId,
             warehouseType = "Secure",
             canHoldStock = false,
             expectedRowVersion = 1
@@ -106,12 +111,14 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
         await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
-        Guid warehouseId = await CreateWarehouseAsync(await SeedSiteAsync());
+        WarehouseParent parent = await SeedWarehouseParentAsync();
+        Guid warehouseId = await CreateWarehouseAsync(parent);
 
         // Act
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"warehouses/{warehouseId}", new
         {
             name = "Stale update",
+            organizationalUnitId = parent.OrganizationalUnitId,
             warehouseType = "General",
             canHoldStock = true,
             expectedRowVersion = 99
@@ -146,7 +153,7 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
         await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
-        Guid warehouseId = await CreateWarehouseAsync(await SeedSiteAsync());
+        Guid warehouseId = await CreateWarehouseAsync(await SeedWarehouseParentAsync());
         Guid domainId = await SeedMaterialDomainAsync();
 
         // Act
@@ -172,7 +179,7 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
         await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
-        Guid warehouseId = await CreateWarehouseAsync(await SeedSiteAsync());
+        Guid warehouseId = await CreateWarehouseAsync(await SeedWarehouseParentAsync());
         Guid domainId = await SeedMaterialDomainAsync();
         HttpResponseMessage first = await HttpClient.PostAsJsonAsync("warehouse-capabilities", new
         {
@@ -192,11 +199,12 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
-    private async Task<Guid> CreateWarehouseAsync(Guid siteId)
+    private async Task<Guid> CreateWarehouseAsync(WarehouseParent parent)
     {
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouses", new
         {
-            siteId,
+            siteId = parent.SiteId,
+            organizationalUnitId = parent.OrganizationalUnitId,
             name = "Warehouse",
             code = $"WH{Guid.NewGuid():N}",
             warehouseType = "General",
@@ -207,17 +215,20 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         return await ReadResourceIdAsync(response);
     }
 
-    private async Task<Guid> SeedSiteAsync()
+    private async Task<WarehouseParent> SeedWarehouseParentAsync()
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         string suffix = Guid.NewGuid().ToString("N")[..12];
         var organization = Organization.Create(Guid.NewGuid(), $"Organization {suffix}", $"ORG{suffix}");
         var site = Site.Create(Guid.NewGuid(), organization.Id, $"Site {suffix}", $"S{suffix}", null);
+        var organizationalUnit = OrganizationalUnit.Create(
+            Guid.NewGuid(), site.Id, null, $"Unit {suffix}", "Directorate");
         dbContext.Organizations.Add(organization);
         dbContext.Sites.Add(site);
+        dbContext.OrganizationalUnits.Add(organizationalUnit);
         await dbContext.SaveChangesAsync();
-        return site.Id;
+        return new WarehouseParent(site.Id, organizationalUnit.Id);
     }
 
     private async Task<Guid> SeedMaterialDomainAsync()
@@ -257,5 +268,7 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
 
     private static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response) =>
         await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+
+    private sealed record WarehouseParent(Guid SiteId, Guid OrganizationalUnitId);
 
 }

@@ -29,6 +29,7 @@ public static class AuditActions
     public const string Revoke = "Revoke";
     public const string Authenticate = "Authenticate";
     public const string TokenRefresh = "TokenRefresh";
+    public const string Logout = "Logout";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -54,6 +55,7 @@ public static class AuditActions
         Grant,
         Revoke,
         Authenticate,
-        TokenRefresh
+        TokenRefresh,
+        Logout
     };
 }

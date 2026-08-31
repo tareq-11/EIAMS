@@ -7,8 +7,12 @@ using Domain.CustodyHistories;
 using Domain.DocumentAttachments;
 using Domain.DocumentLineAssetSelections;
 using Domain.DocumentLines;
+using Domain.DocumentLifecycleEvents;
 using Domain.DocumentSequences;
+using Domain.DurableCustodies;
+using Domain.DurableCustodyAllocations;
 using Domain.Employees;
+using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
@@ -26,6 +30,7 @@ using Domain.ReturnInfos;
 using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
+using Domain.TrackedMaterialUnits;
 using Domain.TransferInfos;
 using Domain.UnitsOfMeasure;
 using Domain.UserRoleScopes;
@@ -60,7 +65,11 @@ public sealed class ApplicationDbContext(
 
     public DbSet<Employee> Employees { get; set; }
 
+    public DbSet<ExternalParty> ExternalParties { get; set; }
+
     public DbSet<Role> Roles { get; set; }
+
+    public DbSet<RoleAllowedScopeType> RoleAllowedScopeTypes { get; set; }
 
     public DbSet<Permission> Permissions { get; set; }
 
@@ -94,6 +103,8 @@ public sealed class ApplicationDbContext(
 
     public DbSet<DocumentLine> DocumentLines { get; set; }
 
+    public DbSet<DocumentLifecycleEvent> DocumentLifecycleEvents { get; set; }
+
     public DbSet<DocumentAttachment> DocumentAttachments { get; set; }
 
     public DbSet<StockMovement> StockMovements { get; set; }
@@ -113,6 +124,12 @@ public sealed class ApplicationDbContext(
     public DbSet<Custody> Custodies { get; set; }
 
     public DbSet<CustodyHistory> CustodyHistories { get; set; }
+
+    public DbSet<TrackedMaterialUnit> TrackedMaterialUnits { get; set; }
+
+    public DbSet<DurableCustodyAllocation> DurableCustodyAllocations { get; set; }
+
+    public DbSet<DurableCustodyHistory> DurableCustodyHistories { get; set; }
 
     public DbSet<DocumentLineAssetSelection> DocumentLineAssetSelections { get; set; }
 
@@ -176,7 +193,9 @@ public sealed class ApplicationDbContext(
         {
             Organization => "organizations",
             Site => "sites",
+            OrganizationalUnit => "organizational-units",
             Employee => "employees",
+            ExternalParty => "external-parties",
             MaterialDomain => "domains",
             MaterialCategory => "categories",
             MaterialFamily => "families",

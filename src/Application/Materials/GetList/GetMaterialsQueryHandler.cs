@@ -19,7 +19,7 @@ internal sealed class GetMaterialsQueryHandler(IApplicationDbContext context)
                 join family in context.MaterialFamilies on m.FamilyId equals family.Id
                 join category in context.MaterialCategories on family.CategoryId equals category.Id
                 join domain in context.MaterialDomains on category.MaterialDomainId equals domain.Id
-                join unit in context.UnitsOfMeasure on family.BaseUnitId equals unit.Id
+                join unit in context.UnitsOfMeasure on m.BaseUnitId equals unit.Id
                 where query.MaterialDomainId == null || domain.Id == query.MaterialDomainId
                 select new MaterialResponse
                 {

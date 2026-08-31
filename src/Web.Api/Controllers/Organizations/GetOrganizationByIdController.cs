@@ -14,6 +14,7 @@ public sealed class GetOrganizationByIdController(IQueryHandler<GetOrganizationB
     : ControllerBase
 {
     [HttpGet("{organizationId:guid}")]
+    [ProducesResponseType<ApiResponse<OrganizationResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Organizations.View)]
     public async Task<IResult> Handle(Guid organizationId, CancellationToken cancellationToken)
     {

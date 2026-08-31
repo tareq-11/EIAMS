@@ -1,4 +1,4 @@
-﻿using Application.Abstractions.Pagination;
+using Application.Abstractions.Pagination;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -34,7 +34,14 @@ public static class ResultExtensions
         return ApiResults.Ok(
             context,
             page.Items,
-            new ApiPagination(page.Page, page.PageSize, page.TotalItems, page.TotalPages));
+            new ApiPagination(
+                page.Page,
+                page.PageSize,
+                page.TotalItems,
+                page.TotalPages,
+                HasPreviousPage: page.Page > 1,
+                HasNextPage: page.Page < page.TotalPages,
+                TotalCount: page.TotalItems));
     }
 
     public static IResult ToApiResponse(this Result<Guid> result, HttpContext context)

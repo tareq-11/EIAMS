@@ -20,9 +20,25 @@ public static class UserErrors
         "Users.EmailNotUnique",
         "The provided email is not unique");
 
+    public static readonly Error RegistrationClosed = Error.Forbidden(
+        "Users.RegistrationClosed",
+        "Public registration is closed. User accounts must be created by an administrator.");
+
     public static readonly Error EmployeeAlreadyLinked = Error.Conflict(
         "Users.EmployeeAlreadyLinked",
         "The employee is already linked to another user account");
+
+    public static readonly Error Suspended = Error.Forbidden(
+        "Users.Suspended",
+        "The user account is suspended.");
+
+    public static readonly Error AdministrationRequiresEnterpriseScope = Error.Forbidden(
+        "Users.AdministrationRequiresEnterpriseScope",
+        "User administration requires Enterprise scope.");
+
+    public static readonly Error SelfSuspensionNotAllowed = Error.Conflict(
+        "Users.SelfSuspensionNotAllowed",
+        "You cannot suspend your own account.");
 
     public static readonly Error InvalidRefreshToken = Error.Problem(
         "Users.InvalidRefreshToken",

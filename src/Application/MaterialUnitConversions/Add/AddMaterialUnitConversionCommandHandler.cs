@@ -29,11 +29,9 @@ internal sealed class AddMaterialUnitConversionCommandHandler(
             return Result.Failure<Guid>(MaterialUnitConversionErrors.Forbidden);
         }
 
-        Guid? baseUnitId = await (
-                from material in context.Materials
-                where material.Id == command.MaterialId
-                join family in context.MaterialFamilies on material.FamilyId equals family.Id
-                select (Guid?)family.BaseUnitId)
+        Guid? baseUnitId = await context.Materials
+            .Where(m => m.Id == command.MaterialId)
+            .Select(m => (Guid?)m.BaseUnitId)
             .SingleOrDefaultAsync(cancellationToken);
 
         if (baseUnitId is null)

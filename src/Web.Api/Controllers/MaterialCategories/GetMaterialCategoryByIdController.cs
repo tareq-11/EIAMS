@@ -14,6 +14,7 @@ public sealed class GetMaterialCategoryByIdController(
     IQueryHandler<GetMaterialCategoryByIdQuery, MaterialCategoryResponse> handler) : ControllerBase
 {
     [HttpGet("{materialCategoryId:guid}")]
+    [ProducesResponseType<ApiResponse<MaterialCategoryResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.View)]
     public async Task<IResult> Handle(Guid materialCategoryId, CancellationToken cancellationToken)
     {

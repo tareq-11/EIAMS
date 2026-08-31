@@ -13,16 +13,24 @@ namespace Web.Api.Controllers.UserRoleScopes;
 [Tags(Tags.UserRoleScopes)]
 public sealed class GrantController(ICommandHandler<GrantUserRoleScopeCommand, Guid> handler) : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] Guid UserId, [property: JsonRequired] Guid RoleId, [property: JsonRequired] int ScopeType, Guid? ScopeId);
+    public sealed record RequestBody(
+        [property: JsonRequired] Guid UserId,
+        [property: JsonRequired] Guid RoleId,
+        [property: JsonRequired] ScopeType ScopeType,
+        Guid? ScopeId);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Roles.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
+        Response.Headers["Deprecation"] = "true";
+        Response.Headers.Append("Link", $"</users/{request.UserId}/role-scope>; rel=successor-version");
+
         var command = new GrantUserRoleScopeCommand(
             request.UserId,
             request.RoleId,
-            (ScopeType)request.ScopeType,
+            request.ScopeType,
             request.ScopeId);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);

@@ -37,13 +37,22 @@ internal sealed class UpdateMaterialCommandHandler(
             return Result.Failure(MaterialErrors.NotFound(command.MaterialId));
         }
 
+        if (command.MaterialKind == MaterialKind.Consumable && command.TrackingType != TrackingType.Quantity)
+        {
+            return Result.Failure(MaterialErrors.ConsumableMustBeQuantityTracked);
+        }
+
+        if (command.MaterialKind == MaterialKind.Asset && command.TrackingType != TrackingType.Serial)
+        {
+            return Result.Failure(MaterialErrors.AssetMustBeSerialTracked);
+        }
+
         material.UpdateDetails(
             command.NameAr,
             command.NameEn,
             command.MaterialKind,
             command.TrackingType,
             command.HasExpiry,
-            command.RequiresAssetNumber,
             command.Attributes);
 
         await context.SaveChangesAsync(cancellationToken);

@@ -264,7 +264,7 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
         dbContext.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         dbContext.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
         dbContext.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
-        dbContext.Materials.Add(Material.Create(materialId, familyId, $"Material {suffix}", $"Material {suffix}", $"M{suffix}", MaterialKind.Consumable, TrackingType.Quantity, false, false, null));
+        dbContext.Materials.Add(Material.Create(materialId, familyId, unitId, $"Material {suffix}", $"Material {suffix}", $"M{suffix}", MaterialKind.Consumable, TrackingType.Quantity, false, null));
         AddCapability(dbContext, sourceWarehouseId, domainId, OperationType.Transfer);
         if (includeDestinationTransferCapability)
         {

@@ -128,6 +128,7 @@ public sealed class IdentityAndOrganizationRulesTests
     [Theory]
     [InlineData(ScopeType.Enterprise, false)]
     [InlineData(ScopeType.Site, true)]
+    [InlineData(ScopeType.OrganizationalUnit, true)]
     [InlineData(ScopeType.Warehouse, true)]
     public void UserRoleScope_Create_Should_PreserveRequestedScope(
         ScopeType scopeType,
@@ -145,6 +146,27 @@ public sealed class IdentityAndOrganizationRulesTests
         scope.ScopeType.ShouldBe(scopeType);
         scope.ScopeId.ShouldBe(scopeId);
         scope.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRoleScopeGrantedDomainEvent);
+    }
+
+    [Fact]
+    public void UserRoleScope_ReplaceAssignment_Should_UpdateFieldsAndRaiseReplacedEvent()
+    {
+        var scope = UserRoleScope.Create(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            ScopeType.Enterprise,
+            null);
+        scope.ClearDomainEvents();
+
+        var newRoleId = Guid.NewGuid();
+        var newScopeId = Guid.NewGuid();
+        scope.ReplaceAssignment(newRoleId, ScopeType.OrganizationalUnit, newScopeId);
+
+        scope.RoleId.ShouldBe(newRoleId);
+        scope.ScopeType.ShouldBe(ScopeType.OrganizationalUnit);
+        scope.ScopeId.ShouldBe(newScopeId);
+        scope.DomainEvents.ShouldContain(domainEvent => domainEvent is UserRoleScopeReplacedDomainEvent);
     }
 
     [Fact]

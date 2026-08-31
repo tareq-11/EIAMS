@@ -14,6 +14,7 @@ public sealed class RemovePermissionController(ICommandHandler<RemovePermissionF
     : ControllerBase
 {
     [HttpDelete("{roleId:guid}/permissions/{permissionId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Roles.Manage)]
     public async Task<IResult> Handle(Guid roleId, Guid permissionId, CancellationToken cancellationToken)
     {

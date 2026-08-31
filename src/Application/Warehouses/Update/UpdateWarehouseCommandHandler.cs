@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
+using Domain.OrganizationalUnits;
 using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -47,7 +48,44 @@ internal sealed class UpdateWarehouseCommandHandler(
                 warehouse.RowVersion));
         }
 
-        warehouse.UpdateDetails(command.Name, command.WarehouseType, command.CanHoldStock);
+        bool canAccessNewOwner = await scopeAuthorizationService.HasPermissionInScopeAsync(
+            userContext.UserId,
+            PermissionCodes.Warehouses.Manage,
+            ScopeType.OrganizationalUnit,
+            command.OrganizationalUnitId,
+            cancellationToken);
+
+        if (!canAccessNewOwner)
+        {
+            return Result.Failure(WarehouseErrors.Forbidden);
+        }
+
+        OrganizationalUnit? organizationalUnit = await context.OrganizationalUnits
+            .AsNoTracking()
+            .SingleOrDefaultAsync(unit => unit.Id == command.OrganizationalUnitId, cancellationToken);
+
+        if (organizationalUnit is null)
+        {
+            return Result.Failure(WarehouseErrors.OrganizationalUnitNotFound(command.OrganizationalUnitId));
+        }
+
+        if (organizationalUnit.SiteId != warehouse.SiteId)
+        {
+            return Result.Failure(WarehouseErrors.OrganizationalUnitInDifferentSite(
+                command.OrganizationalUnitId,
+                warehouse.SiteId));
+        }
+
+        if (organizationalUnit.Status != Status.Active)
+        {
+            return Result.Failure(WarehouseErrors.OrganizationalUnitInactive(command.OrganizationalUnitId));
+        }
+
+        warehouse.UpdateDetailsAndAdministrativeOwner(
+            command.Name,
+            command.WarehouseType,
+            command.CanHoldStock,
+            command.OrganizationalUnitId);
 
         try
         {
@@ -68,6 +106,7 @@ internal sealed class UpdateWarehouseCommandHandler(
         }
 
         await hybridCache.RemoveByTagAsync("warehouses", cancellationToken);
+        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return Result.Success();
     }

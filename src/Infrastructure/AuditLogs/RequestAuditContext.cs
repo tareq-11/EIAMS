@@ -6,6 +6,8 @@ namespace Infrastructure.AuditLogs;
 
 internal sealed class RequestAuditContext(IHttpContextAccessor httpContextAccessor) : IRequestAuditContext
 {
+    private const string IdempotencyKeyHeader = "Idempotency-Key";
+
     public string? GetRequestId()
     {
         HttpContext? context = httpContextAccessor.HttpContext;
@@ -30,5 +32,11 @@ internal sealed class RequestAuditContext(IHttpContextAccessor httpContextAccess
         return remoteIpAddress.IsIPv4MappedToIPv6
             ? remoteIpAddress.MapToIPv4().ToString()
             : remoteIpAddress.ToString();
+    }
+
+    public Guid? GetOperationId()
+    {
+        string? value = httpContextAccessor.HttpContext?.Request.Headers[IdempotencyKeyHeader].FirstOrDefault();
+        return Guid.TryParse(value, out Guid operationId) ? operationId : null;
     }
 }

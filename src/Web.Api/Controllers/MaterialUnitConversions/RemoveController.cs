@@ -13,6 +13,8 @@ namespace Web.Api.Controllers.MaterialUnitConversions;
 public sealed class RemoveController(ICommandHandler<RemoveMaterialUnitConversionCommand> handler) : ControllerBase
 {
     [HttpDelete("{materialUnitConversionId:guid}")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
+    [HttpDelete("/materials/{materialId:guid}/unit-conversions/{materialUnitConversionId:guid}")]
     [HasPermission(PermissionCodes.Materials.Manage)]
     public async Task<IResult> Handle(Guid materialUnitConversionId, CancellationToken cancellationToken)
     {

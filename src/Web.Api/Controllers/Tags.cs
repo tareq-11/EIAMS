@@ -7,6 +7,8 @@ public static class Tags
     public const string Sites = "Sites";
     public const string OrganizationalUnits = "OrganizationalUnits";
     public const string Employees = "Employees";
+    public const string ExternalParties = "ExternalParties";
+    public const string Counterparts = "Counterparts";
     public const string Roles = "Roles";
     public const string Permissions = "Permissions";
     public const string UserRoleScopes = "UserRoleScopes";
@@ -25,4 +27,6 @@ public static class Tags
     public const string Assets = "Assets";
     public const string InventoryCounts = "Inventory Counts";
     public const string AuditLogs = "Audit Logs";
+    public const string Reports = "Reports";
+    public const string ReceivingInfos = "ReceivingInfos";
 }

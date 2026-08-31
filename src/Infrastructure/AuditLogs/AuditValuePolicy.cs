@@ -27,19 +27,14 @@ internal sealed class AuditValuePolicy : IAuditValuePolicy
         "row_version"
     };
 
-    private static readonly HashSet<(string EntityType, string Field)> ForbiddenFields =
-        new HashSet<(string, string)>
-        {
-            ("User", "password_hash"),
-            ("RefreshToken", "token"),
-            ("DocumentAttachment", "storage_key")
-        };
-
     public bool IsExcludedField(string canonicalEntityType, string storeFieldName) =>
         ExcludedFields.Contains(storeFieldName);
 
     public bool IsForbidden(string canonicalEntityType, string storeFieldName) =>
-        ForbiddenFields.Contains((canonicalEntityType, storeFieldName));
+        AuditSensitiveDataPolicy.IsSensitive(storeFieldName);
+
+    public string? SanitizeSummary(string? summary) =>
+        AuditSensitiveDataPolicy.ContainsSensitiveJsonProperty(summary) ? null : summary;
 
     public string? Serialize(string entityType, string field, object? value)
     {

@@ -6,13 +6,34 @@ namespace IntegrationTests.Users;
 public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     [Fact]
-    public async Task Register_Should_ReturnUserId()
+    public async Task AdministratorCreateUser_Should_ReturnUserId()
     {
         // Act
         Guid userId = await RegisterUserAsync(UniqueEmail());
 
         // Assert
         userId.ShouldNotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public async Task PublicRegistration_Should_ReturnForbidden_WhenSystemIsInitialized()
+    {
+        // Arrange
+        await AuthenticateAsAdministratorAsync();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            "users/register",
+            new
+            {
+                email = UniqueEmail(),
+                firstName = "Self",
+                lastName = "Registered",
+                password = "Password123!"
+            });
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     [Fact]

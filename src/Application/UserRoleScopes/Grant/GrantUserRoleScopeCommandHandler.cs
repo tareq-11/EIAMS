@@ -3,7 +3,6 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
-using Domain.Roles;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -21,50 +20,40 @@ internal sealed class GrantUserRoleScopeCommandHandler(
 {
     public async Task<Result<Guid>> Handle(GrantUserRoleScopeCommand command, CancellationToken cancellationToken)
     {
-        bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
-            userContext.UserId,
-            PermissionCodes.Roles.Manage,
-            ScopeType.Enterprise,
-            scopeId: null,
-            cancellationToken);
-
-        if (!authorized)
-        {
-            return Result.Failure<Guid>(UserRoleScopeErrors.Forbidden);
-        }
-
         if (!await context.Users.AnyAsync(u => u.Id == command.UserId, cancellationToken))
         {
             return Result.Failure<Guid>(UserErrors.NotFound(command.UserId));
         }
 
-        if (!await context.Roles.AnyAsync(r => r.Id == command.RoleId, cancellationToken))
+        if (await context.UserRoleScopes.AnyAsync(
+                assignment => assignment.UserId == command.UserId,
+                cancellationToken))
         {
-            return Result.Failure<Guid>(RoleErrors.NotFound(command.RoleId));
+            return Result.Failure<Guid>(UserRoleScopeErrors.UserAlreadyAssigned);
         }
 
-        if (command.ScopeType == ScopeType.Site &&
-            !await context.Sites.AnyAsync(s => s.Id == command.ScopeId, cancellationToken))
-        {
-            return Result.Failure<Guid>(UserRoleScopeErrors.ScopeTargetNotFound(command.ScopeId!.Value));
-        }
-
-        if (command.ScopeType == ScopeType.Warehouse &&
-            !await context.Warehouses.AnyAsync(w => w.Id == command.ScopeId, cancellationToken))
-        {
-            return Result.Failure<Guid>(UserRoleScopeErrors.ScopeTargetNotFound(command.ScopeId!.Value));
-        }
-
-        bool alreadyGranted = await context.UserRoleScopes.AnyAsync(
-            s => s.UserId == command.UserId &&
-                 s.RoleId == command.RoleId &&
-                 s.ScopeType == command.ScopeType &&
-                 s.ScopeId == command.ScopeId,
+        Error validationError = await UserRoleScopeAssignmentRules.ValidateAsync(
+            context,
+            command.RoleId,
+            command.ScopeType,
+            command.ScopeId,
             cancellationToken);
 
-        if (alreadyGranted)
+        if (validationError != Error.None)
         {
-            return Result.Failure<Guid>(UserRoleScopeErrors.AlreadyGranted);
+            return Result.Failure<Guid>(validationError);
+        }
+
+        bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
+            userContext.UserId,
+            PermissionCodes.Roles.Manage,
+            command.ScopeType,
+            command.ScopeId,
+            cancellationToken);
+
+        if (!authorized)
+        {
+            return Result.Failure<Guid>(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
         }
 
         var userRoleScope = UserRoleScope.Create(
@@ -78,6 +67,7 @@ internal sealed class GrantUserRoleScopeCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
+        await hybridCache.RemoveByTagAsync($"user:{command.UserId}", cancellationToken);
         await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return userRoleScope.Id;

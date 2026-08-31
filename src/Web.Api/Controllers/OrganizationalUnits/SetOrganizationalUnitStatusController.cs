@@ -17,6 +17,7 @@ public sealed class SetOrganizationalUnitStatusController(ICommandHandler<SetOrg
     public sealed record RequestBody([property: JsonRequired] int Status);
 
     [HttpPut("{organizationalUnitId:guid}/status")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.OrganizationalUnits.Manage)]
     public async Task<IResult> Handle(
         Guid organizationalUnitId,

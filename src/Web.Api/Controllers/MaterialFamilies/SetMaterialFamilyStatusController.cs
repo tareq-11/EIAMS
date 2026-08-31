@@ -17,6 +17,7 @@ public sealed class SetMaterialFamilyStatusController(ICommandHandler<SetMateria
     public sealed record RequestBody([property: JsonRequired] int Status);
 
     [HttpPut("{materialFamilyId:guid}/status")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.MaterialFamilies.Manage)]
     public async Task<IResult> Handle(Guid materialFamilyId, RequestBody request, CancellationToken cancellationToken)
     {

@@ -34,4 +34,8 @@ internal sealed class UserContext : IUserContext
             return user.GetUserId();
         }
     }
+
+    public string? ActorDisplayName =>
+        _httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.Email) ??
+        _httpContextAccessor.HttpContext?.User.Identity?.Name;
 }

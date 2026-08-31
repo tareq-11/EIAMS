@@ -14,6 +14,7 @@ public sealed class GetMaterialFamilyByIdController(
     IQueryHandler<GetMaterialFamilyByIdQuery, MaterialFamilyResponse> handler) : ControllerBase
 {
     [HttpGet("{materialFamilyId:guid}")]
+    [ProducesResponseType<ApiResponse<MaterialFamilyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.View)]
     public async Task<IResult> Handle(Guid materialFamilyId, CancellationToken cancellationToken)
     {

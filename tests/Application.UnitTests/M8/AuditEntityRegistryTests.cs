@@ -1,4 +1,5 @@
 using Domain.AssetMovementHistories;
+using Domain.AuditLogs;
 using Domain.Common;
 using Domain.CustodyHistories;
 using Domain.DocumentLines;
@@ -64,6 +65,27 @@ public sealed class AuditEntityRegistryTests
         mapping.AggregateType.ShouldBe("Role");
         mapping.EntityIdSelector!(rolePermission).ShouldBe(roleId);
         mapping.AggregateIdSelector!(rolePermission).ShouldBe(roleId);
+    }
+
+    [Fact]
+    public void Registry_Should_MapAllowedScopeTypeToKnownRoleAggregate_WhenQueried()
+    {
+        // Arrange
+        var roleId = Guid.NewGuid();
+        var allowedScopeType = RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse);
+
+        // Act
+        bool resolved = registry.TryGet(
+            allowedScopeType.GetType(),
+            out AuditEntityRegistry.Mapping? mapping);
+
+        // Assert
+        resolved.ShouldBeTrue();
+        mapping!.EntityType.ShouldBe("RoleAllowedScopeType");
+        KnownAuditEntityTypes.IsKnown(mapping.EntityType).ShouldBeTrue();
+        mapping.AggregateType.ShouldBe("Role");
+        mapping.EntityIdSelector(allowedScopeType).ShouldBe(roleId);
+        mapping.AggregateIdSelector!(allowedScopeType).ShouldBe(roleId);
     }
 
     [Fact]

@@ -16,6 +16,7 @@ public sealed class CreateMaterialCategoryController(ICommandHandler<CreateMater
     public sealed record RequestBody([property: JsonRequired] Guid MaterialDomainId, Guid? ParentCategoryId, string Name, string Code);
 
     [HttpPost]
+    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.MaterialCategories.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {

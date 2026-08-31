@@ -16,6 +16,7 @@ public sealed class GetWarehouseCapabilityOperationsController(
     : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityOperationResponse>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Warehouses.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityOperationResponse>>>(
         StatusCodes.Status200OK)]

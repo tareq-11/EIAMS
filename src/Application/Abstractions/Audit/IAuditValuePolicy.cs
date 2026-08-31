@@ -20,6 +20,12 @@ public interface IAuditValuePolicy
     bool IsForbidden(string canonicalEntityType, string storeFieldName);
 
     /// <summary>
+    /// Returns a safe JSON summary, or <see langword="null"/> when the summary contains a
+    /// sensitive property anywhere in its object graph.
+    /// </summary>
+    string? SanitizeSummary(string? summary);
+
+    /// <summary>
     /// Serializes a scalar property value into its deterministic audit string representation.
     /// Returns <see langword="null"/> when the value must not be persisted (e.g. binary content).
     /// Never truncates: oversized strings are replaced by a SHA-256 marker.

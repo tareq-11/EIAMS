@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
+using Domain.OrganizationalUnits;
 using Domain.Sites;
 using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
@@ -24,8 +25,8 @@ internal sealed class CreateWarehouseCommandHandler(
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
             PermissionCodes.Warehouses.Manage,
-            ScopeType.Site,
-            command.SiteId,
+            ScopeType.OrganizationalUnit,
+            command.OrganizationalUnitId,
             cancellationToken);
 
         if (!authorized)
@@ -45,6 +46,27 @@ internal sealed class CreateWarehouseCommandHandler(
             return Result.Failure<Guid>(WarehouseErrors.SiteInactive(command.SiteId));
         }
 
+        OrganizationalUnit? organizationalUnit = await context.OrganizationalUnits
+            .AsNoTracking()
+            .SingleOrDefaultAsync(unit => unit.Id == command.OrganizationalUnitId, cancellationToken);
+
+        if (organizationalUnit is null)
+        {
+            return Result.Failure<Guid>(WarehouseErrors.OrganizationalUnitNotFound(command.OrganizationalUnitId));
+        }
+
+        if (organizationalUnit.SiteId != command.SiteId)
+        {
+            return Result.Failure<Guid>(WarehouseErrors.OrganizationalUnitInDifferentSite(
+                command.OrganizationalUnitId,
+                command.SiteId));
+        }
+
+        if (organizationalUnit.Status != Status.Active)
+        {
+            return Result.Failure<Guid>(WarehouseErrors.OrganizationalUnitInactive(command.OrganizationalUnitId));
+        }
+
         if (await context.Warehouses.AnyAsync(w => w.Code == command.Code, cancellationToken))
         {
             return Result.Failure<Guid>(WarehouseErrors.CodeNotUnique(command.Code));
@@ -56,7 +78,8 @@ internal sealed class CreateWarehouseCommandHandler(
             command.Name,
             command.Code,
             command.WarehouseType,
-            command.CanHoldStock);
+            command.CanHoldStock,
+            command.OrganizationalUnitId);
 
         context.Warehouses.Add(warehouse);
 

@@ -8,5 +8,8 @@ internal sealed class PostDocumentCommandValidator : AbstractValidator<PostDocum
     {
         RuleFor(c => c.DocumentId).NotEmpty();
         RuleFor(c => c.ExpectedRowVersion).GreaterThan(0);
+        RuleFor(c => c.IdempotencyKey)
+            .NotEqual(Guid.Empty)
+            .When(c => c.IdempotencyKey.HasValue);
     }
 }

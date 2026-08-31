@@ -45,7 +45,7 @@ internal sealed class CancelDocumentCommandHandler(
                 document.RowVersion));
         }
 
-        Result cancelResult = document.Cancel();
+        Result cancelResult = document.Cancel(command.Reason);
 
         if (cancelResult.IsFailure)
         {

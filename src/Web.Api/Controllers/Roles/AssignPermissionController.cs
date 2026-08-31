@@ -16,6 +16,7 @@ public sealed class AssignPermissionController(ICommandHandler<AssignPermissionT
     public sealed record RequestBody([property: JsonRequired] Guid PermissionId);
 
     [HttpPost("{roleId:guid}/permissions")]
+    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Roles.Manage)]
     public async Task<IResult> Handle(Guid roleId, RequestBody request, CancellationToken cancellationToken)
     {

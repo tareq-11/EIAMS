@@ -153,6 +153,12 @@ public sealed class Custody : Entity, IAuditableEntity
             return Result.Failure(CustodyErrors.PersonalRequiresEmployee);
         }
 
+
+        if (custodyKind == CustodyKind.Operational && holderType == PartyType.Employee)
+        {
+            return Result.Failure(CustodyErrors.OperationalRequiresNonEmployee);
+        }
+
         return Result.Success();
     }
 }
