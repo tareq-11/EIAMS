@@ -38,6 +38,6 @@ public sealed class AddDocumentLineAssetSelectionController(
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 
-        return result.ToCreatedApiResponse(HttpContext, id => $"/warehouse-documents/{documentId}/lines/{lineId}/assets/{id}");
+        return result.ToCreatedApiResponse(HttpContext, id => $"/api/v1/warehouse-documents/{documentId}/lines/{lineId}/assets/{id}");
     }
 }

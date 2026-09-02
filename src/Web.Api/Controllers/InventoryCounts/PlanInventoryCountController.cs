@@ -29,6 +29,6 @@ public sealed class PlanInventoryCountController(ICommandHandler<PlanInventoryCo
         var command = new PlanInventoryCountCommand(request.WarehouseId, request.CountType,
             request.ScopeType, request.MaterialDomainId, request.MaterialIds, request.FreezePolicy);
         Result<Guid> result = await handler.Handle(command, cancellationToken);
-        return result.ToCreatedApiResponse(HttpContext, id => $"/inventory-counts/{id}");
+        return result.ToCreatedApiResponse(HttpContext, id => $"/api/v1/inventory-counts/{id}");
     }
 }

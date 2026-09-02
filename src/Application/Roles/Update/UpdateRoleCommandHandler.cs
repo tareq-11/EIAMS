@@ -5,7 +5,6 @@ using Application.Abstractions.Messaging;
 using Domain.Common;
 using Domain.Roles;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.Roles.Update;
@@ -13,8 +12,7 @@ namespace Application.Roles.Update;
 internal sealed class UpdateRoleCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    HybridCache hybridCache)
+    IScopeAuthorizationService scopeAuthorizationService)
     : ICommandHandler<UpdateRoleCommand>
 {
     public async Task<Result> Handle(UpdateRoleCommand command, CancellationToken cancellationToken)
@@ -71,8 +69,6 @@ internal sealed class UpdateRoleCommandHandler(
         }
 
         await context.SaveChangesAsync(cancellationToken);
-
-        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return Result.Success();
     }

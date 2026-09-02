@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialCategories;
 
 [ApiController]
-[Route("material-categories")]
+[Route("catalog/categories")]
 [Tags(Tags.MaterialCategories)]
 public sealed class CreateMaterialCategoryController(ICommandHandler<CreateMaterialCategoryCommand, Guid> handler)
     : ControllerBase

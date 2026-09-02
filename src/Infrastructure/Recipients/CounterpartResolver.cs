@@ -4,6 +4,10 @@ using Application.Abstractions.Pagination;
 using Application.Abstractions.Recipients;
 using Domain.Common;
 using Domain.Custodies;
+using Domain.Employees;
+using Domain.ExternalParties;
+using Domain.OrganizationalUnits;
+using Domain.Sites;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -47,6 +51,82 @@ internal sealed class CounterpartResolver(
                 .SingleOrDefaultAsync(cancellationToken),
             _ => null
         };
+    }
+
+    public async Task<IReadOnlyDictionary<CounterpartReference, CounterpartResolution>> ResolveManyAsync(
+        IReadOnlyCollection<CounterpartReference> counterparts,
+        CancellationToken cancellationToken)
+    {
+        CounterpartReference[] references = counterparts
+            .Where(reference => Enum.IsDefined(reference.Type) && reference.Id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+
+        if (references.Length == 0)
+        {
+            return new Dictionary<CounterpartReference, CounterpartResolution>();
+        }
+
+        var resolutions = new Dictionary<CounterpartReference, CounterpartResolution>(references.Length);
+
+        Guid[] employeeIds = GetIds(PartyType.Employee);
+        if (employeeIds.Length > 0)
+        {
+            List<CounterpartResolution> employees = await context.Employees.AsNoTracking()
+                .Where(item => employeeIds.Contains(item.Id))
+                .Select(item => new CounterpartResolution(
+                    PartyType.Employee, item.Id, item.FullName, item.JobTitle, item.Status))
+                .ToListAsync(cancellationToken);
+            AddToDictionary(employees);
+        }
+
+        Guid[] organizationalUnitIds = GetIds(PartyType.OrganizationalUnit);
+        if (organizationalUnitIds.Length > 0)
+        {
+            List<CounterpartResolution> organizationalUnits = await context.OrganizationalUnits.AsNoTracking()
+                .Where(item => organizationalUnitIds.Contains(item.Id))
+                .Select(item => new CounterpartResolution(
+                    PartyType.OrganizationalUnit, item.Id, item.Name, item.UnitType, item.Status))
+                .ToListAsync(cancellationToken);
+            AddToDictionary(organizationalUnits);
+        }
+
+        Guid[] siteIds = GetIds(PartyType.Site);
+        if (siteIds.Length > 0)
+        {
+            List<CounterpartResolution> sites = await context.Sites.AsNoTracking()
+                .Where(item => siteIds.Contains(item.Id))
+                .Select(item => new CounterpartResolution(
+                    PartyType.Site, item.Id, item.Name, item.Code, item.Status))
+                .ToListAsync(cancellationToken);
+            AddToDictionary(sites);
+        }
+
+        Guid[] externalPartyIds = GetIds(PartyType.External);
+        if (externalPartyIds.Length > 0)
+        {
+            List<CounterpartResolution> externalParties = await context.ExternalParties.AsNoTracking()
+                .Where(item => externalPartyIds.Contains(item.Id))
+                .Select(item => new CounterpartResolution(
+                    PartyType.External, item.Id, item.NameAr, item.Code, item.Status))
+                .ToListAsync(cancellationToken);
+            AddToDictionary(externalParties);
+        }
+
+        return resolutions;
+
+        Guid[] GetIds(PartyType partyType) => references
+            .Where(reference => reference.Type == partyType)
+            .Select(reference => reference.Id)
+            .ToArray();
+
+        void AddToDictionary(IEnumerable<CounterpartResolution> items)
+        {
+            foreach (CounterpartResolution item in items)
+            {
+                resolutions[new CounterpartReference(item.Type, item.Id)] = item;
+            }
+        }
     }
 
     public async Task<Result<CounterpartResolution>> ValidateForWriteAsync(
@@ -103,15 +183,44 @@ internal sealed class CounterpartResolver(
         CancellationToken cancellationToken)
     {
         string? term = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
-        var candidates = new List<CounterpartResolution>();
+        int normalizedPage = page <= 0 ? 1 : page;
+        int normalizedPageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
+        int offset = checked((normalizedPage - 1) * normalizedPageSize);
+        int fetchLimit = checked(offset + normalizedPageSize);
+        PartyAccessScope access = await scopeAuthorizationService.GetPartyAccessScopeAsync(
+            userId,
+            cancellationToken);
+
+        if (!access.HasAssignment)
+        {
+            return new PagedResult<CounterpartResolution>(
+                [], normalizedPage, normalizedPageSize, 0);
+        }
+
+        Guid[] allowedSiteIds = access.SiteIds.ToArray();
+        Guid[] allowedOrganizationalUnitIds = access.OrganizationalUnitIds.ToArray();
+        var candidates = new List<CounterpartResolution>(fetchLimit * 4);
+        int totalCount = 0;
 
         if (type is null or PartyType.Employee)
         {
-            candidates.AddRange(await context.Employees.AsNoTracking()
+            IQueryable<Employee> employeeQuery = context.Employees.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
                 .Where(item => term == null ||
                     EF.Functions.ILike(item.FullName, $"%{term}%") ||
-                    EF.Functions.ILike(item.EmployeeNumber, $"%{term}%"))
+                    EF.Functions.ILike(item.EmployeeNumber, $"%{term}%"));
+
+            if (!access.HasEnterpriseAccess)
+            {
+                employeeQuery = employeeQuery.Where(
+                    item => allowedOrganizationalUnitIds.Contains(item.OrgUnitId));
+            }
+
+            totalCount += await employeeQuery.CountAsync(cancellationToken);
+            candidates.AddRange(await employeeQuery
+                .OrderBy(item => item.FullName)
+                .ThenBy(item => item.Id)
+                .Take(fetchLimit)
                 .Select(item => new CounterpartResolution(
                     PartyType.Employee, item.Id, item.FullName, item.JobTitle, item.Status))
                 .ToListAsync(cancellationToken));
@@ -119,9 +228,20 @@ internal sealed class CounterpartResolver(
 
         if (type is null or PartyType.OrganizationalUnit)
         {
-            candidates.AddRange(await context.OrganizationalUnits.AsNoTracking()
+            IQueryable<OrganizationalUnit> unitQuery = context.OrganizationalUnits.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
-                .Where(item => term == null || EF.Functions.ILike(item.Name, $"%{term}%"))
+                .Where(item => term == null || EF.Functions.ILike(item.Name, $"%{term}%"));
+
+            if (!access.HasEnterpriseAccess)
+            {
+                unitQuery = unitQuery.Where(item => allowedOrganizationalUnitIds.Contains(item.Id));
+            }
+
+            totalCount += await unitQuery.CountAsync(cancellationToken);
+            candidates.AddRange(await unitQuery
+                .OrderBy(item => item.Name)
+                .ThenBy(item => item.Id)
+                .Take(fetchLimit)
                 .Select(item => new CounterpartResolution(
                     PartyType.OrganizationalUnit, item.Id, item.Name, item.UnitType, item.Status))
                 .ToListAsync(cancellationToken));
@@ -129,11 +249,22 @@ internal sealed class CounterpartResolver(
 
         if (type is null or PartyType.Site)
         {
-            candidates.AddRange(await context.Sites.AsNoTracking()
+            IQueryable<Site> siteQuery = context.Sites.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
                 .Where(item => term == null ||
                     EF.Functions.ILike(item.Name, $"%{term}%") ||
-                    EF.Functions.ILike(item.Code, $"%{term}%"))
+                    EF.Functions.ILike(item.Code, $"%{term}%"));
+
+            if (!access.HasEnterpriseAccess)
+            {
+                siteQuery = siteQuery.Where(item => allowedSiteIds.Contains(item.Id));
+            }
+
+            totalCount += await siteQuery.CountAsync(cancellationToken);
+            candidates.AddRange(await siteQuery
+                .OrderBy(item => item.Name)
+                .ThenBy(item => item.Id)
+                .Take(fetchLimit)
                 .Select(item => new CounterpartResolution(
                     PartyType.Site, item.Id, item.Name, item.Code, item.Status))
                 .ToListAsync(cancellationToken));
@@ -141,34 +272,32 @@ internal sealed class CounterpartResolver(
 
         if (type is null or PartyType.External)
         {
-            candidates.AddRange(await context.ExternalParties.AsNoTracking()
+            IQueryable<ExternalParty> externalQuery = context.ExternalParties.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
                 .Where(item => term == null ||
                     EF.Functions.ILike(item.NameAr, $"%{term}%") ||
-                    item.Code != null && EF.Functions.ILike(item.Code, $"%{term}%"))
+                    item.Code != null && EF.Functions.ILike(item.Code, $"%{term}%"));
+
+            totalCount += await externalQuery.CountAsync(cancellationToken);
+            candidates.AddRange(await externalQuery
+                .OrderBy(item => item.NameAr)
+                .ThenBy(item => item.Id)
+                .Take(fetchLimit)
                 .Select(item => new CounterpartResolution(
                     PartyType.External, item.Id, item.NameAr, item.Code, item.Status))
                 .ToListAsync(cancellationToken));
         }
 
-        var authorized = new List<CounterpartResolution>(candidates.Count);
-        foreach (CounterpartResolution candidate in candidates)
-        {
-            if (await scopeAuthorizationService.CanAccessPartyAsync(
-                    userId, candidate.Type, candidate.Id, cancellationToken))
-            {
-                authorized.Add(candidate);
-            }
-        }
-
-        var ordered = authorized
+        var ordered = candidates
             .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.Type)
             .ThenBy(item => item.Id)
             .ToList();
-        int offset = checked((page - 1) * pageSize);
 
         return new PagedResult<CounterpartResolution>(
-            ordered.Skip(offset).Take(pageSize).ToList(), page, pageSize, ordered.Count);
+            ordered.Skip(offset).Take(normalizedPageSize).ToList(),
+            normalizedPage,
+            normalizedPageSize,
+            totalCount);
     }
 }

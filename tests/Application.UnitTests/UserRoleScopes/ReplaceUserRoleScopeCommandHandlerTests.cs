@@ -22,7 +22,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
     {
         await using TestDbContext context = CreateDbContext();
         var command = new ReplaceUserRoleScopeCommand(Guid.NewGuid(), WellKnownRoles.AdministratorId, ScopeType.Enterprise, null);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -41,7 +41,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -72,7 +72,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseManagerId, ScopeType.OrganizationalUnit, orgUnitId);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -96,7 +96,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Enterprise, null);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -116,7 +116,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, missingWarehouseId);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 

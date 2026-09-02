@@ -10,7 +10,7 @@ namespace Web.Api.Controllers.Users;
 
 [Authorize]
 [ApiController]
-[Route("users")]
+[Route("auth")]
 [Tags(Tags.Users)]
 public sealed class GetSessionController(
     IQueryHandler<GetUserSessionQuery, UserSessionResponse> handler,

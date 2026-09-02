@@ -5,7 +5,6 @@ using Application.Abstractions.Messaging;
 using Domain.Common;
 using Domain.UserRoleScopes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.UserRoleScopes.Revoke;
@@ -13,8 +12,7 @@ namespace Application.UserRoleScopes.Revoke;
 internal sealed class RevokeUserRoleScopeCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    HybridCache hybridCache)
+    IScopeAuthorizationService scopeAuthorizationService)
     : ICommandHandler<RevokeUserRoleScopeCommand>
 {
     public async Task<Result> Handle(RevokeUserRoleScopeCommand command, CancellationToken cancellationToken)
@@ -44,8 +42,6 @@ internal sealed class RevokeUserRoleScopeCommandHandler(
         context.UserRoleScopes.Remove(userRoleScope);
 
         await context.SaveChangesAsync(cancellationToken);
-
-        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return Result.Success();
     }

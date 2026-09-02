@@ -31,6 +31,12 @@ internal sealed class CreateReversalDocumentCommandHandler(
             return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
         }
 
+        if (command.RequiredDocumentType is not null &&
+            source.DocumentType != command.RequiredDocumentType)
+        {
+            return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
+        }
+
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
             PermissionCodes.WarehouseDocuments.Create,

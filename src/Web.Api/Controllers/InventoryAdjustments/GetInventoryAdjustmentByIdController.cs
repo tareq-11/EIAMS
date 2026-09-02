@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.InventoryAdjustments;
 
 [ApiController]
-[Route("inventory-adjustments/{adjustmentId:guid}")]
+[Route("adjustments/{adjustmentId:guid}")]
 [Tags(Tags.InventoryCounts)]
 public sealed class GetInventoryAdjustmentByIdController(
     IQueryHandler<GetInventoryAdjustmentByIdQuery, InventoryAdjustmentDetailsResponse> handler) : ControllerBase

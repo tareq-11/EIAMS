@@ -6,14 +6,13 @@ namespace IntegrationTests;
 [Collection(nameof(IntegrationTestCollection))]
 public abstract class BaseIntegrationTest
 {
-    private const string AdministratorEmail = "integration-admin@example.com";
-    private const string TestPassword = "Password123!";
-    private static readonly SemaphoreSlim AdministratorLock = new(1, 1);
-    private static AccessTokens? administratorTokens;
+    private const string TestPassword = IntegrationTestWebAppFactory.AdministratorPassword;
+    private AccessTokens? administratorTokens;
 
     protected BaseIntegrationTest(IntegrationTestWebAppFactory factory)
     {
         HttpClient = factory.CreateClient();
+        HttpClient.BaseAddress = new Uri("http://localhost/api/v1/");
     }
 
     protected HttpClient HttpClient { get; }
@@ -38,7 +37,7 @@ public abstract class BaseIntegrationTest
             password = TestPassword
         };
 
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users", request);
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("admin/users", request);
         response.EnsureSuccessStatusCode();
 
         ApiEnvelope<ResourceId>? body =
@@ -54,7 +53,7 @@ public abstract class BaseIntegrationTest
     {
         var request = new { email, password = TestPassword };
 
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login", request);
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("auth/login", request);
         response.EnsureSuccessStatusCode();
 
         ApiEnvelope<AccessTokens>? body =
@@ -82,35 +81,10 @@ public abstract class BaseIntegrationTest
 
     protected async Task AuthenticateAsAdministratorAsync()
     {
-        await AdministratorLock.WaitAsync();
-        try
+        if (administratorTokens is null)
         {
-            if (administratorTokens is null)
-            {
-                HttpClient.DefaultRequestHeaders.Authorization = null;
-
-                HttpResponseMessage bootstrapResponse = await HttpClient.PostAsJsonAsync(
-                    "users/register",
-                    new
-                    {
-                        email = AdministratorEmail,
-                        firstName = "Integration",
-                        lastName = "Administrator",
-                        password = TestPassword
-                    });
-
-                if (bootstrapResponse.StatusCode is not System.Net.HttpStatusCode.Created and
-                    not System.Net.HttpStatusCode.Forbidden)
-                {
-                    bootstrapResponse.EnsureSuccessStatusCode();
-                }
-
-                administratorTokens = await LoginAsync(AdministratorEmail);
-            }
-        }
-        finally
-        {
-            AdministratorLock.Release();
+            HttpClient.DefaultRequestHeaders.Authorization = null;
+            administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorEmail);
         }
 
         Authenticate(administratorTokens.AccessToken);

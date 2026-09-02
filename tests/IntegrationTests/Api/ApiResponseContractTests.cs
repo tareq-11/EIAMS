@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace IntegrationTests.Api;
@@ -13,7 +14,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         await AuthenticateAsAdministratorAsync();
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users",
+            "admin/users",
             new
             {
                 email = UniqueEmail(),
@@ -39,7 +40,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         await AuthenticateAsAdministratorAsync();
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users",
+            "admin/users",
             new
             {
                 email = "not-an-email",
@@ -58,6 +59,42 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         error.GetProperty("message").GetString().ShouldNotBeNullOrWhiteSpace();
         error.GetProperty("details").EnumerateObject().ShouldNotBeEmpty();
         error.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task JsonTypeMismatch_Should_NotExposeImplementationDetails()
+    {
+        await AuthenticateAsAdministratorAsync();
+
+        using var content = new StringContent(
+            """
+            {
+              "name": "Warehouse Manager",
+              "description": "Manages one warehouse",
+              "allowedScopeTypes": "Warehouse"
+            }
+            """,
+            Encoding.UTF8,
+            "application/json");
+
+        HttpResponseMessage response = await HttpClient.PostAsync("admin/roles", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        string responseJson = await response.Content.ReadAsStringAsync();
+        using var body = JsonDocument.Parse(responseJson);
+        JsonElement error = body.RootElement.GetProperty("error");
+        JsonElement details = error.GetProperty("details");
+
+        body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
+        error.GetProperty("code").GetString().ShouldBe("REQUEST_VALIDATION_FAILED");
+        details.TryGetProperty("allowedScopeTypes", out JsonElement fieldErrors).ShouldBeTrue();
+        fieldErrors[0].GetString().ShouldBe("The submitted value has an invalid format.");
+        details.TryGetProperty("request", out _).ShouldBeFalse();
+        responseJson.ShouldNotContain("System.");
+        responseJson.ShouldNotContain("Domain.");
+        responseJson.ShouldNotContain("IReadOnlyCollection");
+        responseJson.ShouldNotContain("LineNumber");
+        responseJson.ShouldNotContain("BytePositionInLine");
     }
 
     [Fact]
@@ -97,7 +134,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         await RegisterUserAsync(email);
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users",
+            "admin/users",
             new
             {
                 email,

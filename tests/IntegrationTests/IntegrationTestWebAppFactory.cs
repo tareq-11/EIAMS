@@ -1,7 +1,14 @@
+using Application.Abstractions.Authentication;
+using Domain.Common;
+using Domain.Roles;
+using Domain.UserRoleScopes;
+using Domain.Users;
 using Infrastructure.Database;
+using IntegrationTests.Performance;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 using Web.Api;
@@ -10,6 +17,9 @@ namespace IntegrationTests;
 
 public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    internal const string AdministratorEmail = "integration-admin@example.com";
+    internal const string AdministratorPassword = "Password123!";
+
     private readonly string attachmentStoragePath = Path.Combine(
         Path.GetTempPath(),
         $"eiams-integration-attachments-{Guid.NewGuid():N}");
@@ -34,6 +44,13 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         // Relax rate limiting so the test suite is not throttled.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
+
+        builder.ConfigureServices(services =>
+        {
+            services.AddSingleton<SqlCommandCounterInterceptor>();
+            services.AddSingleton<DbCommandInterceptor>(serviceProvider =>
+                serviceProvider.GetRequiredService<SqlCommandCounterInterceptor>());
+        });
     }
 
     public async Task InitializeAsync()
@@ -43,6 +60,24 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         using IServiceScope scope = Services.CreateScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await dbContext.Database.MigrateAsync();
+
+        IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var administrator = User.Create(
+            Guid.NewGuid(),
+            AdministratorEmail,
+            "Integration",
+            "Administrator",
+            passwordHasher.Hash(AdministratorPassword));
+
+        dbContext.Users.Add(administrator);
+        dbContext.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(),
+            administrator.Id,
+            WellKnownRoles.AdministratorId,
+            ScopeType.Enterprise,
+            scopeId: null));
+
+        await dbContext.SaveChangesAsync();
     }
 
     public new async Task DisposeAsync()

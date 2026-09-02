@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Permissions;
 
 [ApiController]
-[Route("permissions")]
+[Route("admin/permissions")]
 [Tags(Tags.Permissions)]
 public sealed class GetListController(IQueryHandler<GetPermissionsQuery, PagedResult<PermissionResponse>> handler)
     : ControllerBase

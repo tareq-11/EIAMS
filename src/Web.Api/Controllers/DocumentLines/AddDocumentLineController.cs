@@ -48,6 +48,6 @@ public sealed class AddDocumentLineController(ICommandHandler<AddDocumentLineCom
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 
         // Document details is the canonical readable representation and includes all of its lines.
-        return result.ToCreatedApiResponse(HttpContext, _ => $"/warehouse-documents/{documentId}");
+        return result.ToCreatedApiResponse(HttpContext, _ => $"/api/v1/warehouse-documents/{documentId}");
     }
 }

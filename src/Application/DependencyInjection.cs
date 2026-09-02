@@ -11,8 +11,16 @@ namespace Application;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public static IServiceCollection AddApplication(
+        this IServiceCollection services,
+        Action<PerformanceMonitoringOptions>? configurePerformance = null)
     {
+        services.AddOptions<PerformanceMonitoringOptions>()
+            .Configure(options => configurePerformance?.Invoke(options))
+            .Validate(options => options.SlowHandlerThresholdMilliseconds > 0,
+                "PerformanceMonitoring:SlowHandlerThresholdMilliseconds must be greater than zero.")
+            .ValidateOnStart();
+
         services.Scan(scan => scan.FromAssembliesOf(typeof(DependencyInjection))
             .AddClasses(classes => classes.AssignableTo(typeof(IQueryHandler<,>)), publicOnly: false)
                 .AsImplementedInterfaces()

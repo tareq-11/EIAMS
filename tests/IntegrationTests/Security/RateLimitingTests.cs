@@ -14,7 +14,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     public async Task Login_Should_RespondSuccessfully_UnderNormalRate()
     {
         // Act: Single login request
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("users/login", new
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("auth/login", new
         {
             email = "nonexistent@example.com",
             password = "Password123!"

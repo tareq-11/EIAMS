@@ -6,7 +6,6 @@ using Domain.Common;
 using Domain.Roles;
 using Domain.UserRoleScopes;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.UserRoleScopes.RemoveAssignment;
@@ -14,8 +13,7 @@ namespace Application.UserRoleScopes.RemoveAssignment;
 internal sealed class RemoveUserRoleScopeCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    HybridCache hybridCache) : ICommandHandler<RemoveUserRoleScopeCommand>
+    IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<RemoveUserRoleScopeCommand>
 {
     public async Task<Result> Handle(
         RemoveUserRoleScopeCommand command,
@@ -59,8 +57,6 @@ internal sealed class RemoveUserRoleScopeCommandHandler(
         context.UserRoleScopes.Remove(assignment);
 
         await context.SaveChangesAsync(cancellationToken);
-        await hybridCache.RemoveByTagAsync($"user:{command.UserId}", cancellationToken);
-        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return Result.Success();
     }

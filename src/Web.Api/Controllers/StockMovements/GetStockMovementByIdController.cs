@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.StockMovements;
 
 [ApiController]
-[Route("stock-movements/{movementId:guid}")]
+[Route("inventory/movements/{movementId:guid}")]
 [Tags(Tags.InventoryLedger)]
 public sealed class GetStockMovementByIdController(
     IQueryHandler<GetStockMovementByIdQuery, StockMovementResponse> handler) : ControllerBase

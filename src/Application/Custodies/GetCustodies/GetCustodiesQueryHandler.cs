@@ -7,6 +7,7 @@ using Application.Abstractions.Recipients;
 using Domain.Common;
 using Domain.Custodies;
 using Domain.DurableCustodyAllocations;
+using Domain.Materials;
 using Domain.TrackedMaterialUnits;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -37,273 +38,263 @@ internal sealed class GetCustodiesQueryHandler(
         }
 
         Guid[] allowedWarehouseIds = access.WarehouseIds.ToArray();
-
         int page = query.Page <= 0 ? 1 : query.Page;
-        int pageSize = query.PageSize <= 0 ? 20 : query.PageSize;
-        if (pageSize > 100)
-        {
-            pageSize = 100;
-        }
+        int pageSize = query.PageSize <= 0 ? 20 : Math.Min(query.PageSize, 100);
+        int offset = checked((page - 1) * pageSize);
+        int fetchLimit = checked(offset + pageSize);
+        string? requestedStatus = string.IsNullOrWhiteSpace(query.Status) ? null : query.Status.Trim();
+        var candidateRows = new List<CustodyPageRow>(fetchLimit * 3);
+        int totalCount = 0;
 
-        var allItems = new List<CustodyResponse>();
-
-        // 1. Asset Custodies
         if (query.SubjectType is null or CustodySubjectType.Asset)
         {
-            var assetQuery = from c in context.Custodies.AsNoTracking()
-                             join a in context.Assets.AsNoTracking() on c.AssetId equals a.Id
-                             join m in context.Materials.AsNoTracking() on a.MaterialId equals m.Id
-                             join w in context.Warehouses.AsNoTracking() on a.WarehouseId equals w.Id
-                             join doc in context.WarehouseDocuments.AsNoTracking() on c.IssueDocumentId equals doc.Id
-                             select new
-                             {
-                                 Custody = c,
-                                 Asset = a,
-                                 Material = m,
-                                 Warehouse = w,
-                                 Document = doc
-                             } into row
-                             where access.HasEnterpriseAccess || allowedWarehouseIds.Contains(row.Warehouse.Id)
-                             select row;
+            var assetQuery = from custody in context.Custodies.AsNoTracking()
+                             join asset in context.Assets.AsNoTracking() on custody.AssetId equals asset.Id
+                             join material in context.Materials.AsNoTracking() on asset.MaterialId equals material.Id
+                             join warehouse in context.Warehouses.AsNoTracking() on asset.WarehouseId equals warehouse.Id
+                             join document in context.WarehouseDocuments.AsNoTracking()
+                                 on custody.IssueDocumentId equals document.Id
+                             where access.HasEnterpriseAccess || allowedWarehouseIds.Contains(warehouse.Id)
+                             select new { custody, asset, material, warehouse, document };
 
             if (query.HolderType.HasValue)
             {
-                assetQuery = assetQuery.Where(x => x.Custody.HolderType == query.HolderType.Value);
+                assetQuery = assetQuery.Where(row => row.custody.HolderType == query.HolderType.Value);
             }
 
             if (query.HolderId.HasValue)
             {
-                assetQuery = assetQuery.Where(x => x.Custody.HolderId == query.HolderId.Value);
+                assetQuery = assetQuery.Where(row => row.custody.HolderId == query.HolderId.Value);
             }
 
             if (query.MaterialId.HasValue)
             {
-                assetQuery = assetQuery.Where(x => x.Asset.MaterialId == query.MaterialId.Value);
+                assetQuery = assetQuery.Where(row => row.asset.MaterialId == query.MaterialId.Value);
             }
 
             if (query.WarehouseId.HasValue)
             {
-                assetQuery = assetQuery.Where(x => x.Asset.WarehouseId == query.WarehouseId.Value);
+                assetQuery = assetQuery.Where(row => row.asset.WarehouseId == query.WarehouseId.Value);
             }
 
-            if (!string.IsNullOrWhiteSpace(query.Status))
+            if (requestedStatus is not null)
             {
-                assetQuery = assetQuery.Where(x => x.Custody.Status.ToString() == query.Status);
+                assetQuery = Enum.TryParse(requestedStatus, true, out CustodyStatus status)
+                    ? assetQuery.Where(row => row.custody.Status == status)
+                    : assetQuery.Where(_ => false);
             }
 
-            var assetRows = await assetQuery.ToListAsync(cancellationToken);
+            totalCount += await assetQuery.CountAsync(cancellationToken);
+            IQueryable<CustodyPageRow> projectedAssets = assetQuery
+                .OrderByDescending(row => row.custody.FromUtc)
+                .ThenBy(row => row.custody.Id)
+                .Take(fetchLimit)
+                .Select(row => new CustodyPageRow(
+                CustodySubjectType.Asset, row.asset.Id, row.custody.Id,
+                row.material.Id, row.material.NameAr, row.material.NameEn, row.material.Code,
+                row.material.MaterialKind, row.material.TrackingType,
+                row.asset.SerialNumber, row.asset.AssetNumber,
+                row.warehouse.Id, row.warehouse.Name,
+                row.custody.HolderType, row.custody.HolderId, row.custody.CustodyKind,
+                1m,
+                row.custody.Status == CustodyStatus.Active ? 1m : 0m,
+                row.custody.Status == CustodyStatus.Closed ? 1m : 0m,
+                row.custody.IssueDocumentId, row.document.SystemReferenceNumber,
+                row.custody.Status, null, null,
+                row.custody.FromUtc, row.custody.ToUtc, row.custody.RowVersion));
 
-            foreach (var row in assetRows)
-            {
-                CounterpartResolution? resolution = await counterpartResolver.ResolveAsync(
-                    row.Custody.HolderType,
-                    row.Custody.HolderId,
-                    cancellationToken);
-
-                allItems.Add(new CustodyResponse(
-                    CustodySubjectType.Asset,
-                    row.Asset.Id,
-                    row.Custody.Id,
-                    row.Material.Id,
-                    row.Material.NameAr,
-                    row.Material.NameEn,
-                    row.Material.Code,
-                    row.Material.MaterialKind.ToString(),
-                    row.Material.TrackingType.ToString(),
-                    row.Asset.SerialNumber,
-                    row.Asset.AssetNumber,
-                    row.Warehouse.Id,
-                    row.Warehouse.Name,
-                    row.Custody.HolderType,
-                    row.Custody.HolderId,
-                    resolution?.DisplayName ?? "Unknown",
-                    row.Custody.CustodyKind,
-                    1m,
-                    row.Custody.Status == CustodyStatus.Active ? 1m : 0m,
-                    row.Custody.Status == CustodyStatus.Closed ? 1m : 0m,
-                    row.Custody.IssueDocumentId,
-                    row.Document.SystemReferenceNumber,
-                    row.Custody.Status.ToString(),
-                    row.Custody.FromUtc,
-                    row.Custody.ToUtc,
-                    row.Custody.RowVersion));
-            }
+            candidateRows.AddRange(await projectedAssets.ToListAsync(cancellationToken));
         }
 
-        // 2. Tracked Unit (Durable + Serial)
         if (query.SubjectType is null or CustodySubjectType.TrackedUnit)
         {
-            var unitQuery = from u in context.TrackedMaterialUnits.AsNoTracking()
-                            join m in context.Materials.AsNoTracking() on u.MaterialId equals m.Id
-                            join w in context.Warehouses.AsNoTracking() on u.WarehouseId equals w.Id
-                            join doc in context.WarehouseDocuments.AsNoTracking() on u.IssueDocumentId equals doc.Id
-                            select new
-                            {
-                                Unit = u,
-                                Material = m,
-                                Warehouse = w,
-                                Document = doc
-                            } into row
-                            where access.HasEnterpriseAccess || allowedWarehouseIds.Contains(row.Warehouse.Id)
-                            select row;
+            var unitQuery = from unit in context.TrackedMaterialUnits.AsNoTracking()
+                            join material in context.Materials.AsNoTracking() on unit.MaterialId equals material.Id
+                            join warehouse in context.Warehouses.AsNoTracking() on unit.WarehouseId equals warehouse.Id
+                            join document in context.WarehouseDocuments.AsNoTracking()
+                                on unit.IssueDocumentId equals document.Id
+                            where access.HasEnterpriseAccess || allowedWarehouseIds.Contains(warehouse.Id)
+                            select new { unit, material, warehouse, document };
 
             if (query.HolderType.HasValue)
             {
-                unitQuery = unitQuery.Where(x => x.Unit.HolderType == query.HolderType.Value);
+                unitQuery = unitQuery.Where(row => row.unit.HolderType == query.HolderType.Value);
             }
 
             if (query.HolderId.HasValue)
             {
-                unitQuery = unitQuery.Where(x => x.Unit.HolderId == query.HolderId.Value);
+                unitQuery = unitQuery.Where(row => row.unit.HolderId == query.HolderId.Value);
             }
 
             if (query.MaterialId.HasValue)
             {
-                unitQuery = unitQuery.Where(x => x.Unit.MaterialId == query.MaterialId.Value);
+                unitQuery = unitQuery.Where(row => row.unit.MaterialId == query.MaterialId.Value);
             }
 
             if (query.WarehouseId.HasValue)
             {
-                unitQuery = unitQuery.Where(x => x.Unit.WarehouseId == query.WarehouseId.Value);
+                unitQuery = unitQuery.Where(row => row.unit.WarehouseId == query.WarehouseId.Value);
             }
 
-            if (!string.IsNullOrWhiteSpace(query.Status))
+            if (requestedStatus is not null)
             {
-                unitQuery = unitQuery.Where(x => x.Unit.Status.ToString() == query.Status);
+                unitQuery = Enum.TryParse(requestedStatus, true, out TrackedMaterialUnitStatus status)
+                    ? unitQuery.Where(row => row.unit.Status == status)
+                    : unitQuery.Where(_ => false);
             }
 
-            var unitRows = await unitQuery.ToListAsync(cancellationToken);
+            totalCount += await unitQuery.CountAsync(cancellationToken);
+            IQueryable<CustodyPageRow> projectedUnits = unitQuery
+                .OrderByDescending(row => row.unit.FromUtc)
+                .ThenBy(row => row.unit.Id)
+                .Take(fetchLimit)
+                .Select(row => new CustodyPageRow(
+                CustodySubjectType.TrackedUnit, row.unit.Id, row.unit.Id,
+                row.material.Id, row.material.NameAr, row.material.NameEn, row.material.Code,
+                row.material.MaterialKind, row.material.TrackingType,
+                row.unit.SerialNumber, null,
+                row.warehouse.Id, row.warehouse.Name,
+                row.unit.HolderType, row.unit.HolderId, row.unit.CustodyKind,
+                1m,
+                row.unit.Status == TrackedMaterialUnitStatus.Issued ? 1m : 0m,
+                row.unit.Status == TrackedMaterialUnitStatus.Returned ? 1m : 0m,
+                row.unit.IssueDocumentId, row.document.SystemReferenceNumber,
+                null, row.unit.Status, null,
+                row.unit.FromUtc, row.unit.ToUtc, row.unit.RowVersion));
 
-            foreach (var row in unitRows)
-            {
-                CounterpartResolution? resolution = await counterpartResolver.ResolveAsync(
-                    row.Unit.HolderType,
-                    row.Unit.HolderId,
-                    cancellationToken);
-
-                allItems.Add(new CustodyResponse(
-                    CustodySubjectType.TrackedUnit,
-                    row.Unit.Id,
-                    row.Unit.Id,
-                    row.Material.Id,
-                    row.Material.NameAr,
-                    row.Material.NameEn,
-                    row.Material.Code,
-                    row.Material.MaterialKind.ToString(),
-                    row.Material.TrackingType.ToString(),
-                    row.Unit.SerialNumber,
-                    null,
-                    row.Warehouse.Id,
-                    row.Warehouse.Name,
-                    row.Unit.HolderType,
-                    row.Unit.HolderId,
-                    resolution?.DisplayName ?? "Unknown",
-                    row.Unit.CustodyKind,
-                    1m,
-                    row.Unit.Status == TrackedMaterialUnitStatus.Issued ? 1m : 0m,
-                    row.Unit.Status == TrackedMaterialUnitStatus.Returned ? 1m : 0m,
-                    row.Unit.IssueDocumentId,
-                    row.Document.SystemReferenceNumber,
-                    row.Unit.Status.ToString(),
-                    row.Unit.FromUtc,
-                    row.Unit.ToUtc,
-                    row.Unit.RowVersion));
-            }
+            candidateRows.AddRange(await projectedUnits.ToListAsync(cancellationToken));
         }
 
-        // 3. Durable Custody Allocation (Durable + Quantity)
         if (query.SubjectType is null or CustodySubjectType.MaterialQuantity)
         {
-            var allocQuery = from a in context.DurableCustodyAllocations.AsNoTracking()
-                             join m in context.Materials.AsNoTracking() on a.MaterialId equals m.Id
-                             join w in context.Warehouses.AsNoTracking() on a.WarehouseId equals w.Id
-                             join doc in context.WarehouseDocuments.AsNoTracking() on a.IssueDocumentId equals doc.Id
-                             select new
-                             {
-                                 Allocation = a,
-                                 Material = m,
-                                 Warehouse = w,
-                                 Document = doc
-                             } into row
-                             where access.HasEnterpriseAccess || allowedWarehouseIds.Contains(row.Warehouse.Id)
-                             select row;
+            var allocationQuery = from allocation in context.DurableCustodyAllocations.AsNoTracking()
+                                  join material in context.Materials.AsNoTracking()
+                                      on allocation.MaterialId equals material.Id
+                                  join warehouse in context.Warehouses.AsNoTracking()
+                                      on allocation.WarehouseId equals warehouse.Id
+                                  join document in context.WarehouseDocuments.AsNoTracking()
+                                      on allocation.IssueDocumentId equals document.Id
+                                  where access.HasEnterpriseAccess || allowedWarehouseIds.Contains(warehouse.Id)
+                                  select new { allocation, material, warehouse, document };
 
             if (query.HolderType.HasValue)
             {
-                allocQuery = allocQuery.Where(x => x.Allocation.HolderType == query.HolderType.Value);
+                allocationQuery = allocationQuery.Where(
+                    row => row.allocation.HolderType == query.HolderType.Value);
             }
 
             if (query.HolderId.HasValue)
             {
-                allocQuery = allocQuery.Where(x => x.Allocation.HolderId == query.HolderId.Value);
+                allocationQuery = allocationQuery.Where(row => row.allocation.HolderId == query.HolderId.Value);
             }
 
             if (query.MaterialId.HasValue)
             {
-                allocQuery = allocQuery.Where(x => x.Allocation.MaterialId == query.MaterialId.Value);
+                allocationQuery = allocationQuery.Where(row => row.allocation.MaterialId == query.MaterialId.Value);
             }
 
             if (query.WarehouseId.HasValue)
             {
-                allocQuery = allocQuery.Where(x => x.Allocation.WarehouseId == query.WarehouseId.Value);
+                allocationQuery = allocationQuery.Where(
+                    row => row.allocation.WarehouseId == query.WarehouseId.Value);
             }
 
-            if (!string.IsNullOrWhiteSpace(query.Status))
+            if (requestedStatus is not null)
             {
-                allocQuery = allocQuery.Where(x => x.Allocation.Status.ToString() == query.Status);
+                allocationQuery = Enum.TryParse(requestedStatus, true, out DurableCustodyAllocationStatus status)
+                    ? allocationQuery.Where(row => row.allocation.Status == status)
+                    : allocationQuery.Where(_ => false);
             }
 
-            var allocRows = await allocQuery.ToListAsync(cancellationToken);
+            totalCount += await allocationQuery.CountAsync(cancellationToken);
+            IQueryable<CustodyPageRow> projectedAllocations = allocationQuery
+                .OrderByDescending(row => row.allocation.FromUtc)
+                .ThenBy(row => row.allocation.Id)
+                .Take(fetchLimit)
+                .Select(row => new CustodyPageRow(
+                CustodySubjectType.MaterialQuantity, row.allocation.Id, row.allocation.Id,
+                row.material.Id, row.material.NameAr, row.material.NameEn, row.material.Code,
+                row.material.MaterialKind, row.material.TrackingType,
+                null, null,
+                row.warehouse.Id, row.warehouse.Name,
+                row.allocation.HolderType, row.allocation.HolderId, row.allocation.CustodyKind,
+                row.allocation.IssuedQuantity, row.allocation.ActiveQuantity, row.allocation.ReturnedQuantity,
+                row.allocation.IssueDocumentId, row.document.SystemReferenceNumber,
+                null, null, row.allocation.Status,
+                row.allocation.FromUtc, null, row.allocation.RowVersion));
 
-            foreach (var row in allocRows)
-            {
-                CounterpartResolution? resolution = await counterpartResolver.ResolveAsync(
-                    row.Allocation.HolderType,
-                    row.Allocation.HolderId,
-                    cancellationToken);
-
-                allItems.Add(new CustodyResponse(
-                    CustodySubjectType.MaterialQuantity,
-                    row.Allocation.Id,
-                    row.Allocation.Id,
-                    row.Material.Id,
-                    row.Material.NameAr,
-                    row.Material.NameEn,
-                    row.Material.Code,
-                    row.Material.MaterialKind.ToString(),
-                    row.Material.TrackingType.ToString(),
-                    null,
-                    null,
-                    row.Warehouse.Id,
-                    row.Warehouse.Name,
-                    row.Allocation.HolderType,
-                    row.Allocation.HolderId,
-                    resolution?.DisplayName ?? "Unknown",
-                    row.Allocation.CustodyKind,
-                    row.Allocation.IssuedQuantity,
-                    row.Allocation.ActiveQuantity,
-                    row.Allocation.ReturnedQuantity,
-                    row.Allocation.IssueDocumentId,
-                    row.Document.SystemReferenceNumber,
-                    row.Allocation.Status.ToString(),
-                    row.Allocation.FromUtc,
-                    null,
-                    row.Allocation.RowVersion));
-            }
+            candidateRows.AddRange(await projectedAllocations.ToListAsync(cancellationToken));
         }
 
-        int totalCount = allItems.Count;
-        var pageItems = allItems
-            .OrderByDescending(x => x.FromUtc)
-            .ThenBy(x => x.CustodyId)
-            .Skip((page - 1) * pageSize)
+        var rows = candidateRows
+            .OrderByDescending(row => row.FromUtc)
+            .ThenBy(row => row.CustodyId)
+            .Skip(offset)
             .Take(pageSize)
             .ToList();
 
-        return new PagedResult<CustodyResponse>(
-            pageItems,
-            page,
-            pageSize,
-            totalCount);
+        CounterpartReference[] holderReferences = rows
+            .Select(row => new CounterpartReference(row.HolderType, row.HolderId))
+            .Distinct()
+            .ToArray();
+        IReadOnlyDictionary<CounterpartReference, CounterpartResolution> holders =
+            await counterpartResolver.ResolveManyAsync(holderReferences, cancellationToken);
+
+        var items = rows.Select(row =>
+        {
+            holders.TryGetValue(
+                new CounterpartReference(row.HolderType, row.HolderId),
+                out CounterpartResolution? holder);
+
+            return new CustodyResponse(
+                row.SubjectType, row.SubjectId, row.CustodyId,
+                row.MaterialId, row.MaterialNameAr, row.MaterialNameEn, row.MaterialCode,
+                row.MaterialKind.ToString(), row.TrackingType.ToString(),
+                row.SerialNumber, row.AssetNumber,
+                row.WarehouseId, row.WarehouseName,
+                row.HolderType, row.HolderId, holder?.DisplayName ?? "Unknown", row.CustodyKind,
+                row.IssuedQuantity, row.ActiveQuantity, row.ReturnedQuantity,
+                row.IssueDocumentId, row.SystemReferenceNumber, GetStatus(row),
+                row.FromUtc, row.ToUtc, row.RowVersion);
+        }).ToList();
+
+        return new PagedResult<CustodyResponse>(items, page, pageSize, totalCount);
     }
+
+    private static string GetStatus(CustodyPageRow row) => row.SubjectType switch
+    {
+        CustodySubjectType.Asset => row.AssetStatus?.ToString() ?? "Unknown",
+        CustodySubjectType.TrackedUnit => row.TrackedUnitStatus?.ToString() ?? "Unknown",
+        CustodySubjectType.MaterialQuantity => row.AllocationStatus?.ToString() ?? "Unknown",
+        _ => "Unknown"
+    };
+
+    private sealed record CustodyPageRow(
+        CustodySubjectType SubjectType,
+        Guid SubjectId,
+        Guid CustodyId,
+        Guid MaterialId,
+        string MaterialNameAr,
+        string? MaterialNameEn,
+        string MaterialCode,
+        MaterialKind MaterialKind,
+        TrackingType TrackingType,
+        string? SerialNumber,
+        string? AssetNumber,
+        Guid WarehouseId,
+        string WarehouseName,
+        PartyType HolderType,
+        Guid HolderId,
+        CustodyKind CustodyKind,
+        decimal IssuedQuantity,
+        decimal ActiveQuantity,
+        decimal ReturnedQuantity,
+        Guid IssueDocumentId,
+        string? SystemReferenceNumber,
+        CustodyStatus? AssetStatus,
+        TrackedMaterialUnitStatus? TrackedUnitStatus,
+        DurableCustodyAllocationStatus? AllocationStatus,
+        DateTime FromUtc,
+        DateTime? ToUtc,
+        int RowVersion);
 }

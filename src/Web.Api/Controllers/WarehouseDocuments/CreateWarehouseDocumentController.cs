@@ -29,6 +29,6 @@ public sealed class CreateWarehouseDocumentController(ICommandHandler<CreateWare
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 
-        return result.ToCreatedApiResponse(HttpContext, documentId => $"/warehouse-documents/{documentId}");
+        return result.ToCreatedApiResponse(HttpContext, documentId => $"/api/v1/warehouse-documents/{documentId}");
     }
 }

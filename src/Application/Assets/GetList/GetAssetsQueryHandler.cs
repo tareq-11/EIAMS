@@ -58,7 +58,9 @@ internal sealed class GetAssetsQueryHandler(
                 warehouse.Name,
                 current.CurrentStatus.ToString(),
                 current.ActiveCustodyId,
+#pragma warning disable IDE0031 // Null propagation is not supported in expression trees.
                 current.HolderType == null ? null : current.HolderType.ToString(),
+#pragma warning restore IDE0031
                 current.HolderId,
                 asset.AcquisitionDate,
                 asset.WarrantyExpiry,

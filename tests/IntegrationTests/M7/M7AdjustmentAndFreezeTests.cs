@@ -291,7 +291,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsync(
-            $"warehouse-documents/{disposal.Id}/reversals", null);
+            $"adjustments/{disposal.Id}/reverse", null);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
@@ -316,7 +316,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "inventory-adjustments/disposals",
+            "adjustments/disposals",
             new { warehouseId = seed.WarehouseId, assetIds = new[] { asset.Id }, reason = "Damaged" });
 
         // Assert
@@ -342,7 +342,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
         HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync(
-            "inventory-adjustments", new { warehouseId = seed.WarehouseId, reason = "Variance" });
+            "adjustments", new { warehouseId = seed.WarehouseId, reason = "Variance" });
         createResponse.EnsureSuccessStatusCode();
         ApiEnvelope<ResourceIdDto>? created =
             await createResponse.Content.ReadFromJsonAsync<ApiEnvelope<ResourceIdDto>>();
@@ -351,7 +351,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
 
         // Act
         HttpResponseMessage addResponse = await HttpClient.PostAsJsonAsync(
-            $"inventory-adjustments/{documentId}/lines",
+            $"adjustments/{documentId}/lines",
             new
             {
                 materialId = seed.MaterialId,
@@ -365,11 +365,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
             await addResponse.Content.ReadFromJsonAsync<ApiEnvelope<ResourceIdDto>>();
         added.ShouldNotBeNull();
         HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync(
-            $"inventory-adjustments/{documentId}/lines/{added.Data.Id}",
+            $"adjustments/{documentId}/lines/{added.Data.Id}",
             new { difference = 3m, unitId = seed.UnitId, reason = "Surplus", expectedRowVersion = 2 });
         updateResponse.EnsureSuccessStatusCode();
         HttpResponseMessage removeResponse = await HttpClient.DeleteAsync(
-            $"inventory-adjustments/{documentId}/lines/{added.Data.Id}?expectedRowVersion=3");
+            $"adjustments/{documentId}/lines/{added.Data.Id}?expectedRowVersion=3");
 
         // Assert
         removeResponse.EnsureSuccessStatusCode();

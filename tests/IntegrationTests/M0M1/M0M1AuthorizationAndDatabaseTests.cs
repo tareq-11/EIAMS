@@ -37,7 +37,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         // Arrange
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("materials");
+        HttpResponseMessage response = await HttpClient.GetAsync("catalog/materials");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
@@ -146,11 +146,11 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
 
         // Act
         HttpResponseMessage assignResponse = await HttpClient.PostAsJsonAsync(
-            $"roles/{roleId}/permissions",
+            $"admin/roles/{roleId}/permissions",
             new { permissionId = WellKnownPermissions.MaterialsManageId });
-        HttpResponseMessage listedResponse = await HttpClient.GetAsync($"roles/{roleId}/permissions");
+        HttpResponseMessage listedResponse = await HttpClient.GetAsync($"admin/roles/{roleId}/permissions");
         HttpResponseMessage removeResponse = await HttpClient.DeleteAsync(
-            $"roles/{roleId}/permissions/{WellKnownPermissions.MaterialsManageId}");
+            $"admin/roles/{roleId}/permissions/{WellKnownPermissions.MaterialsManageId}");
 
         // Assert
         assignResponse.StatusCode.ShouldBe(HttpStatusCode.OK);

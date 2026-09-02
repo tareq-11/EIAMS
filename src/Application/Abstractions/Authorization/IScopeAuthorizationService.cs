@@ -55,6 +55,10 @@ public interface IScopeAuthorizationService
         PartyType partyType,
         Guid partyId,
         CancellationToken cancellationToken);
+
+    Task<PartyAccessScope> GetPartyAccessScopeAsync(
+        Guid userId,
+        CancellationToken cancellationToken);
 }
 
 public sealed record UserAuthorizationAssignment(
@@ -73,3 +77,9 @@ public sealed record OrganizationalUnitPermissionScope(
 public sealed record WarehousePermissionScope(
     bool HasEnterpriseAccess,
     IReadOnlySet<Guid> WarehouseIds);
+
+public sealed record PartyAccessScope(
+    bool HasAssignment,
+    bool HasEnterpriseAccess,
+    IReadOnlySet<Guid> SiteIds,
+    IReadOnlySet<Guid> OrganizationalUnitIds);

@@ -80,7 +80,10 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         context.OrganizationalUnits.Add(OrganizationalUnit.Create(parentId, otherSiteId, null, "Parent", "Department"));
         await context.SaveChangesAsync();
 
-        var handler = new CreateOrganizationalUnitCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new CreateOrganizationalUnitCommandHandler(
+            context,
+            CreateUserContext(),
+            CreateAuthorization(true));
         var command = new CreateOrganizationalUnitCommand(requestedSiteId, parentId, "Child", "Department");
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
@@ -173,7 +176,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Site));
         await context.SaveChangesAsync();
 
-        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
         var command = new GrantUserRoleScopeCommand(userId, roleId, ScopeType.Site, missingSiteId);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
@@ -194,7 +197,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         await context.SaveChangesAsync();
 
-        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new GrantUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
         var command = new GrantUserRoleScopeCommand(userId, roleId, ScopeType.Enterprise, null);
 
         Result<Guid> created = await handler.Handle(command, CancellationToken.None);

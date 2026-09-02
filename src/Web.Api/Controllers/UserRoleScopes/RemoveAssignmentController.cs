@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.UserRoleScopes;
 
 [ApiController]
-[Route("users/{userId:guid}/role-scope")]
+[Route("admin/users/{userId:guid}/role-scope")]
 [Tags(Tags.UserRoleScopes)]
 public sealed class RemoveAssignmentController(
     ICommandHandler<RemoveUserRoleScopeCommand> handler) : ControllerBase

@@ -6,6 +6,26 @@ namespace IntegrationTests.M7;
 public sealed class M7AdjustmentHttpTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
 {
     [Fact]
+    public async Task PostAdjustment_Should_ReturnUnauthorized_WhenTokenIsMissing()
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"adjustments/{Guid.NewGuid()}/post",
+            new { expectedRowVersion = 1 });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ReverseAdjustment_Should_ReturnUnauthorized_WhenTokenIsMissing()
+    {
+        HttpResponseMessage response = await HttpClient.PostAsync(
+            $"adjustments/{Guid.NewGuid()}/reverse",
+            content: null);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task CreateDisposal_Should_ReturnUnauthorized_WhenTokenIsMissing()
     {
         // Arrange
@@ -18,7 +38,7 @@ public sealed class M7AdjustmentHttpTests(IntegrationTestWebAppFactory factory) 
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "inventory-adjustments/disposals", request);
+            "adjustments/disposals", request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
@@ -40,7 +60,7 @@ public sealed class M7AdjustmentHttpTests(IntegrationTestWebAppFactory factory) 
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            $"inventory-adjustments/{documentId}/lines", request);
+            $"adjustments/{documentId}/lines", request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);

@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
-[Route("users")]
+[Route("auth")]
 [Tags(Tags.Users)]
 public sealed class LogoutController(ICommandHandler<LogoutUserCommand> handler) : ControllerBase
 {

@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialFamilies;
 
 [ApiController]
-[Route("material-families")]
+[Route("catalog/families")]
 [Tags(Tags.MaterialFamilies)]
 public sealed class CreateMaterialFamilyController(ICommandHandler<CreateMaterialFamilyCommand, Guid> handler)
     : ControllerBase

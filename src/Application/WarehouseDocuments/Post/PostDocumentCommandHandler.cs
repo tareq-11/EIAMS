@@ -31,6 +31,12 @@ internal sealed class PostDocumentCommandHandler(
             return Result.Failure<PostDocumentResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
+        if (command.RequiredDocumentType is not null &&
+            document.DocumentType != command.RequiredDocumentType)
+        {
+            return Result.Failure<PostDocumentResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
+        }
+
         bool hasReview = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
             PermissionCodes.WarehouseDocuments.Review,

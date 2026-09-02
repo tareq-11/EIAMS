@@ -31,7 +31,8 @@ public static class DependencyInjection
         services.AddSwaggerGen();
 
         services
-            .AddControllers()
+            .AddControllers(options =>
+                options.Conventions.Insert(0, new ApiVersionRouteConvention("api/v1")))
             .AddJsonOptions(options =>
             {
                 options.JsonSerializerOptions.Converters.Add(

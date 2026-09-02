@@ -391,7 +391,7 @@ public sealed class AuditCaptureTests : BaseIntegrationTest
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
 
         HttpResponseMessage refreshResponse = await HttpClient.PostAsJsonAsync(
-            "users/refresh-token",
+            "auth/refresh",
             new { refreshToken = tokens.RefreshToken });
 
         refreshResponse.StatusCode.ShouldBe(HttpStatusCode.OK);

@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialUnitConversions;
 
 [ApiController]
-[Route("materials/{materialId:guid}/unit-conversions")]
+[Route("catalog/materials/{materialId:guid}/unit-conversions")]
 [Tags(Tags.MaterialUnitConversions)]
 public sealed class UpdateController(
     ICommandHandler<UpdateMaterialUnitConversionCommand> handler) : ControllerBase

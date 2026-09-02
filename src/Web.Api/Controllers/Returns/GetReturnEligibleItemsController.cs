@@ -1,5 +1,6 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Application.Returns.GetEligibleItems;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
@@ -11,7 +12,7 @@ namespace Web.Api.Controllers.Returns;
 [Route("returns/eligible-items")]
 [Tags(Tags.WarehouseDocuments)]
 public sealed class GetReturnEligibleItemsController(
-    IQueryHandler<GetReturnEligibleItemsQuery, IReadOnlyList<ReturnEligibleItemResponse>> handler)
+    IQueryHandler<GetReturnEligibleItemsQuery, PagedResult<ReturnEligibleItemResponse>> handler)
     : ControllerBase
 {
     [HttpGet]
@@ -22,11 +23,12 @@ public sealed class GetReturnEligibleItemsController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(
         [FromQuery] Guid originalIssueDocumentId,
+        [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {
-        var query = new GetReturnEligibleItemsQuery(originalIssueDocumentId);
-        Result<IReadOnlyList<ReturnEligibleItemResponse>> result = await handler.Handle(query, cancellationToken);
+        var query = new GetReturnEligibleItemsQuery(originalIssueDocumentId, pagination.Page, pagination.PageSize);
+        Result<PagedResult<ReturnEligibleItemResponse>> result = await handler.Handle(query, cancellationToken);
 
-        return result.ToApiResponse(HttpContext);
+        return result.ToPaginatedApiResponse(HttpContext);
     }
 }

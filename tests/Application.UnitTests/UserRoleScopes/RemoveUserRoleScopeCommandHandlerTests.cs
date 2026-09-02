@@ -19,7 +19,7 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
     {
         await using TestDbContext context = CreateDbContext();
         var targetUserId = Guid.NewGuid();
-        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result result = await handler.Handle(new RemoveUserRoleScopeCommand(targetUserId), CancellationToken.None);
 
@@ -39,7 +39,7 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.UserRoleScopes.Add(adminAssignment);
         await context.SaveChangesAsync();
 
-        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result result = await handler.Handle(new RemoveUserRoleScopeCommand(adminUserId), CancellationToken.None);
 
@@ -61,7 +61,7 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.UserRoleScopes.Add(assignment);
         await context.SaveChangesAsync();
 
-        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true), CreateCache());
+        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
 
         Result result = await handler.Handle(new RemoveUserRoleScopeCommand(userId), CancellationToken.None);
 

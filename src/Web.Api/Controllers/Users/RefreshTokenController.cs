@@ -9,14 +9,14 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
-[Route("users")]
+[Route("auth")]
 [Tags(Tags.Users)]
 public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler)
     : ControllerBase
 {
     public sealed record RequestBody(string? RefreshToken);
 
-    [HttpPost("refresh-token")]
+    [HttpPost("refresh")]
     [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(

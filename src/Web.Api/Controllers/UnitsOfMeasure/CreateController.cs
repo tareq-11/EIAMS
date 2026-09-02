@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.UnitsOfMeasure;
 
 [ApiController]
-[Route("units-of-measure")]
+[Route("catalog/units-of-measure")]
 [Tags(Tags.UnitsOfMeasure)]
 public sealed class CreateController(ICommandHandler<CreateUnitOfMeasureCommand, Guid> handler) : ControllerBase
 {

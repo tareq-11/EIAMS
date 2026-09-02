@@ -32,6 +32,6 @@ public sealed class CreateReversalDocumentController(ICommandHandler<CreateRever
 
         return result.ToCreatedApiResponse(
             HttpContext,
-            reversalId => $"/warehouse-documents/{reversalId}");
+            reversalId => $"/api/v1/warehouse-documents/{reversalId}");
     }
 }

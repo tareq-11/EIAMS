@@ -31,7 +31,7 @@ public sealed class JwtConfigurationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("permissions");
+        HttpResponseMessage response = await HttpClient.GetAsync("admin/permissions");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);

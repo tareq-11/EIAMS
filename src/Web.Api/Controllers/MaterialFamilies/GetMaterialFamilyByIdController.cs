@@ -8,17 +8,17 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialFamilies;
 
 [ApiController]
-[Route("material-families")]
+[Route("catalog/families")]
 [Tags(Tags.MaterialFamilies)]
 public sealed class GetMaterialFamilyByIdController(
     IQueryHandler<GetMaterialFamilyByIdQuery, MaterialFamilyResponse> handler) : ControllerBase
 {
-    [HttpGet("{materialFamilyId:guid}")]
+    [HttpGet("{familyId:guid}")]
     [ProducesResponseType<ApiResponse<MaterialFamilyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.View)]
-    public async Task<IResult> Handle(Guid materialFamilyId, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(Guid familyId, CancellationToken cancellationToken)
     {
-        var query = new GetMaterialFamilyByIdQuery(materialFamilyId);
+        var query = new GetMaterialFamilyByIdQuery(familyId);
 
         Result<MaterialFamilyResponse> result = await handler.Handle(query, cancellationToken);
 

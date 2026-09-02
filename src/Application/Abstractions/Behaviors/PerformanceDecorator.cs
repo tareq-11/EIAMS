@@ -1,17 +1,25 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Application.Abstractions.Messaging;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Application.Abstractions.Behaviors;
 
 internal static class PerformanceDecorator
 {
-    private const int DefaultThresholdMilliseconds = 500;
+    internal const string MeterName = "CleanArchitecture.Application";
+    private static readonly Meter Meter = new(MeterName);
+    private static readonly Histogram<double> HandlerDuration = Meter.CreateHistogram<double>(
+        "application.handler.duration",
+        "ms",
+        "Application command and query handler duration.");
 
     internal sealed class CommandHandler<TCommand, TResponse>(
         ICommandHandler<TCommand, TResponse> innerHandler,
-        ILogger<CommandHandler<TCommand, TResponse>> logger)
+        ILogger<CommandHandler<TCommand, TResponse>> logger,
+        IOptions<PerformanceMonitoringOptions> options)
         : ICommandHandler<TCommand, TResponse>
         where TCommand : ICommand<TResponse>
     {
@@ -23,7 +31,9 @@ internal static class PerformanceDecorator
 
             stopwatch.Stop();
 
-            if (stopwatch.ElapsedMilliseconds > DefaultThresholdMilliseconds)
+            RecordDuration("command", typeof(TCommand).Name, stopwatch.Elapsed.TotalMilliseconds, result.IsSuccess);
+
+            if (stopwatch.ElapsedMilliseconds > options.Value.SlowHandlerThresholdMilliseconds)
             {
                 logger.LogWarning(
                     "Long running command {Command} completed in {ElapsedMilliseconds}ms",
@@ -37,7 +47,8 @@ internal static class PerformanceDecorator
 
     internal sealed class CommandBaseHandler<TCommand>(
         ICommandHandler<TCommand> innerHandler,
-        ILogger<CommandBaseHandler<TCommand>> logger)
+        ILogger<CommandBaseHandler<TCommand>> logger,
+        IOptions<PerformanceMonitoringOptions> options)
         : ICommandHandler<TCommand>
         where TCommand : ICommand
     {
@@ -49,7 +60,9 @@ internal static class PerformanceDecorator
 
             stopwatch.Stop();
 
-            if (stopwatch.ElapsedMilliseconds > DefaultThresholdMilliseconds)
+            RecordDuration("command", typeof(TCommand).Name, stopwatch.Elapsed.TotalMilliseconds, result.IsSuccess);
+
+            if (stopwatch.ElapsedMilliseconds > options.Value.SlowHandlerThresholdMilliseconds)
             {
                 logger.LogWarning(
                     "Long running command {Command} completed in {ElapsedMilliseconds}ms",
@@ -63,7 +76,8 @@ internal static class PerformanceDecorator
 
     internal sealed class QueryHandler<TQuery, TResponse>(
         IQueryHandler<TQuery, TResponse> innerHandler,
-        ILogger<QueryHandler<TQuery, TResponse>> logger)
+        ILogger<QueryHandler<TQuery, TResponse>> logger,
+        IOptions<PerformanceMonitoringOptions> options)
         : IQueryHandler<TQuery, TResponse>
         where TQuery : IQuery<TResponse>
     {
@@ -75,7 +89,9 @@ internal static class PerformanceDecorator
 
             stopwatch.Stop();
 
-            if (stopwatch.ElapsedMilliseconds > DefaultThresholdMilliseconds)
+            RecordDuration("query", typeof(TQuery).Name, stopwatch.Elapsed.TotalMilliseconds, result.IsSuccess);
+
+            if (stopwatch.ElapsedMilliseconds > options.Value.SlowHandlerThresholdMilliseconds)
             {
                 logger.LogWarning(
                     "Long running query {Query} completed in {ElapsedMilliseconds}ms",
@@ -86,4 +102,18 @@ internal static class PerformanceDecorator
             return result;
         }
     }
+
+    private static void RecordDuration(string handlerType, string handlerName, double duration, bool succeeded) =>
+        HandlerDuration.Record(
+            duration,
+            new KeyValuePair<string, object?>("handler.type", handlerType),
+            new KeyValuePair<string, object?>("handler.name", handlerName),
+            new KeyValuePair<string, object?>("handler.succeeded", succeeded));
+}
+
+public sealed class PerformanceMonitoringOptions
+{
+    public const string SectionName = "PerformanceMonitoring";
+
+    public int SlowHandlerThresholdMilliseconds { get; set; } = 500;
 }

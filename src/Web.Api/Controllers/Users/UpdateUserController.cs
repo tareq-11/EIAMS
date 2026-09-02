@@ -10,7 +10,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
-[Route("users")]
+[Route("admin/users")]
 [Tags(Tags.Users)]
 public sealed class UpdateUserController(ICommandHandler<UpdateUserCommand> handler) : ControllerBase
 {

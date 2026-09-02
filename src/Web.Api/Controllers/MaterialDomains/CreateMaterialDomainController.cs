@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialDomains;
 
 [ApiController]
-[Route("material-domains")]
+[Route("catalog/domains")]
 [Tags(Tags.MaterialDomains)]
 public sealed class CreateMaterialDomainController(ICommandHandler<CreateMaterialDomainCommand, Guid> handler)
     : ControllerBase

@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.UserRoleScopes;
 
 [ApiController]
-[Route("users/{userId:guid}/role-scopes")]
+[Route("admin/users/{userId:guid}/role-scopes")]
 [Tags(Tags.UserRoleScopes)]
 public sealed class GetByUserController(
     IQueryHandler<GetUserRoleScopesQuery, PagedResult<UserRoleScopeResponse>> handler)

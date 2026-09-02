@@ -6,7 +6,6 @@ using Domain.Common;
 using Domain.OrganizationalUnits;
 using Domain.Warehouses;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.Warehouses.Update;
@@ -14,8 +13,7 @@ namespace Application.Warehouses.Update;
 internal sealed class UpdateWarehouseCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    HybridCache hybridCache)
+    IScopeAuthorizationService scopeAuthorizationService)
     : ICommandHandler<UpdateWarehouseCommand>
 {
     public async Task<Result> Handle(UpdateWarehouseCommand command, CancellationToken cancellationToken)
@@ -104,9 +102,6 @@ internal sealed class UpdateWarehouseCommandHandler(
                 command.ExpectedRowVersion,
                 currentRowVersion));
         }
-
-        await hybridCache.RemoveByTagAsync("warehouses", cancellationToken);
-        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return Result.Success();
     }

@@ -44,6 +44,33 @@ public static class ResultExtensions
                 TotalCount: page.TotalItems));
     }
 
+    public static IResult ToKeysetApiResponse<T>(
+        this Result<KeysetPage<T>> result,
+        HttpContext context)
+    {
+        if (result.IsFailure)
+        {
+            return CustomResults.Problem(result, context);
+        }
+
+        KeysetPage<T> page = result.Value;
+
+        return ApiResults.Ok(
+            context,
+            page.Items,
+            new ApiPagination(
+                Page: 1,
+                PageSize: page.PageSize,
+                TotalItems: null,
+                TotalPages: null,
+                HasPreviousPage: false,
+                HasNextPage: page.HasMore,
+                TotalCount: null,
+                Mode: "cursor",
+                NextCreatedAtUtc: page.NextCreatedAtUtc,
+                NextId: page.NextId));
+    }
+
     public static IResult ToApiResponse(this Result<Guid> result, HttpContext context)
     {
         return result.IsSuccess

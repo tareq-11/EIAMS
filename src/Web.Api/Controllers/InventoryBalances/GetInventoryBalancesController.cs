@@ -11,7 +11,7 @@ namespace Web.Api.Controllers.InventoryBalances;
 public sealed record GetInventoryBalancesRequest(Guid? WarehouseId, Guid? MaterialId, string? Search);
 
 [ApiController]
-[Route("inventory-balances")]
+[Route("inventory/balances")]
 [Tags(Tags.InventoryLedger)]
 public sealed class GetInventoryBalancesController(
     IQueryHandler<GetInventoryBalancesQuery, PagedResult<InventoryBalanceResponse>> handler) : ControllerBase

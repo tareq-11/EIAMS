@@ -10,7 +10,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialDomains;
 
 [ApiController]
-[Route("material-domains")]
+[Route("catalog/domains")]
 [Tags(Tags.MaterialDomains)]
 public sealed class GetMaterialDomainsController(
     IQueryHandler<GetMaterialDomainsQuery, PagedResult<MaterialDomainResponse>> handler) : ControllerBase

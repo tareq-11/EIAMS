@@ -161,7 +161,7 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
 
         // Act
         HttpResponseMessage response = await HttpClient.GetAsync(
-            $"users/{seed.AdminUserId}/role-scopes");
+            $"admin/users/{seed.AdminUserId}/role-scopes");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.OK);

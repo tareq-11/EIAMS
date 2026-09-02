@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.InventoryAdjustments;
 
 [ApiController]
-[Route("inventory-adjustments/{documentId:guid}/lines")]
+[Route("adjustments/{documentId:guid}/lines")]
 [Tags(Tags.WarehouseDocuments)]
 public sealed class UpdateAdjustmentLineController(ICommandHandler<UpdateAdjustmentLineCommand> handler) : ControllerBase
 {

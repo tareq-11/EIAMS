@@ -8,20 +8,20 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialCategories;
 
 [ApiController]
-[Route("material-categories")]
+[Route("catalog/categories")]
 [Tags(Tags.MaterialCategories)]
 public sealed class MoveMaterialCategoryController(ICommandHandler<MoveMaterialCategoryCommand> handler)
     : ControllerBase
 {
     public sealed record RequestBody(Guid? ParentCategoryId);
 
-    [HttpPut("{materialCategoryId:guid}/parent")]
+    [HttpPut("{categoryId:guid}/parent")]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.MaterialCategories.Manage)]
-    public async Task<IResult> Handle(Guid materialCategoryId, RequestBody request, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(Guid categoryId, RequestBody request, CancellationToken cancellationToken)
     {
         Result result = await handler.Handle(
-            new MoveMaterialCategoryCommand(materialCategoryId, request.ParentCategoryId),
+            new MoveMaterialCategoryCommand(categoryId, request.ParentCategoryId),
             cancellationToken);
 
         return result.ToApiResponse(HttpContext);

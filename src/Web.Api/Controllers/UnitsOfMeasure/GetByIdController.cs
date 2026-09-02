@@ -8,17 +8,17 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.UnitsOfMeasure;
 
 [ApiController]
-[Route("units-of-measure")]
+[Route("catalog/units-of-measure")]
 [Tags(Tags.UnitsOfMeasure)]
 public sealed class GetByIdController(IQueryHandler<GetUnitOfMeasureByIdQuery, UnitOfMeasureResponse> handler)
     : ControllerBase
 {
-    [HttpGet("{unitOfMeasureId:guid}")]
+    [HttpGet("{unitId:guid}")]
     [ProducesResponseType<ApiResponse<UnitOfMeasureResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.UnitsOfMeasure.View)]
-    public async Task<IResult> Handle(Guid unitOfMeasureId, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(Guid unitId, CancellationToken cancellationToken)
     {
-        var query = new GetUnitOfMeasureByIdQuery(unitOfMeasureId);
+        var query = new GetUnitOfMeasureByIdQuery(unitId);
 
         Result<UnitOfMeasureResponse> result = await handler.Handle(query, cancellationToken);
 

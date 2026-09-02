@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Abstractions.Pagination;
 using Domain.Common;
 using Domain.Custodies;
 using Domain.DurableCustodyAllocations;
@@ -17,9 +18,9 @@ internal sealed class GetReturnEligibleItemsQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService)
-    : IQueryHandler<GetReturnEligibleItemsQuery, IReadOnlyList<ReturnEligibleItemResponse>>
+    : IQueryHandler<GetReturnEligibleItemsQuery, PagedResult<ReturnEligibleItemResponse>>
 {
-    public async Task<Result<IReadOnlyList<ReturnEligibleItemResponse>>> Handle(
+    public async Task<Result<PagedResult<ReturnEligibleItemResponse>>> Handle(
         GetReturnEligibleItemsQuery query,
         CancellationToken cancellationToken)
     {
@@ -31,7 +32,7 @@ internal sealed class GetReturnEligibleItemsQueryHandler(
             originalIssue.DocumentType != DocumentType.Issue ||
             originalIssue.DocumentStatus != DocumentStatus.Posted)
         {
-            return Result.Failure<IReadOnlyList<ReturnEligibleItemResponse>>(
+            return Result.Failure<PagedResult<ReturnEligibleItemResponse>>(
                 ReturnInfoErrors.OriginalIssueInvalid(query.OriginalIssueDocumentId));
         }
 
@@ -44,82 +45,153 @@ internal sealed class GetReturnEligibleItemsQueryHandler(
 
         if (!authorized)
         {
-            return Result.Failure<IReadOnlyList<ReturnEligibleItemResponse>>(Error.Forbidden(
+            return Result.Failure<PagedResult<ReturnEligibleItemResponse>>(Error.Forbidden(
                 "Returns.Unauthorized",
                 "You do not have permission to view items from this issue document."));
         }
 
-        var results = new List<ReturnEligibleItemResponse>();
+        int page = query.Page < PaginationDefaults.DefaultPage
+            ? PaginationDefaults.DefaultPage
+            : Math.Min(query.Page, PaginationDefaults.MaximumPage);
+        int pageSize = query.PageSize < PaginationDefaults.DefaultPage
+            ? PaginationDefaults.DefaultPageSize
+            : Math.Min(query.PageSize, PaginationDefaults.MaximumPageSize);
+        int offset = checked((page - 1) * pageSize);
+        int fetchLimit = checked(offset + pageSize);
+
+        int totalCount = 0;
+        var candidateRows = new List<EligibleItemPageRow>();
 
         // 1. Assets issued on this document that are currently active in custody
-        List<ReturnEligibleItemResponse> activeAssets = await (
-            from c in context.Custodies.AsNoTracking()
-            where c.IssueDocumentId == query.OriginalIssueDocumentId && c.Status == CustodyStatus.Active
-            join a in context.Assets.AsNoTracking() on c.AssetId equals a.Id
-            join m in context.Materials.AsNoTracking() on a.MaterialId equals m.Id
-            select new ReturnEligibleItemResponse(
-                CustodySubjectType.Asset,
-                a.Id,
-                m.Id,
-                m.NameAr,
-                m.NameEn,
-                m.Code,
-                m.MaterialKind.ToString(),
-                m.TrackingType.ToString(),
-                a.SerialNumber,
-                a.AssetNumber,
-                1m,
-                1m)
-        ).ToListAsync(cancellationToken);
+        var assetQuery = from c in context.Custodies.AsNoTracking()
+                         where c.IssueDocumentId == query.OriginalIssueDocumentId && c.Status == CustodyStatus.Active
+                         join a in context.Assets.AsNoTracking() on c.AssetId equals a.Id
+                         join m in context.Materials.AsNoTracking() on a.MaterialId equals m.Id
+                         select new { c, a, m };
 
-        results.AddRange(activeAssets);
+        totalCount += await assetQuery.CountAsync(cancellationToken);
+
+        List<EligibleItemPageRow> projectedAssets = await assetQuery
+            .OrderByDescending(row => row.c.FromUtc)
+            .ThenBy(row => row.a.Id)
+            .Take(fetchLimit)
+            .Select(row => new EligibleItemPageRow(
+                CustodySubjectType.Asset,
+                row.a.Id,
+                row.m.Id,
+                row.m.NameAr,
+                row.m.NameEn,
+                row.m.Code,
+                row.m.MaterialKind.ToString(),
+                row.m.TrackingType.ToString(),
+                row.a.SerialNumber,
+                row.a.AssetNumber,
+                1m,
+                1m,
+                row.c.FromUtc))
+            .ToListAsync(cancellationToken);
+
+        candidateRows.AddRange(projectedAssets);
 
         // 2. Tracked durable units issued on this document that are currently Issued
-        List<ReturnEligibleItemResponse> activeTrackedUnits = await (
-            from u in context.TrackedMaterialUnits.AsNoTracking()
-            where u.IssueDocumentId == query.OriginalIssueDocumentId && u.Status == TrackedMaterialUnitStatus.Issued
-            join m in context.Materials.AsNoTracking() on u.MaterialId equals m.Id
-            select new ReturnEligibleItemResponse(
+        var unitQuery = from u in context.TrackedMaterialUnits.AsNoTracking()
+                        where u.IssueDocumentId == query.OriginalIssueDocumentId && u.Status == TrackedMaterialUnitStatus.Issued
+                        join m in context.Materials.AsNoTracking() on u.MaterialId equals m.Id
+                        select new { u, m };
+
+        totalCount += await unitQuery.CountAsync(cancellationToken);
+
+        List<EligibleItemPageRow> projectedUnits = await unitQuery
+            .OrderByDescending(row => row.u.FromUtc)
+            .ThenBy(row => row.u.Id)
+            .Take(fetchLimit)
+            .Select(row => new EligibleItemPageRow(
                 CustodySubjectType.TrackedUnit,
-                u.Id,
-                m.Id,
-                m.NameAr,
-                m.NameEn,
-                m.Code,
-                m.MaterialKind.ToString(),
-                m.TrackingType.ToString(),
-                u.SerialNumber,
+                row.u.Id,
+                row.m.Id,
+                row.m.NameAr,
+                row.m.NameEn,
+                row.m.Code,
+                row.m.MaterialKind.ToString(),
+                row.m.TrackingType.ToString(),
+                row.u.SerialNumber,
                 null,
                 1m,
-                1m)
-        ).ToListAsync(cancellationToken);
+                1m,
+                row.u.FromUtc))
+            .ToListAsync(cancellationToken);
 
-        results.AddRange(activeTrackedUnits);
+        candidateRows.AddRange(projectedUnits);
 
         // 3. Durable custody allocations issued on this document with ActiveQuantity > 0
-        List<ReturnEligibleItemResponse> activeAllocations = await (
-            from alloc in context.DurableCustodyAllocations.AsNoTracking()
-            where alloc.IssueDocumentId == query.OriginalIssueDocumentId &&
-                  alloc.Status == DurableCustodyAllocationStatus.Active &&
-                  alloc.ActiveQuantity > 0
-            join m in context.Materials.AsNoTracking() on alloc.MaterialId equals m.Id
-            select new ReturnEligibleItemResponse(
+        var allocationQuery = from alloc in context.DurableCustodyAllocations.AsNoTracking()
+                              where alloc.IssueDocumentId == query.OriginalIssueDocumentId &&
+                                    alloc.Status == DurableCustodyAllocationStatus.Active &&
+                                    alloc.ActiveQuantity > 0
+                              join m in context.Materials.AsNoTracking() on alloc.MaterialId equals m.Id
+                              select new { alloc, m };
+
+        totalCount += await allocationQuery.CountAsync(cancellationToken);
+
+        List<EligibleItemPageRow> projectedAllocations = await allocationQuery
+            .OrderByDescending(row => row.alloc.FromUtc)
+            .ThenBy(row => row.alloc.Id)
+            .Take(fetchLimit)
+            .Select(row => new EligibleItemPageRow(
                 CustodySubjectType.MaterialQuantity,
-                alloc.Id,
-                m.Id,
-                m.NameAr,
-                m.NameEn,
-                m.Code,
-                m.MaterialKind.ToString(),
-                m.TrackingType.ToString(),
+                row.alloc.Id,
+                row.m.Id,
+                row.m.NameAr,
+                row.m.NameEn,
+                row.m.Code,
+                row.m.MaterialKind.ToString(),
+                row.m.TrackingType.ToString(),
                 null,
                 null,
-                alloc.ActiveQuantity,
-                alloc.IssuedQuantity)
-        ).ToListAsync(cancellationToken);
+                row.alloc.ActiveQuantity,
+                row.alloc.IssuedQuantity,
+                row.alloc.FromUtc))
+            .ToListAsync(cancellationToken);
 
-        results.AddRange(activeAllocations);
+        candidateRows.AddRange(projectedAllocations);
 
-        return results;
+        var rows = candidateRows
+            .OrderByDescending(row => row.FromUtc)
+            .ThenBy(row => row.SubjectId)
+            .Skip(offset)
+            .Take(pageSize)
+            .ToList();
+
+        var items = rows.Select(row => new ReturnEligibleItemResponse(
+            row.SubjectType,
+            row.SubjectId,
+            row.MaterialId,
+            row.MaterialNameAr,
+            row.MaterialNameEn,
+            row.MaterialCode,
+            row.MaterialKind,
+            row.TrackingType,
+            row.SerialNumber,
+            row.AssetNumber,
+            row.AvailableQuantity,
+            row.IssuedQuantity
+        )).ToList();
+
+        return new PagedResult<ReturnEligibleItemResponse>(items, page, pageSize, totalCount);
     }
+
+    private sealed record EligibleItemPageRow(
+        CustodySubjectType SubjectType,
+        Guid SubjectId,
+        Guid MaterialId,
+        string MaterialNameAr,
+        string? MaterialNameEn,
+        string MaterialCode,
+        string MaterialKind,
+        string TrackingType,
+        string? SerialNumber,
+        string? AssetNumber,
+        decimal AvailableQuantity,
+        decimal IssuedQuantity,
+        DateTime FromUtc);
 }

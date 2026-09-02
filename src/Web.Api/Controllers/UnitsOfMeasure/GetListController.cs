@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.UnitsOfMeasure;
 
 [ApiController]
-[Route("units-of-measure")]
+[Route("catalog/units-of-measure")]
 [Tags(Tags.UnitsOfMeasure)]
 public sealed class GetListController(IQueryHandler<GetUnitsOfMeasureQuery, PagedResult<UnitOfMeasureResponse>> handler)
     : ControllerBase

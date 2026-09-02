@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Roles;
 
 [ApiController]
-[Route("roles")]
+[Route("admin/roles")]
 [Tags(Tags.Roles)]
 public sealed class RemovePermissionController(ICommandHandler<RemovePermissionFromRoleCommand> handler)
     : ControllerBase

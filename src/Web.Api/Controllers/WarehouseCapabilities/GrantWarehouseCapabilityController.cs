@@ -31,6 +31,6 @@ public sealed class GrantWarehouseCapabilityController(ICommandHandler<GrantWare
 
         return result.ToCreatedApiResponse(
             HttpContext,
-            _ => $"/warehouses/{request.WarehouseId}/capabilities");
+            _ => $"/api/v1/warehouses/{request.WarehouseId}/capabilities");
     }
 }

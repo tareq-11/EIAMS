@@ -176,10 +176,8 @@ public sealed class ApplicationDbContext(
 
         if (hybridCache is not null)
         {
-            foreach (string tag in invalidatedCacheTags)
-            {
-                await hybridCache.RemoveByTagAsync(tag, cancellationToken);
-            }
+            await Task.WhenAll(invalidatedCacheTags.Select(tag =>
+                hybridCache.RemoveByTagAsync(tag, cancellationToken).AsTask()));
         }
 
         await PublishDomainEventsAsync(domainEvents);
@@ -202,7 +200,7 @@ public sealed class ApplicationDbContext(
             Material => "materials",
             UnitOfMeasure => "uom",
             Warehouse => "warehouses",
-            Role or RolePermission or UserRoleScope => "auth-roles",
+            User or Role or RolePermission or UserRoleScope => "auth-roles",
             _ => null
         })
         .Where(tag => tag is not null)

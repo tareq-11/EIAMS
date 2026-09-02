@@ -223,7 +223,46 @@ internal static class AuditLogQuerySupport
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var items = rawItems.Select(item => new AuditLogListItemResponse(
+        List<AuditLogListItemResponse> items = MapListItems(rawItems, redactionService);
+
+        return new PagedResult<AuditLogListItemResponse>(items, page, pageSize, totalItems);
+    }
+
+    public static async Task<KeysetPage<AuditLogListItemResponse>> ToKeysetPageAsync(
+        IQueryable<AuditLog> query,
+        int pageSize,
+        CancellationToken cancellationToken,
+        IAuditRedactionService? redactionService = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(pageSize, PaginationDefaults.MaximumPageSize);
+
+        List<AuditLog> rawItems = await query
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .ThenByDescending(item => item.Id)
+            .Take(pageSize + 1)
+            .ToListAsync(cancellationToken);
+        bool hasMore = rawItems.Count > pageSize;
+        if (hasMore)
+        {
+            rawItems.RemoveAt(rawItems.Count - 1);
+        }
+
+        List<AuditLogListItemResponse> items = MapListItems(rawItems, redactionService);
+        AuditLog? lastItem = rawItems.LastOrDefault();
+
+        return new KeysetPage<AuditLogListItemResponse>(
+            items,
+            pageSize,
+            hasMore,
+            hasMore ? lastItem?.CreatedAtUtc : null,
+            hasMore ? lastItem?.Id : null);
+    }
+
+    private static List<AuditLogListItemResponse> MapListItems(
+        IEnumerable<AuditLog> rawItems,
+        IAuditRedactionService? redactionService) =>
+        rawItems.Select(item => new AuditLogListItemResponse(
             item.Id,
             item.OperationId,
             item.RequestId,
@@ -238,9 +277,5 @@ internal static class AuditLogQuerySupport
             redactionService?.GetActionDisplayAr(item.Action),
             redactionService?.GetActionDisplayEn(item.Action),
             redactionService?.GetEntityTypeDisplayAr(item.EntityType),
-            redactionService?.GetEntityTypeDisplayEn(item.EntityType)
-        )).ToList();
-
-        return new PagedResult<AuditLogListItemResponse>(items, page, pageSize, totalItems);
-    }
+            redactionService?.GetEntityTypeDisplayEn(item.EntityType))).ToList();
 }

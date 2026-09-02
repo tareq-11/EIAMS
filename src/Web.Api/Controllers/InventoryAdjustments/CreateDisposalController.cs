@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.InventoryAdjustments;
 
 [ApiController]
-[Route("inventory-adjustments/disposals")]
+[Route("adjustments/disposals")]
 [Tags(Tags.Assets)]
 public sealed class CreateDisposalController(ICommandHandler<CreateDisposalCommand, Guid> handler) : ControllerBase
 {
@@ -24,6 +24,6 @@ public sealed class CreateDisposalController(ICommandHandler<CreateDisposalComma
     {
         Result<Guid> result = await handler.Handle(
             new CreateDisposalCommand(request.WarehouseId, request.AssetIds, request.Reason), cancellationToken);
-        return result.ToCreatedApiResponse(HttpContext, id => $"/warehouse-documents/{id}");
+        return result.ToCreatedApiResponse(HttpContext, id => $"/api/v1/adjustments/{id}");
     }
 }

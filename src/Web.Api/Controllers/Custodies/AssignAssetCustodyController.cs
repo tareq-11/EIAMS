@@ -38,6 +38,6 @@ public sealed class AssignAssetCustodyController(
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 
-        return result.ToCreatedApiResponse(HttpContext, custodyId => $"/assets/{assetId}/custodies/{custodyId}");
+        return result.ToCreatedApiResponse(HttpContext, custodyId => $"/api/v1/assets/{assetId}/custodies/{custodyId}");
     }
 }

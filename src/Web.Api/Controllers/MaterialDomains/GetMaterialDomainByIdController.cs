@@ -8,17 +8,17 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialDomains;
 
 [ApiController]
-[Route("material-domains")]
+[Route("catalog/domains")]
 [Tags(Tags.MaterialDomains)]
 public sealed class GetMaterialDomainByIdController(
     IQueryHandler<GetMaterialDomainByIdQuery, MaterialDomainResponse> handler) : ControllerBase
 {
-    [HttpGet("{materialDomainId:guid}")]
+    [HttpGet("{domainId:guid}")]
     [ProducesResponseType<ApiResponse<MaterialDomainResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.View)]
-    public async Task<IResult> Handle(Guid materialDomainId, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(Guid domainId, CancellationToken cancellationToken)
     {
-        var query = new GetMaterialDomainByIdQuery(materialDomainId);
+        var query = new GetMaterialDomainByIdQuery(domainId);
 
         Result<MaterialDomainResponse> result = await handler.Handle(query, cancellationToken);
 

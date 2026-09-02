@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Application.Abstractions.Posting;
 using Domain.Common;
+using Domain.IssueTos;
 using Domain.WarehouseDocuments;
 using Infrastructure.Database;
 using IntegrationTests.Regression;
@@ -66,5 +67,104 @@ public sealed class ConcurrentPostingTests : BaseIntegrationTest
 
             finalBalance.ShouldBe(concurrentPosts * quantityPerPost);
         }
+    }
+
+    [Fact]
+    public async Task ConcurrentPostingOfSameDocument_Should_CreateOneLedgerEntry()
+    {
+        // Arrange
+        RegressionSeedData seed = await RegressionTestHelper.SeedAsync(factory.Services);
+        WarehouseDocument document = await RegressionTestHelper.CreateAndSubmitDocumentAsync(
+            factory.Services,
+            seed.WarehouseId,
+            DocumentType.Receiving,
+            seed.KeeperUserId,
+            [(seed.NormalMaterialId, DocumentLineType.Normal, 10m)]);
+
+        // Act
+        Result<PostingOutcome>[] results = await Task.WhenAll(
+            PostAsync(document, seed.ManagerUserId),
+            PostAsync(document, seed.ManagerUserId));
+
+        // Assert
+        results.Count(result => result.IsSuccess).ShouldBe(1);
+        results.Count(result => result.IsFailure).ShouldBe(1);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.StockMovements.CountAsync(movement => movement.DocumentId == document.Id)).ShouldBe(1);
+        (await context.InventoryBalances
+                .Where(balance =>
+                    balance.WarehouseId == seed.WarehouseId &&
+                    balance.MaterialId == seed.NormalMaterialId)
+                .Select(balance => balance.Quantity)
+                .SingleAsync())
+            .ShouldBe(10m);
+    }
+
+    [Fact]
+    public async Task ConcurrentIssues_Should_NotOversell_WhenOnlyOneCanConsumeTheRemainingBalance()
+    {
+        // Arrange
+        RegressionSeedData seed = await RegressionTestHelper.SeedAsync(factory.Services);
+        WarehouseDocument receiving = await RegressionTestHelper.CreateAndSubmitDocumentAsync(
+            factory.Services,
+            seed.WarehouseId,
+            DocumentType.Receiving,
+            seed.KeeperUserId,
+            [(seed.NormalMaterialId, DocumentLineType.Normal, 10m)]);
+        (await PostAsync(receiving, seed.ManagerUserId)).IsSuccess.ShouldBeTrue();
+
+        WarehouseDocument firstIssue = await CreateIssueAsync(seed, 10m);
+        WarehouseDocument secondIssue = await CreateIssueAsync(seed, 10m);
+
+        // Act
+        Result<PostingOutcome>[] results = await Task.WhenAll(
+            PostAsync(firstIssue, seed.ManagerUserId),
+            PostAsync(secondIssue, seed.ManagerUserId));
+
+        // Assert
+        results.Count(result => result.IsSuccess).ShouldBe(1);
+        Result<PostingOutcome> insufficientStock = results.Single(result => result.IsFailure);
+        insufficientStock.Error.Code.ShouldBe("InventoryBalances.InsufficientQuantity");
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.InventoryBalances
+                .Where(balance =>
+                    balance.WarehouseId == seed.WarehouseId &&
+                    balance.MaterialId == seed.NormalMaterialId)
+                .Select(balance => balance.Quantity)
+                .SingleAsync())
+            .ShouldBe(0m);
+        (await context.StockMovements.CountAsync(movement =>
+            movement.DocumentId == firstIssue.Id || movement.DocumentId == secondIssue.Id)).ShouldBe(1);
+    }
+
+    private async Task<WarehouseDocument> CreateIssueAsync(RegressionSeedData seed, decimal quantity) =>
+        await RegressionTestHelper.CreateAndSubmitDocumentAsync(
+            factory.Services,
+            seed.WarehouseId,
+            DocumentType.Issue,
+            seed.KeeperUserId,
+            [(seed.NormalMaterialId, DocumentLineType.Normal, quantity)],
+            (document, context) => context.IssueTos.Add(
+                IssueTo.Create(
+                    document.Id,
+                    PartyType.OrganizationalUnit,
+                    seed.OrgUnitId,
+                    "Performance concurrency test").Value));
+
+    private async Task<Result<PostingOutcome>> PostAsync(WarehouseDocument document, Guid postedBy)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        IDocumentPostingCoordinator coordinator = scope.ServiceProvider
+            .GetRequiredService<IDocumentPostingCoordinator>();
+
+        return await coordinator.PostAsync(
+            document.Id,
+            document.RowVersion,
+            postedBy,
+            CancellationToken.None);
     }
 }

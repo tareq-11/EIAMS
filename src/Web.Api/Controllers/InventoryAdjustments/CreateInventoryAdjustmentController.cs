@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.InventoryAdjustments;
 
 [ApiController]
-[Route("inventory-adjustments")]
+[Route("adjustments")]
 [Tags(Tags.WarehouseDocuments)]
 public sealed class CreateInventoryAdjustmentController(ICommandHandler<CreateInventoryAdjustmentCommand, Guid> handler) : ControllerBase
 {
@@ -21,6 +21,6 @@ public sealed class CreateInventoryAdjustmentController(ICommandHandler<CreateIn
     {
         Result<Guid> result = await handler.Handle(
             new CreateInventoryAdjustmentCommand(request.WarehouseId, request.Reason), cancellationToken);
-        return result.ToCreatedApiResponse(HttpContext, id => $"/warehouse-documents/{id}");
+        return result.ToCreatedApiResponse(HttpContext, id => $"/api/v1/adjustments/{id}");
     }
 }

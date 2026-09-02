@@ -6,7 +6,6 @@ using Domain.Common;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.UserRoleScopes.Grant;
@@ -14,8 +13,7 @@ namespace Application.UserRoleScopes.Grant;
 internal sealed class GrantUserRoleScopeCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    HybridCache hybridCache)
+    IScopeAuthorizationService scopeAuthorizationService)
     : ICommandHandler<GrantUserRoleScopeCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(GrantUserRoleScopeCommand command, CancellationToken cancellationToken)
@@ -66,9 +64,6 @@ internal sealed class GrantUserRoleScopeCommandHandler(
         context.UserRoleScopes.Add(userRoleScope);
 
         await context.SaveChangesAsync(cancellationToken);
-
-        await hybridCache.RemoveByTagAsync($"user:{command.UserId}", cancellationToken);
-        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return userRoleScope.Id;
     }

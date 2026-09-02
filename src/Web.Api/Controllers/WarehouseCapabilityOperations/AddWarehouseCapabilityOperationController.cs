@@ -32,6 +32,6 @@ public sealed class AddWarehouseCapabilityOperationController(
 
         return result.ToCreatedApiResponse(
             HttpContext,
-            _ => $"/warehouse-capabilities/{capabilityId}/operations");
+            _ => $"/api/v1/warehouse-capabilities/{capabilityId}/operations");
     }
 }

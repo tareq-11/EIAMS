@@ -5,7 +5,6 @@ using Application.Abstractions.Messaging;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Hybrid;
 using SharedKernel;
 
 namespace Application.UserRoleScopes.Replace;
@@ -13,8 +12,7 @@ namespace Application.UserRoleScopes.Replace;
 internal sealed class ReplaceUserRoleScopeCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    HybridCache hybridCache) : ICommandHandler<ReplaceUserRoleScopeCommand, Guid>
+    IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<ReplaceUserRoleScopeCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(
         ReplaceUserRoleScopeCommand command,
@@ -84,8 +82,6 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
         }
 
         await context.SaveChangesAsync(cancellationToken);
-        await hybridCache.RemoveByTagAsync($"user:{command.UserId}", cancellationToken);
-        await hybridCache.RemoveByTagAsync("auth-roles", cancellationToken);
 
         return existingAssignment.Id;
     }

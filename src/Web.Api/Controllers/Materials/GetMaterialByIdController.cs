@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Materials;
 
 [ApiController]
-[Route("materials")]
+[Route("catalog/materials")]
 [Tags(Tags.Materials)]
 public sealed class GetMaterialByIdController(IQueryHandler<GetMaterialByIdQuery, MaterialResponse> handler)
     : ControllerBase

@@ -1,10 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
+using Application.Abstractions.Authentication;
+using Domain.Users;
+using Infrastructure.Database;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace IntegrationTests.Users;
 
-public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseIntegrationTest(factory)
+public sealed class UsersTests : BaseIntegrationTest
 {
+    private readonly IntegrationTestWebAppFactory factory;
+
+    public UsersTests(IntegrationTestWebAppFactory factory) : base(factory)
+    {
+        this.factory = factory;
+    }
+
     [Fact]
     public async Task AdministratorCreateUser_Should_ReturnUserId()
     {
@@ -23,7 +34,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/register",
+            "admin/users/register",
             new
             {
                 email = UniqueEmail(),
@@ -34,6 +45,30 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task RegisterAndLogin_Should_Succeed_WhenOrdinaryUserExistsBeforeFirstAdministratorAuthentication()
+    {
+        // Arrange
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        context.Users.Add(User.Create(
+            Guid.NewGuid(),
+            UniqueEmail(),
+            "Ordinary",
+            "User",
+            passwordHasher.Hash(IntegrationTestWebAppFactory.AdministratorPassword)));
+        await context.SaveChangesAsync();
+
+        // Act
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+
+        // Assert
+        userId.ShouldNotBe(Guid.Empty);
+        tokens.AccessToken.ShouldNotBeNullOrWhiteSpace();
+        tokens.RefreshToken.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -60,7 +95,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/login",
+            "auth/login",
             new { email, password = "WrongPassword1!" });
 
         // Assert
@@ -77,7 +112,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/refresh-token",
+            "auth/refresh",
             new { refreshToken = tokens.RefreshToken });
 
         // Assert
@@ -95,7 +130,7 @@ public sealed class UsersTests(IntegrationTestWebAppFactory factory) : BaseInteg
     {
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "users/refresh-token",
+            "auth/refresh",
             new { refreshToken = "this-token-does-not-exist" });
 
         // Assert

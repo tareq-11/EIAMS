@@ -10,7 +10,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialFamilies;
 
 [ApiController]
-[Route("material-families")]
+[Route("catalog/families")]
 [Tags(Tags.MaterialFamilies)]
 public sealed class GetMaterialFamiliesController(
     IQueryHandler<GetMaterialFamiliesQuery, PagedResult<MaterialFamilyResponse>> handler) : ControllerBase

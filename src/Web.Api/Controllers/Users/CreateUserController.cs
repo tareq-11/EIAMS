@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
-[Route("users")]
+[Route("admin/users")]
 [Tags(Tags.Users)]
 public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid> handler) : ControllerBase
 {
@@ -32,7 +32,7 @@ public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
         return result.Match(
-            id => ApiResults.Created(HttpContext, $"/users/{id}", new ResponseBody(id)),
+            id => ApiResults.Created(HttpContext, $"/api/v1/admin/users/{id}", new ResponseBody(id)),
             failure => CustomResults.Problem(failure, HttpContext));
     }
 }

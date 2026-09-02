@@ -11,7 +11,7 @@ namespace Web.Api.Controllers.InventoryAdjustments;
 public sealed record GetDisposalEligibleAssetsRequest(Guid? WarehouseId, Guid? MaterialId, string? Search);
 
 [ApiController]
-[Route("inventory-adjustments/disposal-eligible-assets")]
+[Route("adjustments/disposal-eligible-assets")]
 [Tags(Tags.Assets)]
 public sealed class GetDisposalEligibleAssetsController(
     IQueryHandler<GetDisposalEligibleAssetsQuery, PagedResult<DisposalEligibleAssetResponse>> handler)

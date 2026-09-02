@@ -18,6 +18,6 @@ public sealed class CreateAdjustmentFromCountController(ICommandHandler<CreateAd
     public async Task<IResult> Handle(Guid countId, CancellationToken cancellationToken)
     {
         Result<Guid> result = await handler.Handle(new CreateAdjustmentFromCountCommand(countId), cancellationToken);
-        return result.ToCreatedApiResponse(HttpContext, id => $"/warehouse-documents/{id}");
+        return result.ToCreatedApiResponse(HttpContext, id => $"/api/v1/adjustments/{id}");
     }
 }

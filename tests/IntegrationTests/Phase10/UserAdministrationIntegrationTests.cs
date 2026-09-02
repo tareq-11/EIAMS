@@ -26,7 +26,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
     [Fact]
     public async Task GetUsers_Should_ReturnUnauthorized_WhenRequestHasNoToken()
     {
-        HttpResponseMessage response = await HttpClient.GetAsync("users");
+        HttpResponseMessage response = await HttpClient.GetAsync("admin/users");
 
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
@@ -40,7 +40,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         Authenticate(administratorTokens.AccessToken);
 
         string email = $"Managed-{Guid.NewGuid():N}@Example.com";
-        HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("users", new
+        HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("admin/users", new
         {
             email,
             firstName = "Managed",
@@ -59,7 +59,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
 
         // Act: suspend the managed account through the safe update operation.
         Authenticate(administratorTokens.AccessToken);
-        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"users/{managedUserId}", new
+        HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"admin/users/{managedUserId}", new
         {
             email,
             firstName = "Updated",
@@ -71,26 +71,26 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         updateResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         HttpClient.DefaultRequestHeaders.Authorization = null;
-        HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("users/login", new
+        HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("auth/login", new
         {
             email,
             password = ManagedPassword
         });
         loginResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
-        HttpResponseMessage refreshResponse = await HttpClient.PostAsJsonAsync("users/refresh-token", new
+        HttpResponseMessage refreshResponse = await HttpClient.PostAsJsonAsync("auth/refresh", new
         {
             refreshToken = managedTokens.RefreshToken
         });
         refreshResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         Authenticate(managedTokens.AccessToken);
-        HttpResponseMessage staleAccessResponse = await HttpClient.GetAsync("users");
+        HttpResponseMessage staleAccessResponse = await HttpClient.GetAsync("admin/users");
         staleAccessResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         Authenticate(administratorTokens.AccessToken);
         HttpResponseMessage listResponse = await HttpClient.GetAsync(
-            $"users?search={Uri.EscapeDataString(email)}&status=Suspended&page=1&pageSize=10");
+            $"admin/users?search={Uri.EscapeDataString(email)}&status=Suspended&page=1&pageSize=10");
         listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         using var listBody = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
@@ -117,7 +117,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Act
-        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"users/{administratorId}", new
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"admin/users/{administratorId}", new
         {
             email = $"self-{Guid.NewGuid():N}@example.com",
             firstName = "System",

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Application.Custodies.GetCustodies;
 using Application.Returns.GetEligibleItems;
 using Domain.Common;
@@ -19,6 +20,7 @@ using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Domain.Warehouses;
 using Infrastructure.Database;
+using IntegrationTests.Performance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedKernel;
@@ -65,31 +67,40 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         using (IServiceScope scope = factory.Services.CreateScope())
         {
             ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            DurableCustodyAllocation alloc = DurableCustodyAllocation.Open(
-                Guid.NewGuid(),
-                materialId,
-                warehouseId,
-                PartyType.Employee,
-                employeeId,
-                CustodyKind.Personal,
-                issueDocId,
-                5m,
-                DateTime.UtcNow).Value;
+            for (int index = 0; index < 25; index++)
+            {
+                DurableCustodyAllocation allocation = DurableCustodyAllocation.Open(
+                    Guid.NewGuid(),
+                    materialId,
+                    warehouseId,
+                    PartyType.Employee,
+                    employeeId,
+                    CustodyKind.Personal,
+                    issueDocId,
+                    5m,
+                    DateTime.UtcNow.AddSeconds(-index)).Value;
 
-            dbContext.DurableCustodyAllocations.Add(alloc);
+                dbContext.DurableCustodyAllocations.Add(allocation);
+            }
+
             await dbContext.SaveChangesAsync();
         }
 
         // Act
+        SqlCommandCounterInterceptor commandCounter =
+            factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        commandCounter.Reset();
         HttpResponseMessage response = await HttpClient.GetAsync("custodies");
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        string responseContent = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, responseContent);
         ApiResponse<IReadOnlyList<CustodyResponse>>? envelope =
             await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<CustodyResponse>>>();
         envelope.ShouldNotBeNull();
         envelope.Data.ShouldNotBeNull();
         envelope.Data.ShouldContain(c => c.MaterialId == materialId && c.IssuedQuantity == 5m);
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
     }
 
     [Fact]
@@ -179,32 +190,64 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         using (IServiceScope scope = factory.Services.CreateScope())
         {
             ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            DurableCustodyAllocation alloc = DurableCustodyAllocation.Open(
-                Guid.NewGuid(),
-                materialId,
-                warehouseId,
-                PartyType.Employee,
-                employeeId,
-                CustodyKind.Personal,
-                issueDocId,
-                8m,
-                DateTime.UtcNow).Value;
+            for (int i = 0; i < 25; i++)
+            {
+                DurableCustodyAllocation alloc = DurableCustodyAllocation.Open(
+                    Guid.NewGuid(),
+                    materialId,
+                    warehouseId,
+                    PartyType.Employee,
+                    employeeId,
+                    CustodyKind.Personal,
+                    issueDocId,
+                    8m + i,
+                    DateTime.UtcNow.AddSeconds(-i)).Value;
 
-            dbContext.DurableCustodyAllocations.Add(alloc);
+                dbContext.DurableCustodyAllocations.Add(alloc);
+            }
             await dbContext.SaveChangesAsync();
         }
 
         // Act
+        SqlCommandCounterInterceptor commandCounter =
+            factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        commandCounter.Reset();
+
         HttpResponseMessage response = await HttpClient.GetAsync(
-            $"returns/eligible-items?originalIssueDocumentId={issueDocId}");
+            $"returns/eligible-items?originalIssueDocumentId={issueDocId}&page=2&pageSize=10");
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        string responseContent = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, responseContent);
+
+        using var body = JsonDocument.Parse(responseContent);
+        JsonElement root = body.RootElement;
+        root.GetProperty("success").GetBoolean().ShouldBeTrue();
+
+        JsonElement data = root.GetProperty("data");
+        data.GetArrayLength().ShouldBe(10);
+
+        JsonElement pagination = root.GetProperty("pagination");
+        pagination.GetProperty("page").GetInt32().ShouldBe(2);
+        pagination.GetProperty("page_size").GetInt32().ShouldBe(10);
+        pagination.GetProperty("total_items").GetInt32().ShouldBe(25);
+        pagination.GetProperty("total_pages").GetInt32().ShouldBe(3);
+        pagination.GetProperty("has_previous_page").GetBoolean().ShouldBeTrue();
+        pagination.GetProperty("has_next_page").GetBoolean().ShouldBeTrue();
+
+        decimal[] expectedQuantities = [18m, 19m, 20m, 21m, 22m, 23m, 24m, 25m, 26m, 27m];
+        for (int i = 0; i < data.GetArrayLength(); i++)
+        {
+            data[i].GetProperty("availableQuantity").GetDecimal().ShouldBe(expectedQuantities[i]);
+        }
+
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
+
         ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>? envelope =
             await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>>();
         envelope.ShouldNotBeNull();
         envelope.Data.ShouldNotBeNull();
-        envelope.Data.ShouldContain(i => i.MaterialId == materialId && i.AvailableQuantity == 8m);
+        envelope.Data.Count.ShouldBe(10);
     }
 
     private async Task GrantEnterpriseAdministratorAsync(Guid userId)

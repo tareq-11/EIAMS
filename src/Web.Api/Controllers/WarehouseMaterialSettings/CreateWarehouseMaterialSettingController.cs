@@ -35,6 +35,6 @@ public sealed class CreateWarehouseMaterialSettingController(
 
         return result.ToCreatedApiResponse(
             HttpContext,
-            _ => $"/warehouses/{request.WarehouseId}/material-settings");
+            _ => $"/api/v1/warehouses/{request.WarehouseId}/material-settings");
     }
 }

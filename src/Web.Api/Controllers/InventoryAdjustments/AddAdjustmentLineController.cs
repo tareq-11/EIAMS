@@ -8,7 +8,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.InventoryAdjustments;
 
 [ApiController]
-[Route("inventory-adjustments/{documentId:guid}/lines")]
+[Route("adjustments/{documentId:guid}/lines")]
 [Tags(Tags.WarehouseDocuments)]
 public sealed class AddAdjustmentLineController(ICommandHandler<AddAdjustmentLineCommand, Guid> handler) : ControllerBase
 {
@@ -27,6 +27,6 @@ public sealed class AddAdjustmentLineController(ICommandHandler<AddAdjustmentLin
         Result<Guid> result = await handler.Handle(new AddAdjustmentLineCommand(
             documentId, request.MaterialId, request.Difference, request.UnitId,
             request.Reason, request.ExpectedRowVersion), cancellationToken);
-        return result.ToCreatedApiResponse(HttpContext, _ => $"/warehouse-documents/{documentId}");
+        return result.ToCreatedApiResponse(HttpContext, _ => $"/api/v1/adjustments/{documentId}");
     }
 }

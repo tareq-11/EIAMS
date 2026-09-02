@@ -9,19 +9,19 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialFamilies;
 
 [ApiController]
-[Route("material-families")]
+[Route("catalog/families")]
 [Tags(Tags.MaterialFamilies)]
 public sealed class SetMaterialFamilyStatusController(ICommandHandler<SetMaterialFamilyStatusCommand> handler)
     : ControllerBase
 {
     public sealed record RequestBody([property: JsonRequired] int Status);
 
-    [HttpPut("{materialFamilyId:guid}/status")]
+    [HttpPut("{familyId:guid}/status")]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.MaterialFamilies.Manage)]
-    public async Task<IResult> Handle(Guid materialFamilyId, RequestBody request, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(Guid familyId, RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new SetMaterialFamilyStatusCommand(materialFamilyId, (Status)request.Status);
+        var command = new SetMaterialFamilyStatusCommand(familyId, (Status)request.Status);
 
         Result result = await handler.Handle(command, cancellationToken);
 

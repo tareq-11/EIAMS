@@ -8,17 +8,17 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.MaterialCategories;
 
 [ApiController]
-[Route("material-categories")]
+[Route("catalog/categories")]
 [Tags(Tags.MaterialCategories)]
 public sealed class GetMaterialCategoryByIdController(
     IQueryHandler<GetMaterialCategoryByIdQuery, MaterialCategoryResponse> handler) : ControllerBase
 {
-    [HttpGet("{materialCategoryId:guid}")]
+    [HttpGet("{categoryId:guid}")]
     [ProducesResponseType<ApiResponse<MaterialCategoryResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.View)]
-    public async Task<IResult> Handle(Guid materialCategoryId, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(Guid categoryId, CancellationToken cancellationToken)
     {
-        var query = new GetMaterialCategoryByIdQuery(materialCategoryId);
+        var query = new GetMaterialCategoryByIdQuery(categoryId);
 
         Result<MaterialCategoryResponse> result = await handler.Handle(query, cancellationToken);
 

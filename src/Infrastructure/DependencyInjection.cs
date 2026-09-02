@@ -33,7 +33,9 @@ using Infrastructure.Warehouses;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
@@ -230,6 +232,13 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Database connection string is not configured. " +
                 "Set 'ConnectionStrings:Database' in appsettings.json or user secrets.");
+        int commandTimeoutSeconds = configuration.GetValue<int?>("DatabasePerformance:CommandTimeoutSeconds") ?? 30;
+
+        if (commandTimeoutSeconds is < 1 or > 600)
+        {
+            throw new InvalidOperationException(
+                "DatabasePerformance:CommandTimeoutSeconds must be between 1 and 600 seconds.");
+        }
 
         services.AddScoped<AuditableEntityInterceptor>();
 
@@ -240,12 +249,15 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>(
             (sp, options) => options
                 .UseNpgsql(connectionString, npgsqlOptions =>
-                    npgsqlOptions.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default))
+                    npgsqlOptions
+                        .MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default)
+                        .CommandTimeout(commandTimeoutSeconds))
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<AuditableEntityInterceptor>(),
                     sp.GetRequiredService<DocumentLifecycleSaveChangesInterceptor>(),
-                    sp.GetRequiredService<AuditSaveChangesInterceptor>()));
+                    sp.GetRequiredService<AuditSaveChangesInterceptor>())
+                .AddInterceptors(sp.GetServices<DbCommandInterceptor>()));
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 
@@ -256,7 +268,14 @@ public static class DependencyInjection
     {
         services
             .AddHealthChecks()
-            .AddNpgSql(configuration.GetConnectionString("Database")!);
+            .AddCheck(
+                "self",
+                () => HealthCheckResult.Healthy(),
+                tags: ["live"])
+            .AddNpgSql(
+                configuration.GetConnectionString("Database")!,
+                name: "postgresql",
+                tags: ["ready"]);
 
         return services;
     }
@@ -289,8 +308,6 @@ public static class DependencyInjection
     private static IServiceCollection AddAuthorizationInternal(this IServiceCollection services)
     {
         services.AddAuthorization();
-
-        services.AddScoped<PermissionProvider>();
 
         services.AddScoped<IScopeAuthorizationService, ScopeAuthorizationService>();
 

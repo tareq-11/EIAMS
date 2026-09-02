@@ -57,6 +57,6 @@ public sealed class UploadDocumentAttachmentController(ICommandHandler<UploadDoc
 
         return result.ToCreatedApiResponse(
             HttpContext,
-            attachmentId => $"/warehouse-documents/{documentId}/attachments/{attachmentId}/content");
+            attachmentId => $"/api/v1/warehouse-documents/{documentId}/attachments/{attachmentId}/content");
     }
 }

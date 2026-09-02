@@ -13,6 +13,10 @@ public interface ICounterpartResolver
         Guid id,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyDictionary<CounterpartReference, CounterpartResolution>> ResolveManyAsync(
+        IReadOnlyCollection<CounterpartReference> counterparts,
+        CancellationToken cancellationToken);
+
     Task<Result<CounterpartResolution>> ValidateForWriteAsync(
         Guid userId,
         PartyType type,
@@ -28,6 +32,8 @@ public interface ICounterpartResolver
         int pageSize,
         CancellationToken cancellationToken);
 }
+
+public readonly record struct CounterpartReference(PartyType Type, Guid Id);
 
 public sealed record CounterpartResolution(
     [property: JsonConverter(typeof(JsonStringEnumConverter<PartyType>))] PartyType Type,

@@ -40,6 +40,6 @@ public sealed class CreateWarehouseController(ICommandHandler<CreateWarehouseCom
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 
-        return result.ToCreatedApiResponse(HttpContext, warehouseId => $"/warehouses/{warehouseId}");
+        return result.ToCreatedApiResponse(HttpContext, warehouseId => $"/api/v1/warehouses/{warehouseId}");
     }
 }

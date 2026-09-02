@@ -16,7 +16,10 @@ builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configu
 builder.Services.AddSwaggerGenWithAuth();
 
 builder.Services
-    .AddApplication()
+    .AddApplication(options => options.SlowHandlerThresholdMilliseconds =
+        builder.Configuration.GetValue<int?>(
+            $"{Application.Abstractions.Behaviors.PerformanceMonitoringOptions.SectionName}:SlowHandlerThresholdMilliseconds")
+        ?? options.SlowHandlerThresholdMilliseconds)
     .AddPresentation(builder.Configuration)
     .AddInfrastructure(builder.Configuration);
 
@@ -54,8 +57,19 @@ if (app.Environment.IsDevelopment())
     app.ApplyMigrations();
 }
 
-app.MapHealthChecks("health", new HealthCheckOptions
+app.MapHealthChecks("api/v1/health", new HealthCheckOptions
 {
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
+
+app.MapHealthChecks("api/v1/health/live", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live")
+});
+
+app.MapHealthChecks("api/v1/health/ready", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready"),
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
 });
 

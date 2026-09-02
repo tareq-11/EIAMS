@@ -9,7 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.UserRoleScopes;
 
 [ApiController]
-[Route("user-role-scopes")]
+[Route("admin/user-role-scopes")]
 [Tags(Tags.UserRoleScopes)]
 public sealed class GrantController(ICommandHandler<GrantUserRoleScopeCommand, Guid> handler) : ControllerBase
 {

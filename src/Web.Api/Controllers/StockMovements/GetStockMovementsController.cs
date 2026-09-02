@@ -19,7 +19,7 @@ public sealed record GetStockMovementsRequest(
     string? Search);
 
 [ApiController]
-[Route("stock-movements")]
+[Route("inventory/movements")]
 [Tags(Tags.InventoryLedger)]
 public sealed class GetStockMovementsController(
     IQueryHandler<GetStockMovementsQuery, PagedResult<StockMovementResponse>> handler) : ControllerBase

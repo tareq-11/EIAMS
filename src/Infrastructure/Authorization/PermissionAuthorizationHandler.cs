@@ -1,10 +1,14 @@
+using Application.Abstractions.Authorization;
 using Infrastructure.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Authorization;
 
-internal sealed class PermissionAuthorizationHandler(IServiceScopeFactory serviceScopeFactory)
+internal sealed class PermissionAuthorizationHandler(
+    IServiceScopeFactory serviceScopeFactory,
+    IHttpContextAccessor httpContextAccessor)
     : AuthorizationHandler<PermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(
@@ -18,13 +22,17 @@ internal sealed class PermissionAuthorizationHandler(IServiceScopeFactory servic
 
         using IServiceScope scope = serviceScopeFactory.CreateScope();
 
-        PermissionProvider permissionProvider = scope.ServiceProvider.GetRequiredService<PermissionProvider>();
+        IScopeAuthorizationService authorizationService =
+            scope.ServiceProvider.GetRequiredService<IScopeAuthorizationService>();
 
         Guid userId = context.User.GetUserId();
+        CancellationToken cancellationToken =
+            httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
 
-        HashSet<string> permissions = await permissionProvider.GetForUserIdAsync(userId);
-
-        if (permissions.Contains(requirement.Permission))
+        if (await authorizationService.HasPermissionAsync(
+                userId,
+                requirement.Permission,
+                cancellationToken))
         {
             context.Succeed(requirement);
         }

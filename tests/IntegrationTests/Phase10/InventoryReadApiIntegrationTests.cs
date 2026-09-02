@@ -47,7 +47,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Act + Assert: global balance list contains only the assigned warehouse.
-        HttpResponseMessage balancesResponse = await HttpClient.GetAsync("inventory-balances?page=1&pageSize=10");
+        HttpResponseMessage balancesResponse = await HttpClient.GetAsync("inventory/balances?page=1&pageSize=10");
         string balancesJson = await balancesResponse.Content.ReadAsStringAsync();
         balancesResponse.StatusCode.ShouldBe(HttpStatusCode.OK, balancesJson);
         using var balancesBody = JsonDocument.Parse(balancesJson);
@@ -58,7 +58,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
 
         // A WarehouseId query parameter only narrows the authorized result; it cannot expand Scope.
         HttpResponseMessage outsideFilterResponse = await HttpClient.GetAsync(
-            $"inventory-balances?warehouseId={seed.OutsideWarehouseId}&page=1&pageSize=10");
+            $"inventory/balances?warehouseId={seed.OutsideWarehouseId}&page=1&pageSize=10");
         outsideFilterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var outsideFilterBody = JsonDocument.Parse(
             await outsideFilterResponse.Content.ReadAsStringAsync());
@@ -67,7 +67,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
 
         // The same Scope rule is applied to both movement list and movement detail.
         HttpResponseMessage movementsResponse = await HttpClient.GetAsync(
-            "stock-movements?movementType=Receipt&page=1&pageSize=10");
+            "inventory/movements?movementType=Receipt&page=1&pageSize=10");
         movementsResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var movementsBody = JsonDocument.Parse(await movementsResponse.Content.ReadAsStringAsync());
         JsonElement movements = movementsBody.RootElement.GetProperty("data");
@@ -76,11 +76,11 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         movements[0].GetProperty("documentReferenceNumber").GetString().ShouldBe(seed.AllowedDocumentReference);
 
         HttpResponseMessage allowedDetailResponse = await HttpClient.GetAsync(
-            $"stock-movements/{seed.AllowedMovementId}");
+            $"inventory/movements/{seed.AllowedMovementId}");
         allowedDetailResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         HttpResponseMessage outsideDetailResponse = await HttpClient.GetAsync(
-            $"stock-movements/{seed.OutsideMovementId}");
+            $"inventory/movements/{seed.OutsideMovementId}");
         outsideDetailResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
@@ -94,7 +94,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Adjustments
-        HttpResponseMessage adjustments = await HttpClient.GetAsync("inventory-adjustments?page=1&pageSize=10");
+        HttpResponseMessage adjustments = await HttpClient.GetAsync("adjustments?page=1&pageSize=10");
         adjustments.StatusCode.ShouldBe(HttpStatusCode.OK);
         using (var body = JsonDocument.Parse(await adjustments.Content.ReadAsStringAsync()))
         {
@@ -102,12 +102,12 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             body.RootElement.GetProperty("data")[0].GetProperty("id").GetGuid().ShouldBe(seed.AllowedAdjustmentId);
         }
 
-        (await HttpClient.GetAsync($"inventory-adjustments/{seed.AllowedAdjustmentId}"))
+        (await HttpClient.GetAsync($"adjustments/{seed.AllowedAdjustmentId}"))
             .StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await HttpClient.GetAsync($"inventory-adjustments/{seed.OutsideAdjustmentId}"))
+        (await HttpClient.GetAsync($"adjustments/{seed.OutsideAdjustmentId}"))
             .StatusCode.ShouldBe(HttpStatusCode.NotFound);
         HttpResponseMessage eligible = await HttpClient.GetAsync(
-            "inventory-adjustments/disposal-eligible-assets?page=1&pageSize=10");
+            "adjustments/disposal-eligible-assets?page=1&pageSize=10");
         eligible.StatusCode.ShouldBe(HttpStatusCode.OK);
         using (var body = JsonDocument.Parse(await eligible.Content.ReadAsStringAsync()))
         {
@@ -156,7 +156,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Act
-        HttpResponseMessage response = await HttpClient.GetAsync("inventory-balances?page=1&pageSize=10");
+        HttpResponseMessage response = await HttpClient.GetAsync("inventory/balances?page=1&pageSize=10");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);

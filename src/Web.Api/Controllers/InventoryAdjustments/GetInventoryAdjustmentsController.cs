@@ -18,7 +18,7 @@ public sealed record GetInventoryAdjustmentsRequest(
     string? Search);
 
 [ApiController]
-[Route("inventory-adjustments")]
+[Route("adjustments")]
 [Tags(Tags.InventoryCounts)]
 public sealed class GetInventoryAdjustmentsController(
     IQueryHandler<GetInventoryAdjustmentsQuery, PagedResult<InventoryAdjustmentResponse>> handler) : ControllerBase

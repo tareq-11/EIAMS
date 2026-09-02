@@ -1,0 +1,27 @@
+{
+  "contractId": "eiams-backend-v1",
+  "contractVersion": "v1",
+  "releaseLabel": "1.0-phase10-contract-complete",
+  "openapiVersion": "3.0.4",
+  "status": "ImplementedBackendBaseline",
+  "generatedAt": "2026-09-01T11:07:07Z",
+  "snapshotPath": "contracts/openapi/eiams-backend-v1.openapi.json",
+  "sha256": "b5733ff8faaef2029995eeba9f8fdc30a182939e65d349ae7587917c02490235",
+  "source": {
+    "backendBaseRevision": "30dfac5144f5e6f25acb4fa6aba903094ed9cda1",
+    "endpoint": "/swagger/v1/swagger.json",
+    "environment": "Development with local PostgreSQL",
+    "buildCommand": "dotnet build CleanArchitectureTemplate.slnx --no-restore",
+    "buildResult": "passed with 0 warnings and 0 errors"
+  },
+  "coverage": {
+    "paths": 132,
+    "operations": 170,
+    "schemas": 279,
+    "successResponsesMissingContent": 0,
+    "operationIds": {
+      "missing": 0,
+      "duplicates": 0
+    }
+  }
+}
