@@ -23,7 +23,9 @@ internal sealed class GetExternalPartiesQueryHandler(IApplicationDbContext conte
             .Where(item => search == null ||
                 item.NormalizedNameAr.Contains(search) ||
                 item.NormalizedCode != null && item.NormalizedCode.Contains(search))
-            .Select(item => new ExternalPartyResponse(
+            .OrderBy(item => item.NameAr)
+            .ThenBy(item => item.Id)
+            .ToPagedResultAsync(item => new ExternalPartyResponse(
                 item.Id,
                 item.NameAr,
                 item.Code,
@@ -32,10 +34,10 @@ internal sealed class GetExternalPartiesQueryHandler(IApplicationDbContext conte
                 item.Status.ToString(),
                 item.RowVersion,
                 item.CreatedAtUtc,
-                item.UpdatedAtUtc))
-            .OrderBy(item => item.NameAr)
-            .ThenBy(item => item.Id)
-            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
+                item.UpdatedAtUtc),
+                query.Page,
+                query.PageSize,
+                cancellationToken);
 
         return parties;
     }

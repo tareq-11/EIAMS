@@ -49,7 +49,7 @@ public sealed class ApiLatencyBenchmarkTests
         }
 
         measurements.Add(CreateMeasurement(
-            "POST /users/login",
+            "POST /api/v1/auth/login",
             firstLoginMs,
             repeatedLoginDurations,
             sqlCommands: null));

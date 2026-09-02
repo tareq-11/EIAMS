@@ -55,6 +55,12 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
         party.GetProperty("status").GetString().ShouldBe("Active");
         party.GetProperty("rowVersion").GetInt32().ShouldBe(1);
 
+        HttpResponseMessage listResponse = await HttpClient.GetAsync(
+            "external-parties?search=التكامل&page=1&pageSize=20");
+        listResponse.EnsureSuccessStatusCode();
+        string listJson = await listResponse.Content.ReadAsStringAsync();
+        listJson.ShouldContain(partyId.ToString());
+
         HttpResponseMessage counterpartList = await HttpClient.GetAsync(
             "counterparts?type=External&search=التكامل&Page=1&PageSize=20");
         counterpartList.EnsureSuccessStatusCode();
