@@ -1,5 +1,6 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
+using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.UserRoleScopes.Replace;
 using Domain.Common;
@@ -22,7 +23,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
     {
         await using TestDbContext context = CreateDbContext();
         var command = new ReplaceUserRoleScopeCommand(Guid.NewGuid(), WellKnownRoles.AdministratorId, ScopeType.Enterprise, null);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -41,7 +42,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -69,10 +70,23 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.Sites.Add(Site.Create(siteId, Guid.NewGuid(), "Main Site", "SITE1", null));
         context.OrganizationalUnits.Add(OrganizationalUnit.Create(orgUnitId, siteId, null, "Directorate", "Directorate"));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+        var secondAdministratorId = Guid.NewGuid();
+        context.Users.Add(User.Create(
+            secondAdministratorId,
+            "second-admin@example.com",
+            "Second",
+            "Administrator",
+            "hash"));
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(),
+            secondAdministratorId,
+            WellKnownRoles.AdministratorId,
+            ScopeType.Enterprise,
+            null));
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseManagerId, ScopeType.OrganizationalUnit, orgUnitId);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -86,6 +100,34 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_PreventReplacing_LastActiveEnterpriseAdministrator()
+    {
+        await using TestDbContext context = CreateDbContext();
+        var userId = Guid.NewGuid();
+        var replacementRoleId = Guid.NewGuid();
+        context.Users.Add(User.Create(userId, "last-admin@example.com", "Last", "Administrator", "hash"));
+        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
+        context.Roles.Add(Role.Create(replacementRoleId, "Viewer", "Replacement role"));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(replacementRoleId, ScopeType.Enterprise));
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(),
+            userId,
+            WellKnownRoles.AdministratorId,
+            ScopeType.Enterprise,
+            null));
+        await context.SaveChangesAsync();
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
+
+        Result<Guid> result = await handler.Handle(
+            new ReplaceUserRoleScopeCommand(userId, replacementRoleId, ScopeType.Enterprise, null),
+            CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
+    }
+
+    [Fact]
     public async Task Handle_Should_Reject_WhenRoleDoesNotAllowScopeType()
     {
         await using TestDbContext context = CreateDbContext();
@@ -96,7 +138,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Enterprise, null);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -116,7 +158,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
 
         var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, missingWarehouseId);
-        var handler = new ReplaceUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
@@ -129,6 +171,26 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(Guid.NewGuid());
         return userContext;
+    }
+
+    private static ReplaceUserRoleScopeCommandHandler CreateHandler(TestDbContext context)
+    {
+        IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
+        transaction.ExecuteAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<Guid>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<Guid>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
+        applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        return new ReplaceUserRoleScopeCommandHandler(
+            context,
+            transaction,
+            applicationLock,
+            CreateUserContext(),
+            CreateAuthorization(true));
     }
 
     private static IScopeAuthorizationService CreateAuthorization(bool authorized)

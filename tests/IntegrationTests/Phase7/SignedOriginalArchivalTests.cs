@@ -83,7 +83,7 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
         archived.ReplacedByAttachmentId.ShouldBe(secondAttachmentId);
 
         archivedContentResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await archivedContentResponse.Content.ReadAsStringAsync()).ShouldBe("version-one");
+        (await archivedContentResponse.Content.ReadAsStringAsync()).ShouldBe("%PDF-1.7\nversion-one");
 
         policyResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         ApiEnvelope<DocumentPolicyDto>? policyBody =
@@ -154,6 +154,27 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
         (await dbContext.DocumentAttachments.CountAsync(item => item.DocumentId == documentId)).ShouldBe(1);
     }
 
+    [Fact]
+    public async Task UploadSignedOriginal_Should_RejectContentThatDoesNotMatchDeclaredMimeType()
+    {
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantEnterpriseAdministratorAsync(userId);
+        Authenticate(tokens.AccessToken);
+        Guid documentId = await SeedDraftDocumentAsync();
+
+        HttpResponseMessage response = await SendSignedOriginalAsync(
+            documentId,
+            1,
+            "spoofed.pdf",
+            "this-is-not-a-pdf",
+            includePdfSignature: false);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        ApiErrorEnvelope? body = await response.Content.ReadFromJsonAsync<ApiErrorEnvelope>();
+        body.ShouldNotBeNull();
+        body.Error.Code.ShouldBe("DOCUMENT_ATTACHMENTS_FILE_SIGNATURE_MISMATCH");
+    }
+
     private async Task<Guid> UploadSignedOriginalAsync(
         Guid documentId,
         int expectedRowVersion,
@@ -177,9 +198,11 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
         Guid documentId,
         int expectedRowVersion,
         string filename,
-        string content)
+        string content,
+        bool includePdfSignature = true)
     {
-        using var fileContent = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(content));
+        string fileBody = includePdfSignature ? $"%PDF-1.7\n{content}" : content;
+        using var fileContent = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(fileBody));
         using var attachmentTypeContent = new StringContent(AttachmentType.SignedOriginal.ToString());
         using var rowVersionContent = new StringContent(
             expectedRowVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));

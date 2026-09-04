@@ -11,13 +11,40 @@ namespace Application.Users.Refresh;
 
 internal sealed class RefreshTokenCommandHandler(
     IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
     IAuditOperationContextAccessor auditContext) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
 {
-    public async Task<Result<AccessTokensResponse>> Handle(RefreshTokenCommand command, CancellationToken cancellationToken)
+    public async Task<Result<AccessTokensResponse>> Handle(
+        RefreshTokenCommand command,
+        CancellationToken cancellationToken)
     {
         string tokenHash = tokenProvider.HashRefreshToken(command.RefreshToken);
+        Result<AccessTokensResponse>? refreshResult = null;
+
+        Result transactionResult = await transaction.ExecuteAsync(
+            async ct =>
+            {
+                await applicationLock.AcquireAsync($"security:refresh-token:{tokenHash}", ct);
+                refreshResult = await RefreshAsync(tokenHash, ct);
+
+                // Replay detection intentionally changes persistent state while returning an
+                // authentication failure. Commit that revocation; only exceptions should roll it back.
+                return Result.Success();
+            },
+            cancellationToken);
+
+        return transactionResult.IsFailure
+            ? Result.Failure<AccessTokensResponse>(transactionResult.Error)
+            : refreshResult ?? Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
+    }
+
+    private async Task<Result<AccessTokensResponse>> RefreshAsync(
+        string tokenHash,
+        CancellationToken cancellationToken)
+    {
         DateTime nowUtc = dateTimeProvider.UtcNow;
 
         RefreshToken? refreshToken = await context.RefreshTokens

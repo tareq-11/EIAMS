@@ -136,4 +136,33 @@ public sealed class UsersTests : BaseIntegrationTest
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task ConcurrentRefresh_Should_AllowOnlyOneRotation_AndInvalidateTheTokenFamilyAsReplay()
+    {
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+        AccessTokens originalTokens = await LoginAsync(email);
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        Task<HttpResponseMessage>[] refreshRequests =
+        [
+            HttpClient.PostAsJsonAsync("auth/refresh", new { refreshToken = originalTokens.RefreshToken }),
+            HttpClient.PostAsJsonAsync("auth/refresh", new { refreshToken = originalTokens.RefreshToken })
+        ];
+        HttpResponseMessage[] responses = await Task.WhenAll(refreshRequests);
+
+        responses.Count(response => response.StatusCode == HttpStatusCode.OK).ShouldBe(1);
+        responses.Count(response => response.StatusCode == HttpStatusCode.BadRequest).ShouldBe(1);
+
+        HttpResponseMessage successfulResponse = responses.Single(response => response.StatusCode == HttpStatusCode.OK);
+        ApiEnvelope<AccessTokens>? successfulBody =
+            await successfulResponse.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
+        successfulBody.ShouldNotBeNull();
+
+        HttpResponseMessage familyTokenResponse = await HttpClient.PostAsJsonAsync(
+            "auth/refresh",
+            new { refreshToken = successfulBody.Data.RefreshToken });
+        familyTokenResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
 }

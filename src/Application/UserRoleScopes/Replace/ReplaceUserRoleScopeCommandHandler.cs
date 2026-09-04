@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.UserRoleScopes;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -11,10 +12,23 @@ namespace Application.UserRoleScopes.Replace;
 
 internal sealed class ReplaceUserRoleScopeCommandHandler(
     IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<ReplaceUserRoleScopeCommand, Guid>
 {
-    public async Task<Result<Guid>> Handle(
+    public Task<Result<Guid>> Handle(
+        ReplaceUserRoleScopeCommand command,
+        CancellationToken cancellationToken) =>
+        transaction.ExecuteAsync(
+            async ct =>
+            {
+                await applicationLock.AcquireAsync(AdministratorAssignmentSafety.LockKey, ct);
+                return await ReplaceAsync(command, ct);
+            },
+            cancellationToken);
+
+    private async Task<Result<Guid>> ReplaceAsync(
         ReplaceUserRoleScopeCommand command,
         CancellationToken cancellationToken)
     {
@@ -50,6 +64,23 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
             if (!canManageCurrentAssignment)
             {
                 return Result.Failure<Guid>(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
+            }
+
+            bool removesEnterpriseAdministrator =
+                AdministratorAssignmentSafety.IsEnterpriseAdministrator(
+                    existingAssignment.RoleId,
+                    existingAssignment.ScopeType) &&
+                !AdministratorAssignmentSafety.IsEnterpriseAdministrator(
+                    command.RoleId,
+                    command.ScopeType);
+
+            if (removesEnterpriseAdministrator &&
+                await AdministratorAssignmentSafety.IsLastActiveEnterpriseAdministratorAsync(
+                    context,
+                    existingAssignment.UserId,
+                    cancellationToken))
+            {
+                return Result.Failure<Guid>(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
             }
         }
 

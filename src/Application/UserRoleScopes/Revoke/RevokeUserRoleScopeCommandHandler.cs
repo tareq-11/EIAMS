@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.UserRoleScopes;
 using Domain.Common;
 using Domain.UserRoleScopes;
 using Microsoft.EntityFrameworkCore;
@@ -11,11 +12,24 @@ namespace Application.UserRoleScopes.Revoke;
 
 internal sealed class RevokeUserRoleScopeCommandHandler(
     IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService)
     : ICommandHandler<RevokeUserRoleScopeCommand>
 {
-    public async Task<Result> Handle(RevokeUserRoleScopeCommand command, CancellationToken cancellationToken)
+    public Task<Result> Handle(RevokeUserRoleScopeCommand command, CancellationToken cancellationToken) =>
+        transaction.ExecuteAsync(
+            async ct =>
+            {
+                await applicationLock.AcquireAsync(AdministratorAssignmentSafety.LockKey, ct);
+                return await RevokeAsync(command, ct);
+            },
+            cancellationToken);
+
+    private async Task<Result> RevokeAsync(
+        RevokeUserRoleScopeCommand command,
+        CancellationToken cancellationToken)
     {
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
@@ -35,6 +49,17 @@ internal sealed class RevokeUserRoleScopeCommandHandler(
         if (userRoleScope is null)
         {
             return Result.Failure(UserRoleScopeErrors.NotFound(command.UserRoleScopeId));
+        }
+
+        if (AdministratorAssignmentSafety.IsEnterpriseAdministrator(
+                userRoleScope.RoleId,
+                userRoleScope.ScopeType) &&
+            await AdministratorAssignmentSafety.IsLastActiveEnterpriseAdministratorAsync(
+                context,
+                userRoleScope.UserId,
+                cancellationToken))
+        {
+            return Result.Failure(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
         }
 
         userRoleScope.MarkAsRevoked();

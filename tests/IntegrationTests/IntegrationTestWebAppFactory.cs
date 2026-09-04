@@ -19,6 +19,9 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
 {
     internal const string AdministratorEmail = "integration-admin@example.com";
     internal const string AdministratorPassword = "Password123!";
+    internal const string JwtSecret = "super-duper-secret-value-that-should-be-in-user-secrets";
+    internal const string JwtIssuer = "clean-architecture-template";
+    internal const string JwtAudience = "developers";
 
     private readonly string attachmentStoragePath = Path.Combine(
         Path.GetTempPath(),
@@ -35,9 +38,9 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("ConnectionStrings:Database", _dbContainer.GetConnectionString());
 
         // Provide deterministic JWT settings so tokens can be issued and validated in tests.
-        builder.UseSetting("Jwt:Secret", "super-duper-secret-value-that-should-be-in-user-secrets");
-        builder.UseSetting("Jwt:Issuer", "clean-architecture-template");
-        builder.UseSetting("Jwt:Audience", "developers");
+        builder.UseSetting("Jwt:Secret", JwtSecret);
+        builder.UseSetting("Jwt:Issuer", JwtIssuer);
+        builder.UseSetting("Jwt:Audience", JwtAudience);
         builder.UseSetting("Jwt:ExpirationInMinutes", "60");
         builder.UseSetting("AttachmentStorage:Local:RootPath", attachmentStoragePath);
 

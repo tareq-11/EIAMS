@@ -1,5 +1,6 @@
 using Application.Abstractions.Messaging;
 using Application.Users.Logout;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
@@ -9,6 +10,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
+[AllowAnonymous]
 [Route("auth")]
 [Tags(Tags.Users)]
 public sealed class LogoutController(ICommandHandler<LogoutUserCommand> handler) : ControllerBase

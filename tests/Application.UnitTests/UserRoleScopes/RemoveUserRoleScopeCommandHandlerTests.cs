@@ -1,5 +1,6 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
+using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.UserRoleScopes.RemoveAssignment;
 using Domain.Common;
@@ -19,7 +20,7 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
     {
         await using TestDbContext context = CreateDbContext();
         var targetUserId = Guid.NewGuid();
-        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        RemoveUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result result = await handler.Handle(new RemoveUserRoleScopeCommand(targetUserId), CancellationToken.None);
 
@@ -39,7 +40,7 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.UserRoleScopes.Add(adminAssignment);
         await context.SaveChangesAsync();
 
-        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        RemoveUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result result = await handler.Handle(new RemoveUserRoleScopeCommand(adminUserId), CancellationToken.None);
 
@@ -61,7 +62,7 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.UserRoleScopes.Add(assignment);
         await context.SaveChangesAsync();
 
-        var handler = new RemoveUserRoleScopeCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
+        RemoveUserRoleScopeCommandHandler handler = CreateHandler(context);
 
         Result result = await handler.Handle(new RemoveUserRoleScopeCommand(userId), CancellationToken.None);
 
@@ -74,6 +75,26 @@ public sealed class RemoveUserRoleScopeCommandHandlerTests : BaseHandlerTest
         IUserContext userContext = Substitute.For<IUserContext>();
         userContext.UserId.Returns(Guid.NewGuid());
         return userContext;
+    }
+
+    private static RemoveUserRoleScopeCommandHandler CreateHandler(TestDbContext context)
+    {
+        IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
+        transaction.ExecuteAsync(
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
+        applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        return new RemoveUserRoleScopeCommandHandler(
+            context,
+            transaction,
+            applicationLock,
+            CreateUserContext(),
+            CreateAuthorization(true));
     }
 
     private static IScopeAuthorizationService CreateAuthorization(bool authorized)

@@ -6,7 +6,8 @@ internal static class CorsExtensions
 
     internal static IServiceCollection AddCorsPolicy(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         string[] allowedOrigins = configuration
             .GetSection("Cors:AllowedOrigins")
@@ -16,7 +17,7 @@ internal static class CorsExtensions
         {
             options.AddPolicy(PolicyName, builder =>
             {
-                if (allowedOrigins.Length == 0)
+                if (allowedOrigins.Length == 0 && environment.IsDevelopment())
                 {
                     // Development-friendly: allow any origin when no origins are configured.
                     builder
@@ -24,13 +25,22 @@ internal static class CorsExtensions
                         .AllowAnyMethod()
                         .AllowAnyHeader();
                 }
-                else
+                else if (allowedOrigins.Length > 0)
                 {
                     builder
                         .WithOrigins(allowedOrigins)
-                        .AllowAnyMethod()
-                        .AllowAnyHeader()
+                        .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+                        .WithHeaders("Authorization", "Content-Type", "Idempotency-Key", "Correlation-Id")
+                        .WithExposedHeaders("X-Request-Id")
                         .AllowCredentials();
+                }
+                else
+                {
+                    // Production is fail-closed when no browser origins are configured.
+                    builder
+                        .SetIsOriginAllowed(_ => false)
+                        .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+                        .WithHeaders("Authorization", "Content-Type", "Idempotency-Key", "Correlation-Id");
                 }
             });
         });

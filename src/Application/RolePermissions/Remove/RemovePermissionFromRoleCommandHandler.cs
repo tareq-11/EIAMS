@@ -29,6 +29,11 @@ internal sealed class RemovePermissionFromRoleCommandHandler(
             return Result.Failure(RoleErrors.Forbidden);
         }
 
+        if (command.RoleId == WellKnownRoles.AdministratorId)
+        {
+            return Result.Failure(RoleErrors.BuiltInRoleImmutable);
+        }
+
         RolePermission? rolePermission = await context.RolePermissions
             .SingleOrDefaultAsync(
                 rp => rp.RoleId == command.RoleId && rp.PermissionId == command.PermissionId,

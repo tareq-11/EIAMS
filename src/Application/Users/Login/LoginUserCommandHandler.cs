@@ -16,20 +16,23 @@ internal sealed class LoginUserCommandHandler(
     IDateTimeProvider dateTimeProvider,
     IAuditOperationContextAccessor auditContext) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
+    // A syntactically valid PBKDF2-SHA512 hash used only to equalize the work performed for an
+    // unknown email and a wrong password. It is not a credential and cannot authenticate a user.
+    private const string DummyPasswordHash =
+        "0000000000000000000000000000000000000000000000000000000000000000-" +
+        "00000000000000000000000000000000";
+
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
         string email = User.NormalizeEmail(command.Email);
         User? user = await context.Users
             .SingleOrDefaultAsync(u => u.Email == email, cancellationToken);
 
-        if (user is null)
-        {
-            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
-        }
+        // Always run the expensive password verification. Returning before PBKDF2 for an unknown
+        // email creates a measurable timing oracle that reveals which accounts exist.
+        bool verified = passwordHasher.Verify(command.Password, user?.PasswordHash ?? DummyPasswordHash);
 
-        bool verified = passwordHasher.Verify(command.Password, user.PasswordHash);
-
-        if (!verified)
+        if (user is null || !verified)
         {
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }

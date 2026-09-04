@@ -4,7 +4,8 @@ internal static class AuthCookies
 {
     public const string CookieName = "eiams_refresh_token";
     public const string LegacyCookieName = "refreshToken";
-    public const string CookiePath = "/users";
+    public const string CookiePath = "/api/v1/auth";
+    private const string LegacyCookiePath = "/users";
 
     public static void SetRefreshTokenCookie(HttpContext context, string refreshToken, int expirationDays = 7)
     {
@@ -42,16 +43,22 @@ internal static class AuthCookies
 
     public static void ClearRefreshTokenCookies(HttpContext context)
     {
-        var cookieOptions = new CookieOptions
+        DeleteCookie(context, CookieName, CookiePath);
+        DeleteCookie(context, LegacyCookieName, CookiePath);
+
+        // Remove cookies issued before the API was moved from /users to /api/v1/auth.
+        DeleteCookie(context, CookieName, LegacyCookiePath);
+        DeleteCookie(context, LegacyCookieName, LegacyCookiePath);
+    }
+
+    private static void DeleteCookie(HttpContext context, string name, string path)
+    {
+        context.Response.Cookies.Delete(name, new CookieOptions
         {
             HttpOnly = true,
             Secure = context.Request.IsHttps,
             SameSite = SameSiteMode.Strict,
-            Path = CookiePath,
-            Expires = DateTimeOffset.UtcNow.AddDays(-1)
-        };
-
-        context.Response.Cookies.Delete(CookieName, cookieOptions);
-        context.Response.Cookies.Delete(LegacyCookieName, cookieOptions);
+            Path = path
+        });
     }
 }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Application.Abstractions.Assets;
 using Application.Abstractions.Audit;
@@ -78,6 +79,8 @@ public static class DependencyInjection
         services.AddScoped<ICapabilityCheckService, CapabilityCheckService>();
 
         services.AddScoped<IApplicationTransaction, EfApplicationTransaction>();
+
+        services.AddScoped<IApplicationLock, PostgresApplicationLock>();
 
         services.AddScoped<IDocumentLock, ApplicationDocumentLock>();
 
@@ -284,19 +287,43 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        var jwtOptions = JwtOptions.FromConfiguration(configuration);
+
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(o =>
             {
-                o.RequireHttpsMetadata = false;
+                o.RequireHttpsMetadata = jwtOptions.RequireHttpsMetadata;
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["Jwt:Secret"]!)),
-                    ValidIssuer = configuration["Jwt:Issuer"],
-                    ValidAudience = configuration["Jwt:Audience"],
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret)),
+                    ValidateIssuer = true,
+                    ValidIssuer = jwtOptions.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = jwtOptions.Audience,
+                    ValidateLifetime = true,
+                    RequireExpirationTime = true,
+                    RequireSignedTokens = true,
                     ClockSkew = TimeSpan.Zero
+                };
+                o.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = context =>
+                    {
+                        string? subject = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                                          context.Principal?.FindFirstValue("sub");
+
+                        if (!Guid.TryParse(subject, out _))
+                        {
+                            context.Fail("The access token subject is missing or invalid.");
+                        }
+
+                        return Task.CompletedTask;
+                    }
                 };
             });
 
+        services.AddSingleton(jwtOptions);
         services.AddHttpContextAccessor();
         services.AddScoped<IUserContext, UserContext>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

@@ -75,6 +75,14 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             return Result.Failure<Guid>(DocumentAttachmentErrors.MimeTypeNotAllowed(command.MimeType));
         }
 
+        if (!await FileSignatureValidator.MatchesMimeTypeAsync(
+                command.Content,
+                command.MimeType,
+                cancellationToken))
+        {
+            return Result.Failure<Guid>(DocumentAttachmentErrors.FileSignatureMismatch);
+        }
+
         DocumentAttachment? activeSignedOriginal = command.AttachmentType == AttachmentType.SignedOriginal
             ? await context.DocumentAttachments.SingleOrDefaultAsync(
                 a => a.DocumentId == command.DocumentId &&

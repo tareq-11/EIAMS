@@ -3,18 +3,16 @@ using System.Security.Cryptography;
 using System.Text;
 using Application.Abstractions.Authentication;
 using Domain.Users;
-using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Infrastructure.Authentication;
 
-internal sealed class TokenProvider(IConfiguration configuration) : ITokenProvider
+internal sealed class TokenProvider(JwtOptions options) : ITokenProvider
 {
     public string Create(User user)
     {
-        string secretKey = configuration["Jwt:Secret"]!;
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));
 
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
@@ -25,10 +23,10 @@ internal sealed class TokenProvider(IConfiguration configuration) : ITokenProvid
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email)
             ]),
-            Expires = DateTime.UtcNow.AddMinutes(configuration.GetValue<int>("Jwt:ExpirationInMinutes")),
+            Expires = DateTime.UtcNow.AddMinutes(options.ExpirationInMinutes),
             SigningCredentials = credentials,
-            Issuer = configuration["Jwt:Issuer"],
-            Audience = configuration["Jwt:Audience"]
+            Issuer = options.Issuer,
+            Audience = options.Audience
         };
 
         var handler = new JsonWebTokenHandler();

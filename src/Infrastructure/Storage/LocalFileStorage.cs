@@ -91,11 +91,16 @@ internal sealed class LocalFileStorage(
 
     public Task<Result<Stream>> OpenAsync(string storageKey, CancellationToken cancellationToken)
     {
+        if (!IsValidStorageKey(storageKey))
+        {
+            return Task.FromResult(Result.Failure<Stream>(DocumentAttachmentErrors.ContentNotFound));
+        }
+
         string filePath = Path.Combine(ResolveRootPath(), storageKey);
 
         if (!File.Exists(filePath))
         {
-            return Task.FromResult(Result.Failure<Stream>(DocumentAttachmentErrors.ContentNotFound(storageKey)));
+            return Task.FromResult(Result.Failure<Stream>(DocumentAttachmentErrors.ContentNotFound));
         }
 
 #pragma warning disable CA2000 // Ownership transfers to the caller, who is responsible for disposing the stream.
@@ -107,6 +112,11 @@ internal sealed class LocalFileStorage(
 
     public Task<Result> DeleteAsync(string storageKey, CancellationToken cancellationToken)
     {
+        if (!IsValidStorageKey(storageKey))
+        {
+            return Task.FromResult(Result.Failure(DocumentAttachmentErrors.StorageFailure));
+        }
+
         string filePath = Path.Combine(ResolveRootPath(), storageKey);
 
         try
@@ -127,6 +137,9 @@ internal sealed class LocalFileStorage(
         Path.IsPathRooted(options.Value.RootPath)
             ? options.Value.RootPath
             : Path.GetFullPath(Path.Combine(hostEnvironment.ContentRootPath, options.Value.RootPath));
+
+    private static bool IsValidStorageKey(string storageKey) =>
+        storageKey.Length == 32 && Guid.TryParseExact(storageKey, "N", out _);
 
     private void TryDeletePartialFile(string filePath)
     {

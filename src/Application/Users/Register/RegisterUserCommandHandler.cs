@@ -10,10 +10,27 @@ using SharedKernel;
 
 namespace Application.Users.Register;
 
-internal sealed class RegisterUserCommandHandler(IApplicationDbContext context, IPasswordHasher passwordHasher)
+internal sealed class RegisterUserCommandHandler(
+    IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
+    IPasswordHasher passwordHasher)
     : ICommandHandler<RegisterUserCommand, Guid>
 {
-    public async Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
+    private const string BootstrapLockKey = "security:bootstrap-administrator";
+
+    public Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken) =>
+        transaction.ExecuteAsync(
+            async ct =>
+            {
+                await applicationLock.AcquireAsync(BootstrapLockKey, ct);
+                return await RegisterAsync(command, ct);
+            },
+            cancellationToken);
+
+    private async Task<Result<Guid>> RegisterAsync(
+        RegisterUserCommand command,
+        CancellationToken cancellationToken)
     {
         // This endpoint exists only to bootstrap a brand-new installation. Once the first
         // administrator exists, every account must be provisioned through the protected

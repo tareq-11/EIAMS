@@ -1,4 +1,5 @@
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.Users.Register;
 using Domain.Common;
@@ -28,7 +29,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
             "hash"));
         await context.SaveChangesAsync();
 
-        var handler = new RegisterUserCommandHandler(context, Substitute.For<IPasswordHasher>());
+        RegisterUserCommandHandler handler = CreateHandler(context, Substitute.For<IPasswordHasher>());
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -47,7 +48,7 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         passwordHasher.Hash(Command.Password).Returns("hashed-password");
 
-        var handler = new RegisterUserCommandHandler(context, passwordHasher);
+        RegisterUserCommandHandler handler = CreateHandler(context, passwordHasher);
 
         // Act
         Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
@@ -65,5 +66,22 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         assignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
         assignment.ScopeType.ShouldBe(ScopeType.Enterprise);
         assignment.ScopeId.ShouldBeNull();
+    }
+
+    private static RegisterUserCommandHandler CreateHandler(
+        TestDbContext context,
+        IPasswordHasher passwordHasher)
+    {
+        IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
+        transaction.ExecuteAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<Guid>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<Guid>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
+        applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        return new RegisterUserCommandHandler(context, transaction, applicationLock, passwordHasher);
     }
 }

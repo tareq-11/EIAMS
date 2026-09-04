@@ -1,6 +1,5 @@
 using System.IO.Compression;
 using Application;
-using HealthChecks.UI.Client;
 using Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -10,6 +9,8 @@ using Web.Api.Extensions;
 using Web.Api.Infrastructure;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.ValidateProductionSecurityConfiguration(builder.Environment);
 
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
 
@@ -27,7 +28,7 @@ builder.Services.AddObservability(builder.Configuration, builder.Environment.App
 
 builder.Services.AddRateLimitingInternal(builder.Configuration);
 
-builder.Services.AddCorsPolicy(builder.Configuration);
+builder.Services.AddCorsPolicy(builder.Configuration, builder.Environment);
 
 builder.Services.AddForwardedHeaders(builder.Configuration);
 
@@ -57,9 +58,17 @@ if (app.Environment.IsDevelopment())
     app.ApplyMigrations();
 }
 
+app.UseForwardedHeaders();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
 app.MapHealthChecks("api/v1/health", new HealthCheckOptions
 {
-    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
 });
 
 app.MapHealthChecks("api/v1/health/live", new HealthCheckOptions
@@ -70,16 +79,16 @@ app.MapHealthChecks("api/v1/health/live", new HealthCheckOptions
 app.MapHealthChecks("api/v1/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
-    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
 });
-
-app.UseForwardedHeaders();
 
 app.UseRequestContextLogging();
 
 app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
+
+app.UseSecurityHeaders();
 
 app.UseStatusCodePages(async statusCodeContext =>
 {

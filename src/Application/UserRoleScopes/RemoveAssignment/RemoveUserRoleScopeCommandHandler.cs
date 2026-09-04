@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.UserRoleScopes;
 using Domain.Common;
 using Domain.Roles;
 using Domain.UserRoleScopes;
@@ -12,10 +13,23 @@ namespace Application.UserRoleScopes.RemoveAssignment;
 
 internal sealed class RemoveUserRoleScopeCommandHandler(
     IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<RemoveUserRoleScopeCommand>
 {
-    public async Task<Result> Handle(
+    public Task<Result> Handle(
+        RemoveUserRoleScopeCommand command,
+        CancellationToken cancellationToken) =>
+        transaction.ExecuteAsync(
+            async ct =>
+            {
+                await applicationLock.AcquireAsync(AdministratorAssignmentSafety.LockKey, ct);
+                return await RemoveAsync(command, ct);
+            },
+            cancellationToken);
+
+    private async Task<Result> RemoveAsync(
         RemoveUserRoleScopeCommand command,
         CancellationToken cancellationToken)
     {
@@ -39,18 +53,15 @@ internal sealed class RemoveUserRoleScopeCommandHandler(
             return Result.Failure(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
         }
 
-        if (assignment.RoleId == WellKnownRoles.AdministratorId &&
-            assignment.ScopeType == ScopeType.Enterprise)
+        if (AdministratorAssignmentSafety.IsEnterpriseAdministrator(
+                assignment.RoleId,
+                assignment.ScopeType) &&
+            await AdministratorAssignmentSafety.IsLastActiveEnterpriseAdministratorAsync(
+                context,
+                assignment.UserId,
+                cancellationToken))
         {
-            int enterpriseAdministratorCount = await context.UserRoleScopes
-                .CountAsync(item => item.RoleId == WellKnownRoles.AdministratorId &&
-                                    item.ScopeType == ScopeType.Enterprise,
-                    cancellationToken);
-
-            if (enterpriseAdministratorCount == 1)
-            {
-                return Result.Failure(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
-            }
+            return Result.Failure(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
         }
 
         assignment.MarkAsRevoked();
@@ -60,4 +71,5 @@ internal sealed class RemoveUserRoleScopeCommandHandler(
 
         return Result.Success();
     }
+
 }

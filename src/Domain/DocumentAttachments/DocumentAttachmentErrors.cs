@@ -48,6 +48,10 @@ public static class DocumentAttachmentErrors
         $"The MIME type '{mimeType}' is not allowed for document attachments.",
         new { mime_type = mimeType });
 
+    public static readonly Error FileSignatureMismatch = Error.Problem(
+        "DocumentAttachments.FileSignatureMismatch",
+        "The file content does not match its declared MIME type.");
+
     public static readonly Error NotEditable = Error.Problem(
         "DocumentAttachments.NotEditable",
         "Attachments can only be uploaded to or removed from a Draft document.");
@@ -56,8 +60,7 @@ public static class DocumentAttachmentErrors
         "DocumentAttachments.StorageFailure",
         "The file could not be stored.");
 
-    public static Error ContentNotFound(string storageKey) => Error.NotFound(
+    public static readonly Error ContentNotFound = Error.NotFound(
         "DocumentAttachments.ContentNotFound",
-        "The attachment's stored file content could not be found.",
-        new { storage_key = storageKey });
+        "The attachment's stored file content could not be found.");
 }

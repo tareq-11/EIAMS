@@ -84,4 +84,22 @@ public sealed class EndpointAuthorizationTests : BaseTest
             hasAuthorize.ShouldBeTrue($"Controller {controller.FullName} must have [Authorize] attribute");
         }
     }
+
+    [Fact]
+    public void Anonymous_Allowlist_Controllers_Should_Declare_AllowAnonymous_Explicitly()
+    {
+        var controllerTypes = PresentationAssembly.GetTypes()
+            .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
+            .Where(t => AnonymousAllowlist.Contains(t.FullName ?? string.Empty))
+            .ToList();
+
+        foreach (Type controller in controllerTypes)
+        {
+            bool hasAllowAnonymous = controller
+                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AllowAnonymousAttribute), true)
+                .Length != 0;
+
+            hasAllowAnonymous.ShouldBeTrue($"Controller {controller.FullName} must declare [AllowAnonymous] explicitly");
+        }
+    }
 }

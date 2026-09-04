@@ -29,6 +29,11 @@ internal sealed class UpdateRoleCommandHandler(
             return Result.Failure(RoleErrors.Forbidden);
         }
 
+        if (command.RoleId == WellKnownRoles.AdministratorId)
+        {
+            return Result.Failure(RoleErrors.BuiltInRoleImmutable);
+        }
+
         Role? role = await context.Roles.SingleOrDefaultAsync(r => r.Id == command.RoleId, cancellationToken);
 
         if (role is null)

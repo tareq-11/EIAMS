@@ -1,6 +1,7 @@
 using Application.Abstractions.Messaging;
 using Application.Users;
 using Application.Users.Refresh;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
@@ -9,6 +10,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
+[AllowAnonymous]
 [Route("auth")]
 [Tags(Tags.Users)]
 public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler)

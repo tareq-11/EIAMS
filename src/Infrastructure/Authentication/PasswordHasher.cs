@@ -22,8 +22,26 @@ internal sealed class PasswordHasher : IPasswordHasher
     public bool Verify(string password, string passwordHash)
     {
         string[] parts = passwordHash.Split('-');
-        byte[] hash = Convert.FromHexString(parts[0]);
-        byte[] salt = Convert.FromHexString(parts[1]);
+
+        if (parts.Length != 2 ||
+            parts[0].Length != HashSize * 2 ||
+            parts[1].Length != SaltSize * 2)
+        {
+            return false;
+        }
+
+        byte[] hash;
+        byte[] salt;
+
+        try
+        {
+            hash = Convert.FromHexString(parts[0]);
+            salt = Convert.FromHexString(parts[1]);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
 
         byte[] inputHash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, Algorithm, HashSize);
 

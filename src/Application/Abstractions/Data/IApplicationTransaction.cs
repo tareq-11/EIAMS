@@ -11,6 +11,10 @@ namespace Application.Abstractions.Data;
 /// </summary>
 public interface IApplicationTransaction
 {
+    Task<Result> ExecuteAsync(
+        Func<CancellationToken, Task<Result>> action,
+        CancellationToken cancellationToken);
+
     Task<Result<TResult>> ExecuteAsync<TResult>(
         Func<CancellationToken, Task<Result<TResult>>> action,
         CancellationToken cancellationToken);

@@ -1,4 +1,5 @@
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.Users;
 using Application.Users.Refresh;
@@ -19,11 +20,10 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
         tokenProvider.HashRefreshToken(Arg.Any<string>()).Returns(callInfo => "hash:" + callInfo.Arg<string>());
 
-        var handler = new RefreshTokenCommandHandler(
+        RefreshTokenCommandHandler handler = CreateHandler(
             context,
             tokenProvider,
-            Substitute.For<IDateTimeProvider>(),
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<IDateTimeProvider>());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -49,11 +49,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(now);
 
-        var handler = new RefreshTokenCommandHandler(
-            context,
-            tokenProvider,
-            dateTimeProvider,
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+        RefreshTokenCommandHandler handler = CreateHandler(context, tokenProvider, dateTimeProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -89,11 +85,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(now);
 
-        var handler = new RefreshTokenCommandHandler(
-            context,
-            tokenProvider,
-            dateTimeProvider,
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+        RefreshTokenCommandHandler handler = CreateHandler(context, tokenProvider, dateTimeProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -125,11 +117,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(now);
 
-        var handler = new RefreshTokenCommandHandler(
-            context,
-            tokenProvider,
-            dateTimeProvider,
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+        RefreshTokenCommandHandler handler = CreateHandler(context, tokenProvider, dateTimeProvider);
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -180,5 +168,29 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         context.RefreshTokens.Add(refreshToken);
 
         await context.SaveChangesAsync();
+    }
+
+    private static RefreshTokenCommandHandler CreateHandler(
+        TestDbContext context,
+        ITokenProvider tokenProvider,
+        IDateTimeProvider dateTimeProvider)
+    {
+        IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
+        transaction.ExecuteAsync(
+                Arg.Any<Func<CancellationToken, Task<Result>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
+        applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        return new RefreshTokenCommandHandler(
+            context,
+            transaction,
+            applicationLock,
+            tokenProvider,
+            dateTimeProvider,
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
     }
 }

@@ -1,5 +1,6 @@
 using Application.Abstractions.Messaging;
 using Application.Users.Register;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
@@ -8,6 +9,7 @@ using Web.Api.Infrastructure;
 namespace Web.Api.Controllers.Users;
 
 [ApiController]
+[AllowAnonymous]
 [Route("admin/users")]
 [Tags(Tags.Users)]
 public sealed class RegisterController(ICommandHandler<RegisterUserCommand, Guid> handler) : ControllerBase

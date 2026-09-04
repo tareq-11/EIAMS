@@ -30,6 +30,11 @@ internal sealed class AssignPermissionToRoleCommandHandler(
             return Result.Failure(RoleErrors.Forbidden);
         }
 
+        if (command.RoleId == WellKnownRoles.AdministratorId)
+        {
+            return Result.Failure(RoleErrors.BuiltInRoleImmutable);
+        }
+
         if (!await context.Roles.AnyAsync(r => r.Id == command.RoleId, cancellationToken))
         {
             return Result.Failure(RoleErrors.NotFound(command.RoleId));

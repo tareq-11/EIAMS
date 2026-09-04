@@ -18,9 +18,10 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         var handler = new LoginUserCommandHandler(
             context,
-            Substitute.For<IPasswordHasher>(),
+            passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
             Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
@@ -33,6 +34,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(UserErrors.NotFoundByEmail);
+        passwordHasher.Received(1).Verify(Password, Arg.Any<string>());
     }
 
     [Fact]

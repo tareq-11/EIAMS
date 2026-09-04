@@ -1,5 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace IntegrationTests.Security;
 
@@ -35,5 +39,46 @@ public sealed class JwtConfigurationTests : BaseIntegrationTest
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task SignedTokenWithoutUserSubject_Should_Return401InsteadOfReachingApplicationCode()
+    {
+        string token = CreateToken(subject: null, IntegrationTestWebAppFactory.JwtAudience, DateTime.UtcNow.AddMinutes(5));
+        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response = await HttpClient.GetAsync("organizations");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task SignedTokenForWrongAudience_Should_Return401Unauthorized()
+    {
+        string token = CreateToken(Guid.NewGuid(), "another-audience", DateTime.UtcNow.AddMinutes(5));
+        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response = await HttpClient.GetAsync("organizations");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    private static string CreateToken(Guid? subject, string audience, DateTime expires)
+    {
+        Claim[] claims = subject.HasValue
+            ? [new Claim(JwtRegisteredClaimNames.Sub, subject.Value.ToString())]
+            : [];
+        var securityKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(IntegrationTestWebAppFactory.JwtSecret));
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(claims),
+            Expires = expires,
+            Issuer = IntegrationTestWebAppFactory.JwtIssuer,
+            Audience = audience,
+            SigningCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256)
+        };
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 }
