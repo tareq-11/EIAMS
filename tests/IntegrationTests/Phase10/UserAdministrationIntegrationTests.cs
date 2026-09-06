@@ -129,6 +129,44 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
     }
 
+    [Fact]
+    public async Task ConcurrentRefreshAndSuspension_Should_LeaveAccountSuspendedWithoutActiveRefreshTokens()
+    {
+        await AuthenticateAsAdministratorAsync();
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens tokens = await LoginAsync(email);
+        await AuthenticateAsAdministratorAsync();
+
+#pragma warning disable CA2025 // Both client-bound tasks are awaited before the shared client is disposed.
+        Task<HttpResponseMessage> suspensionRequest = HttpClient.PutAsJsonAsync($"admin/users/{userId}", new
+        {
+            email,
+            firstName = "Concurrent",
+            lastName = "Suspension",
+            status = "Suspended"
+        });
+        Task<HttpResponseMessage> refreshRequest = HttpClient.PostAsJsonAsync("auth/refresh", new
+        {
+            refreshToken = tokens.RefreshToken
+        });
+#pragma warning restore CA2025
+
+        HttpResponseMessage[] responses = await Task.WhenAll(suspensionRequest, refreshRequest);
+
+        responses.Single(response => response.RequestMessage?.Method == HttpMethod.Put)
+            .StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        User user = await context.Users.SingleAsync(candidate => candidate.Id == userId);
+        bool hasActiveRefreshToken = await context.RefreshTokens.AnyAsync(token =>
+            token.UserId == userId && token.RevokedOnUtc == null);
+
+        user.Status.ShouldBe(UserStatus.Suspended);
+        hasActiveRefreshToken.ShouldBeFalse();
+    }
+
     private async Task GrantEnterpriseAdministratorAsync(Guid userId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();

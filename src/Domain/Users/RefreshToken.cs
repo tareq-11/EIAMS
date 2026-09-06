@@ -7,6 +7,7 @@ public sealed class RefreshToken
     public Guid Id { get; private set; }
     public string Token { get; private set; }
     public Guid UserId { get; private set; }
+    public Guid SessionId { get; private set; }
     public DateTime CreatedOnUtc { get; private set; }
     public DateTime ExpiresOnUtc { get; private set; }
     public DateTime? RevokedOnUtc { get; private set; }
@@ -18,13 +19,15 @@ public sealed class RefreshToken
         string token,
         Guid userId,
         DateTime expiresOnUtc,
-        DateTime createdOnUtc)
+        DateTime createdOnUtc,
+        Guid? sessionId = null)
     {
         return new RefreshToken
         {
             Id = id,
             Token = token,
             UserId = userId,
+            SessionId = sessionId ?? id,
             CreatedOnUtc = createdOnUtc,
             ExpiresOnUtc = expiresOnUtc
         };

@@ -12,7 +12,29 @@ namespace IntegrationTests.Security;
 public sealed class BootstrapAndAdministratorSafetyTests
 {
     private const string Password = "Bootstrap123!";
+    private static readonly string BootstrapToken = Convert.ToBase64String(new byte[32]);
     private static readonly string[] EnterpriseScope = ["Enterprise"];
+
+    [Fact]
+    public async Task Bootstrap_Should_ReturnForbidden_WhenOperationalGateIsDisabled()
+    {
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: false);
+
+        try
+        {
+            await factory.StartAsync();
+            using HttpClient client = factory.CreateApiClient();
+
+            RegistrationAttempt response = await RegisterAsync(client, "blocked-bootstrap@example.com");
+
+            response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+            response.UserId.ShouldBeNull();
+        }
+        finally
+        {
+            await factory.ShutdownAsync();
+        }
+    }
 
     [Fact]
     public async Task BootstrapAndBuiltInAdministrator_Should_ResistConcurrentCreationAndLockout()
@@ -82,6 +104,7 @@ public sealed class BootstrapAndAdministratorSafetyTests
 
     private static async Task<RegistrationAttempt> RegisterAsync(HttpClient client, string email)
     {
+        client.DefaultRequestHeaders.Add("X-Bootstrap-Token", BootstrapToken);
         using HttpResponseMessage response = await client.PostAsJsonAsync("admin/users/register", new
         {
             email,
@@ -125,7 +148,7 @@ public sealed class BootstrapAndAdministratorSafetyTests
 
     private sealed record Assignment(Guid Id);
 
-    private sealed class EmptySystemWebAppFactory : WebApplicationFactory<Program>
+    private sealed class EmptySystemWebAppFactory(bool bootstrapEnabled = true) : WebApplicationFactory<Program>
     {
         private readonly string attachmentStoragePath = Path.Combine(
             Path.GetTempPath(),
@@ -147,6 +170,8 @@ public sealed class BootstrapAndAdministratorSafetyTests
             builder.UseSetting("AttachmentStorage:Local:RootPath", attachmentStoragePath);
             builder.UseSetting("RateLimiting:Global:PermitLimit", "1000");
             builder.UseSetting("RateLimiting:Authentication:PermitLimit", "1000");
+            builder.UseSetting("BootstrapAdministrator:Enabled", bootstrapEnabled.ToString());
+            builder.UseSetting("BootstrapAdministrator:Token", BootstrapToken);
         }
 
         internal Task StartAsync() => database.StartAsync();

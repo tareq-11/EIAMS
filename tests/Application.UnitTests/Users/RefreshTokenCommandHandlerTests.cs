@@ -141,6 +141,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         newToken.Token.ShouldBe("hash:new-refresh-token");
         newToken.ExpiresOnUtc.ShouldBeGreaterThan(now);
         newToken.RevokedOnUtc.ShouldBeNull();
+        newToken.SessionId.ShouldBe(oldToken.SessionId);
     }
 
     private static async Task SeedRefreshTokenAsync(

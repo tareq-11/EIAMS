@@ -14,19 +14,27 @@ internal sealed class RegisterUserCommandHandler(
     IApplicationDbContext context,
     IApplicationTransaction transaction,
     IApplicationLock applicationLock,
+    IBootstrapAdministratorAuthorizer bootstrapAuthorizer,
     IPasswordHasher passwordHasher)
     : ICommandHandler<RegisterUserCommand, Guid>
 {
     private const string BootstrapLockKey = "security:bootstrap-administrator";
 
-    public Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken) =>
-        transaction.ExecuteAsync(
+    public Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
+    {
+        if (!bootstrapAuthorizer.IsAuthorized(command.BootstrapToken))
+        {
+            return Task.FromResult(Result.Failure<Guid>(UserErrors.RegistrationClosed));
+        }
+
+        return transaction.ExecuteAsync(
             async ct =>
             {
                 await applicationLock.AcquireAsync(BootstrapLockKey, ct);
                 return await RegisterAsync(command, ct);
             },
             cancellationToken);
+    }
 
     private async Task<Result<Guid>> RegisterAsync(
         RegisterUserCommand command,

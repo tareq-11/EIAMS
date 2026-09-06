@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Application.Abstractions.Authentication;
 using Domain.Users;
 using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IntegrationTests.Users;
@@ -164,5 +165,60 @@ public sealed class UsersTests : BaseIntegrationTest
             "auth/refresh",
             new { refreshToken = successfulBody.Data.RefreshToken });
         familyTokenResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task ConcurrentRefreshAndLogout_Should_LeaveNoActiveRefreshToken()
+    {
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        AccessTokens tokens = await LoginAsync(email);
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+#pragma warning disable CA2025 // Both client-bound tasks are awaited before the shared client is disposed.
+        Task<HttpResponseMessage> refreshRequest = HttpClient.PostAsJsonAsync(
+            "auth/refresh",
+            new { refreshToken = tokens.RefreshToken });
+        Task<HttpResponseMessage> logoutRequest = HttpClient.PostAsJsonAsync(
+            "auth/logout",
+            new { refreshToken = tokens.RefreshToken });
+#pragma warning restore CA2025
+
+        HttpResponseMessage[] responses = await Task.WhenAll(refreshRequest, logoutRequest);
+
+        responses.Single(response => response.RequestMessage?.RequestUri?.AbsolutePath.EndsWith(
+            "/auth/logout",
+            StringComparison.Ordinal) == true).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        bool hasActiveToken = await context.RefreshTokens
+            .AnyAsync(token => token.UserId == userId && token.RevokedOnUtc == null);
+
+        hasActiveToken.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Logout_Should_RevokeCurrentSessionButKeepOtherDeviceSessionActive()
+    {
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+        AccessTokens firstSession = await LoginAsync(email);
+        AccessTokens secondSession = await LoginAsync(email);
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+
+        HttpResponseMessage logout = await HttpClient.PostAsJsonAsync(
+            "auth/logout",
+            new { refreshToken = firstSession.RefreshToken });
+        HttpResponseMessage secondRefresh = await HttpClient.PostAsJsonAsync(
+            "auth/refresh",
+            new { refreshToken = secondSession.RefreshToken });
+        HttpResponseMessage firstRefresh = await HttpClient.PostAsJsonAsync(
+            "auth/refresh",
+            new { refreshToken = firstSession.RefreshToken });
+
+        logout.StatusCode.ShouldBe(HttpStatusCode.OK);
+        firstRefresh.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        secondRefresh.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 }

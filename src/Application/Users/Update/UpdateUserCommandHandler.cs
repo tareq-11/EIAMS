@@ -23,6 +23,7 @@ internal sealed class UpdateUserCommandHandler(
             async ct =>
             {
                 await applicationLock.AcquireAsync(AdministratorAssignmentSafety.LockKey, ct);
+                await applicationLock.AcquireAsync(UserSessionLock.ForUser(command.UserId), ct);
                 return await UpdateAsync(command, ct);
             },
             cancellationToken);

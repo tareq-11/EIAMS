@@ -60,6 +60,8 @@ public static class DependencyInjection
     {
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
+        services.AddSingleton<IBootstrapAdministratorAuthorizer, BootstrapAdministratorAuthorizer>();
+
         services.AddScoped<IAuditOperationContextAccessor, AuditOperationContextAccessor>();
 
         services.AddScoped<IRequestAuditContext, RequestAuditContext>();
@@ -220,6 +222,14 @@ public static class DependencyInjection
                 "PolymorphicReferenceAudit:Interval must be greater than zero.")
             .Validate(options => options.MaximumLoggedFindingsPerCycle is > 0 and <= 10_000,
                 "PolymorphicReferenceAudit:MaximumLoggedFindingsPerCycle must be between 1 and 10000.")
+            .ValidateOnStart();
+
+        services.AddOptions<BootstrapAdministratorOptions>()
+            .Bind(configuration.GetSection(BootstrapAdministratorOptions.SectionName))
+            .Validate(
+                options => !options.Enabled ||
+                           BootstrapAdministratorOptions.TryDecodeToken(options.Token, out _),
+                $"BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled.")
             .ValidateOnStart();
 
 #pragma warning disable EXTEXP0018 // HybridCache is released; the API is stable in .NET 10.

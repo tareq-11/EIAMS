@@ -1,4 +1,5 @@
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.Users;
 using Application.Users.Login;
@@ -21,6 +22,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
         var handler = new LoginUserCommandHandler(
             context,
+            CreateTransaction(),
+            CreateLock(),
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
@@ -49,6 +52,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         var handler = new LoginUserCommandHandler(
             context,
+            CreateTransaction(),
+            CreateLock(),
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
@@ -84,6 +89,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         var handler = new LoginUserCommandHandler(
             context,
+            CreateTransaction(),
+            CreateLock(),
             passwordHasher,
             tokenProvider,
             dateTimeProvider,
@@ -104,6 +111,39 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         refreshToken.ExpiresOnUtc.ShouldBeGreaterThan(dateTimeProvider.UtcNow);
     }
 
+    [Fact]
+    public async Task Handle_Should_RejectOldEmail_WhenEmailChangesBeforeSessionLock()
+    {
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        User user = await context.Users.SingleAsync();
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Password, "hash").Returns(true);
+        IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
+        applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                user.UpdateProfile("changed@example.com", user.FirstName, user.LastName);
+                await context.SaveChangesAsync(call.ArgAt<CancellationToken>(1));
+            });
+        var handler = new LoginUserCommandHandler(
+            context,
+            CreateTransaction(),
+            applicationLock,
+            passwordHasher,
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFoundByEmail);
+        context.RefreshTokens.ShouldBeEmpty();
+    }
+
     private static async Task SeedUserAsync(TestDbContext context)
     {
         context.Users.Add(User.Create(
@@ -114,5 +154,24 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             "hash"));
 
         await context.SaveChangesAsync();
+    }
+
+    private static IApplicationTransaction CreateTransaction()
+    {
+        IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
+        transaction.ExecuteAsync(
+                Arg.Any<Func<CancellationToken, Task<Result<AccessTokensResponse>>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<AccessTokensResponse>>>>(0)(
+                call.ArgAt<CancellationToken>(1)));
+        return transaction;
+    }
+
+    private static IApplicationLock CreateLock()
+    {
+        IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
+        applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return applicationLock;
     }
 }
