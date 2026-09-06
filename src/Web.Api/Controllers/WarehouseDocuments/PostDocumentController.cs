@@ -2,6 +2,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.WarehouseDocuments.Post;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -23,6 +24,7 @@ public sealed class PostDocumentController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    [EnableRateLimiting(RateLimitingPolicies.Posting)]
     public async Task<IResult> Handle(
         Guid documentId,
         RequestBody request,

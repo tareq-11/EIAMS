@@ -4,6 +4,7 @@ using Application.Abstractions.Pagination;
 using Application.Reports.Documents;
 using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -21,6 +22,7 @@ public sealed class GetDocumentsReportController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
+    [EnableRateLimiting(RateLimitingPolicies.Reporting)]
     public async Task<IResult> Handle(
         [FromQuery] Guid? warehouseId,
         [FromQuery] DocumentType? documentType,

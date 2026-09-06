@@ -3,6 +3,7 @@ using Application.Abstractions.Messaging;
 using Application.WarehouseDocuments.CreateReversal;
 using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -22,6 +23,7 @@ public sealed class ReverseInventoryAdjustmentController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    [EnableRateLimiting(RateLimitingPolicies.Posting)]
     public async Task<IResult> Handle(
         Guid id,
         [FromHeader(Name = "Idempotency-Key")] Guid? idempotencyKey,

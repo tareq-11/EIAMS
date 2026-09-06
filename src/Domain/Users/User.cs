@@ -60,6 +60,12 @@ public sealed class User : Entity, IAuditableEntity
         LastLoginUtc = occurredAtUtc;
     }
 
+    public void UpgradePasswordHash(string passwordHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
+        PasswordHash = passwordHash;
+    }
+
     // Email canonicalization intentionally uses lower case: unlike protocol identifiers, the
     // canonical form is also returned as a human-facing address throughout the API.
 #pragma warning disable CA1308

@@ -74,6 +74,53 @@ public sealed class AuthorizationCacheIntegrationTests
     }
 
     [Fact]
+    public async Task DatabaseAuthorizationVersion_ShouldBypassStaleCache_WhenLocalInvalidationDoesNotRun()
+    {
+        (Guid userId, Guid roleId) = await CreateUserWithRoleAndPermissionAsync(
+            PermissionCodes.Organizations.Manage);
+        (await HasPermissionAsync(userId, PermissionCodes.Organizations.Manage)).ShouldBeTrue();
+
+        // Execute SQL directly to model another application instance or an operational change.
+        // The current process receives no HybridCache tag invalidation.
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            int affectedRows = await context.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM public.role_permissions
+                WHERE role_id = {roleId}
+                  AND permission_id = {WellKnownPermissions.OrganizationsManageId}
+                """);
+            affectedRows.ShouldBe(1);
+        }
+
+        bool isAuthorizedAfterExternalRevocation = await HasPermissionAsync(
+            userId,
+            PermissionCodes.Organizations.Manage);
+
+        isAuthorizedAfterExternalRevocation.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task NonAuthorizationUserUpdate_Should_NotAdvanceGlobalAuthorizationVersion()
+    {
+        Guid userId = await CreateUserAsync();
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        long versionBefore = await ReadAuthorizationVersionAsync(context);
+
+        int affectedRows = await context.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE public.users
+            SET last_login_utc = CURRENT_TIMESTAMP
+            WHERE id = {userId}
+            """);
+        long versionAfter = await ReadAuthorizationVersionAsync(context);
+
+        affectedRows.ShouldBe(1);
+        versionAfter.ShouldBe(versionBefore);
+    }
+
+    [Fact]
     public async Task ScopeReplacement_ShouldTakeEffectImmediatelyAfterSaveChangesInvalidatesCache()
     {
         var originalWarehouseId = Guid.NewGuid();
@@ -258,6 +305,11 @@ public sealed class AuthorizationCacheIntegrationTests
         await context.SaveChangesAsync();
         return userId;
     }
+
+    private static Task<long> ReadAuthorizationVersionAsync(ApplicationDbContext context) =>
+        context.Database
+            .SqlQueryRaw<long>("SELECT version AS \"Value\" FROM public.authorization_versions WHERE id = 1")
+            .SingleAsync();
 
     private static Guid GetPermissionId(string permission) => permission switch
     {

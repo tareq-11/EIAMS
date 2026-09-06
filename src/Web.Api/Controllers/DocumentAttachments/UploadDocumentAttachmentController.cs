@@ -5,6 +5,7 @@ using Application.DocumentAttachments.Upload;
 using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -40,6 +41,7 @@ public sealed class UploadDocumentAttachmentController(ICommandHandler<UploadDoc
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
+    [EnableRateLimiting(RateLimitingPolicies.Upload)]
     public async Task<IResult> Handle(Guid documentId, [FromForm] RequestForm request, CancellationToken cancellationToken)
     {
         await using Stream content = request.File.OpenReadStream();

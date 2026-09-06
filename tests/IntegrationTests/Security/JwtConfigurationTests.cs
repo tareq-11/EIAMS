@@ -63,7 +63,48 @@ public sealed class JwtConfigurationTests : BaseIntegrationTest
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
     }
 
-    private static string CreateToken(Guid? subject, string audience, DateTime expires)
+    [Fact]
+    public async Task SignedTokenUsingUnapprovedAlgorithm_Should_Return401Unauthorized()
+    {
+        string token = CreateToken(
+            Guid.NewGuid(),
+            IntegrationTestWebAppFactory.JwtAudience,
+            DateTime.UtcNow.AddMinutes(5),
+            SecurityAlgorithms.HmacSha384);
+        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response = await HttpClient.GetAsync("organizations");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task SignedTokenWithEmptyUserSubject_Should_Return401Unauthorized()
+    {
+        string token = CreateToken(Guid.Empty, IntegrationTestWebAppFactory.JwtAudience, DateTime.UtcNow.AddMinutes(5));
+        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response = await HttpClient.GetAsync("organizations");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ExpiredSignedToken_Should_Return401Unauthorized()
+    {
+        string token = CreateToken(Guid.NewGuid(), IntegrationTestWebAppFactory.JwtAudience, DateTime.UtcNow.AddSeconds(-1));
+        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response = await HttpClient.GetAsync("organizations");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    private static string CreateToken(
+        Guid? subject,
+        string audience,
+        DateTime expires,
+        string algorithm = SecurityAlgorithms.HmacSha256)
     {
         Claim[] claims = subject.HasValue
             ? [new Claim(JwtRegisteredClaimNames.Sub, subject.Value.ToString())]
@@ -76,7 +117,7 @@ public sealed class JwtConfigurationTests : BaseIntegrationTest
             Expires = expires,
             Issuer = IntegrationTestWebAppFactory.JwtIssuer,
             Audience = audience,
-            SigningCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256)
+            SigningCredentials = new SigningCredentials(securityKey, algorithm)
         };
 
         return new JsonWebTokenHandler().CreateToken(descriptor);

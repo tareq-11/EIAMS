@@ -314,6 +314,7 @@ public static class DependencyInjection
                     ValidateLifetime = true,
                     RequireExpirationTime = true,
                     RequireSignedTokens = true,
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
                     ClockSkew = TimeSpan.Zero
                 };
                 o.Events = new JwtBearerEvents
@@ -323,7 +324,7 @@ public static class DependencyInjection
                         string? subject = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ??
                                           context.Principal?.FindFirstValue("sub");
 
-                        if (!Guid.TryParse(subject, out _))
+                        if (!Guid.TryParse(subject, out Guid userId) || userId == Guid.Empty)
                         {
                             context.Fail("The access token subject is missing or invalid.");
                         }
@@ -345,6 +346,8 @@ public static class DependencyInjection
     private static IServiceCollection AddAuthorizationInternal(this IServiceCollection services)
     {
         services.AddAuthorization();
+
+        services.AddScoped<AuthorizationVersionProvider>();
 
         services.AddScoped<IScopeAuthorizationService, ScopeAuthorizationService>();
 

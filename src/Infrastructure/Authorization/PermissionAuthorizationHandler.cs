@@ -2,12 +2,11 @@ using Application.Abstractions.Authorization;
 using Infrastructure.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Authorization;
 
 internal sealed class PermissionAuthorizationHandler(
-    IServiceScopeFactory serviceScopeFactory,
+    IScopeAuthorizationService authorizationService,
     IHttpContextAccessor httpContextAccessor)
     : AuthorizationHandler<PermissionRequirement>
 {
@@ -19,11 +18,6 @@ internal sealed class PermissionAuthorizationHandler(
         {
             return;
         }
-
-        using IServiceScope scope = serviceScopeFactory.CreateScope();
-
-        IScopeAuthorizationService authorizationService =
-            scope.ServiceProvider.GetRequiredService<IScopeAuthorizationService>();
 
         Guid userId = context.User.GetUserId();
         CancellationToken cancellationToken =
