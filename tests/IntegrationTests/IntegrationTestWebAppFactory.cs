@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Testcontainers.PostgreSql;
 using Web.Api;
 
@@ -92,6 +93,42 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         SqlCommandCounterInterceptor? commandCounter = null) =>
         new SiblingWebAppFactory(_dbContainer.GetConnectionString(), commandCounter);
 
+    internal async Task<PostgresAdvisoryLockLease> HoldApplicationLockAsync(
+        string resourceKey,
+        CancellationToken cancellationToken = default)
+    {
+#pragma warning disable CA2000 // Ownership is transferred to PostgresAdvisoryLockLease on success.
+        var connection = new NpgsqlConnection(_dbContainer.GetConnectionString());
+#pragma warning restore CA2000
+        await connection.OpenAsync(cancellationToken);
+        NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            await using var pidCommand = new NpgsqlCommand("SELECT pg_backend_pid()", connection, transaction);
+            int holderProcessId = (int)(await pidCommand.ExecuteScalarAsync(cancellationToken))!;
+
+            await using var lockCommand = new NpgsqlCommand(
+                "SELECT pg_advisory_xact_lock(hashtextextended(@resource_key, 0))",
+                connection,
+                transaction);
+            lockCommand.Parameters.AddWithValue("resource_key", resourceKey);
+            await lockCommand.ExecuteNonQueryAsync(cancellationToken);
+
+            return new PostgresAdvisoryLockLease(
+                _dbContainer.GetConnectionString(),
+                connection,
+                transaction,
+                holderProcessId);
+        }
+        catch
+        {
+            await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+            throw;
+        }
+    }
+
     public new async Task DisposeAsync()
     {
         await _dbContainer.DisposeAsync();
@@ -101,6 +138,67 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         {
             Directory.Delete(attachmentStoragePath, recursive: true);
         }
+    }
+
+    internal sealed class PostgresAdvisoryLockLease(
+        string connectionString,
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        int holderProcessId) : IAsyncDisposable
+    {
+        private bool released;
+
+        internal async Task WaitUntilContendedAsync(CancellationToken cancellationToken = default)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            await using var observer = new NpgsqlConnection(connectionString);
+            await observer.OpenAsync(timeout.Token);
+
+            const string sql = """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_locks AS waiting
+                    INNER JOIN pg_locks AS held
+                        ON held.locktype = waiting.locktype
+                       AND held.database IS NOT DISTINCT FROM waiting.database
+                       AND held.classid IS NOT DISTINCT FROM waiting.classid
+                       AND held.objid IS NOT DISTINCT FROM waiting.objid
+                       AND held.objsubid IS NOT DISTINCT FROM waiting.objsubid
+                    WHERE NOT waiting.granted
+                      AND held.granted
+                      AND held.pid = @holder_pid
+                      AND waiting.pid <> @holder_pid
+                )
+                """;
+
+            while (true)
+            {
+                await using var command = new NpgsqlCommand(sql, observer);
+                command.Parameters.AddWithValue("holder_pid", holderProcessId);
+                if ((bool)(await command.ExecuteScalarAsync(timeout.Token))!)
+                {
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+            }
+        }
+
+        internal async Task ReleaseAsync()
+        {
+            if (released)
+            {
+                return;
+            }
+
+            released = true;
+            await transaction.RollbackAsync();
+            await transaction.DisposeAsync();
+            await connection.DisposeAsync();
+        }
+
+        public ValueTask DisposeAsync() => new(ReleaseAsync());
     }
 
     private sealed class SiblingWebAppFactory(
