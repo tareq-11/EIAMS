@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
@@ -116,5 +117,64 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.Contains("Strict-Transport-Security").ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task JwtKeyRing_Should_AcceptPreviousKeyDuringOverlap_AndRejectItAfterRemoval()
+    {
+        const string previousKey = "previous-signing-key-with-at-least-32-bytes";
+        const string currentKey = "current-signing-key-with-at-least-32-bytes";
+
+        await using WebApplicationFactory<Program> previousKeyFactory = factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Jwt:Secret", previousKey));
+        using HttpClient previousKeyClient = CreateVersionedClient(previousKeyFactory);
+        HttpResponseMessage loginResponse = await previousKeyClient.PostAsJsonAsync("auth/login", new
+        {
+            email = IntegrationTestWebAppFactory.AdministratorEmail,
+            password = IntegrationTestWebAppFactory.AdministratorPassword
+        });
+        loginResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        ApiEnvelope<AccessTokens>? login =
+            await loginResponse.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
+        login.ShouldNotBeNull();
+
+        await using WebApplicationFactory<Program> overlapFactory = factory.WithWebHostBuilder(builder =>
+            ConfigureJwtKeyRing(builder, "current", legacySecret: previousKey, currentKey));
+        using HttpClient overlapClient = CreateVersionedClient(overlapFactory);
+        overlapClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
+
+        HttpResponseMessage acceptedDuringOverlap = await overlapClient.GetAsync("auth/session");
+        acceptedDuringOverlap.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await using WebApplicationFactory<Program> currentOnlyFactory = factory.WithWebHostBuilder(builder =>
+            ConfigureJwtKeyRing(builder, "current", legacySecret: null, currentKey));
+        using HttpClient currentOnlyClient = CreateVersionedClient(currentOnlyFactory);
+        currentOnlyClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
+
+        HttpResponseMessage rejectedAfterRemoval = await currentOnlyClient.GetAsync("auth/session");
+        rejectedAfterRemoval.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    private static void ConfigureJwtKeyRing(
+        IWebHostBuilder builder,
+        string activeKeyId,
+        string? legacySecret,
+        string? currentKey)
+    {
+        builder.UseSetting("Jwt:Secret", legacySecret ?? string.Empty);
+        builder.UseSetting("Jwt:ActiveKeyId", activeKeyId);
+        if (currentKey is not null)
+        {
+            builder.UseSetting("Jwt:Keys:current", currentKey);
+        }
+    }
+
+    private static HttpClient CreateVersionedClient(WebApplicationFactory<Program> factory)
+    {
+        HttpClient client = factory.CreateClient();
+        client.BaseAddress = new Uri("http://localhost/api/v1/");
+        return client;
     }
 }

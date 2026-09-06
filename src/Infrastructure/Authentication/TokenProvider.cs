@@ -12,7 +12,10 @@ internal sealed class TokenProvider(JwtOptions options) : ITokenProvider
 {
     public string Create(User user)
     {
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));
+        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.GetActiveSecret()))
+        {
+            KeyId = options.GetActiveKeyId()
+        };
 
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
