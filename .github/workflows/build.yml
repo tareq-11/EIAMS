@@ -5,6 +5,9 @@ permissions:
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -18,12 +21,12 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -33,15 +36,21 @@ jobs:
       - name: Audit NuGet dependencies
         shell: bash
         run: |
-          vulnerable=0
+          set -euo pipefail
           while IFS= read -r -d '' project; do
-            output=$(dotnet list "$project" package --vulnerable --include-transitive)
-            printf '%s\n' "$output"
-            if grep -q "has the following vulnerable packages" <<< "$output"; then
-              vulnerable=1
-            fi
+            dotnet package list \
+              --project "$project" \
+              --vulnerable \
+              --include-transitive \
+              --format json \
+              --no-restore | jq -e '
+              ((.problems // []) | length == 0) and
+              ([
+                .projects[]?.frameworks[]?.topLevelPackages[]?,
+                .projects[]?.frameworks[]?.transitivePackages[]?
+              ] | all(((.vulnerabilities // []) | length) == 0))
+            ' > /dev/null
           done < <(find src tests -name '*.csproj' -print0)
-          exit "$vulnerable"
 
       - name: Build
         run: dotnet build CleanArchitectureTemplate.slnx --configuration Release --no-restore
