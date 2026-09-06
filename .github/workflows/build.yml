@@ -5,6 +5,8 @@ permissions:
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * 0"
   pull_request:
     branches:
       - main
@@ -88,6 +90,31 @@ jobs:
 
       - name: Test
         run: dotnet test CleanArchitectureTemplate.slnx --configuration Release --no-restore --no-build
+
+      - name: Run scheduled performance checks
+        if: github.event_name == 'schedule'
+        env:
+          RUN_API_BENCHMARKS: "1"
+          RUN_PERFORMANCE_TESTS: "1"
+          EIAMS_BENCHMARK_SAMPLES: "100"
+          EIAMS_BENCHMARK_RESULTS_DIR: artifacts/performance
+        run: >-
+          dotnet test tests/IntegrationTests/IntegrationTests.csproj
+          --configuration Release
+          --no-restore
+          --no-build
+          --filter Category=Performance
+          --logger "trx;LogFileName=performance.trx"
+          --results-directory artifacts/performance/test-results
+
+      - name: Retain scheduled performance results
+        if: always() && github.event_name == 'schedule'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: performance-results-${{ github.sha }}
+          path: artifacts/performance
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Publish
         run: dotnet publish CleanArchitectureTemplate.slnx --configuration Release --no-restore --no-build
