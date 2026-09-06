@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
@@ -12,7 +14,8 @@ namespace IntegrationTests.Performance;
 [Collection(nameof(IntegrationTestCollection))]
 public sealed class ApiLatencyBenchmarkTests
 {
-    private const int WarmIterations = 7;
+    private const int WarmupIterations = 5;
+    private const int DefaultSampleIterations = 100;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly IntegrationTestWebAppFactory factory;
     private readonly ITestOutputHelper output;
@@ -29,8 +32,10 @@ public sealed class ApiLatencyBenchmarkTests
     [Trait("Category", "Performance")]
     public async Task MeasureRepresentativeApiLatency()
     {
+        DateTime startedAtUtc = DateTime.UtcNow;
         using HttpClient client = factory.CreateClient();
         client.BaseAddress = new Uri("http://localhost/api/v1/");
+        int sampleIterations = GetSampleIterations();
         var measurements = new List<ApiLatencyMeasurement>();
         var failures = new List<string>();
 
@@ -39,20 +44,36 @@ public sealed class ApiLatencyBenchmarkTests
         string accessToken = await ReadAccessTokenAsync(firstLogin);
         firstLogin.Dispose();
 
-        var repeatedLoginDurations = new List<double>();
-        for (int iteration = 0; iteration < 3; iteration++)
+        for (int iteration = 0; iteration < WarmupIterations; iteration++)
+        {
+            (HttpResponseMessage loginResponse, _) = await LoginAsync(client);
+            loginResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+            loginResponse.Dispose();
+        }
+
+        var repeatedLoginDurations = new List<double>(sampleIterations);
+        for (int iteration = 0; iteration < sampleIterations; iteration++)
         {
             (HttpResponseMessage loginResponse, double elapsedMs) = await LoginAsync(client);
-            loginResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+            if (loginResponse.StatusCode != HttpStatusCode.OK)
+            {
+                failures.Add($"POST auth/login: sample HTTP {(int)loginResponse.StatusCode}");
+                loginResponse.Dispose();
+                break;
+            }
+
             repeatedLoginDurations.Add(elapsedMs);
             loginResponse.Dispose();
         }
 
-        measurements.Add(CreateMeasurement(
-            "POST /api/v1/auth/login",
-            firstLoginMs,
-            repeatedLoginDurations,
-            sqlCommands: null));
+        if (repeatedLoginDurations.Count > 0)
+        {
+            measurements.Add(CreateMeasurement(
+                "POST /api/v1/auth/login",
+                firstLoginMs,
+                repeatedLoginDurations,
+                sqlCommands: null));
+        }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         SqlCommandCounterInterceptor commandCounter = factory.Services
@@ -102,9 +123,24 @@ public sealed class ApiLatencyBenchmarkTests
                 continue;
             }
 
-            var warmDurations = new List<double>(WarmIterations);
-            var warmSqlCounts = new List<int>(WarmIterations);
-            for (int iteration = 0; iteration < WarmIterations; iteration++)
+            for (int iteration = 0; iteration < WarmupIterations; iteration++)
+            {
+                (HttpStatusCode status, _, _) = await GetAsync(client, endpoint, commandCounter);
+                if (status != HttpStatusCode.OK)
+                {
+                    failures.Add($"GET {endpoint}: warmup HTTP {(int)status}");
+                    break;
+                }
+            }
+
+            if (failures.Any(failure => failure.StartsWith($"GET {endpoint}:", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            var warmDurations = new List<double>(sampleIterations);
+            var warmSqlCounts = new List<int>(sampleIterations);
+            for (int iteration = 0; iteration < sampleIterations; iteration++)
             {
                 (HttpStatusCode status, double elapsedMs, int sqlCommands) =
                     await GetAsync(client, endpoint, commandCounter);
@@ -130,16 +166,36 @@ public sealed class ApiLatencyBenchmarkTests
                 warmSqlCounts.Average()));
         }
 
-        string resultPath = Path.Combine(Path.GetTempPath(), "eiams-api-latency-results.json");
+        string runId = $"{DateTime.UtcNow:yyyyMMddTHHmmssZ}-{Guid.NewGuid():N}";
+        string resultDirectory = Environment.GetEnvironmentVariable("EIAMS_BENCHMARK_RESULTS_DIR")
+            ?? Path.GetTempPath();
+        Directory.CreateDirectory(resultDirectory);
+        string resultPath = Path.Combine(resultDirectory, $"eiams-api-latency-{runId}.json");
+        var benchmarkRun = new
+        {
+            RunId = runId,
+            Commit = GetBuildVersion(),
+            StartedAtUtc = startedAtUtc,
+            CompletedAtUtc = DateTime.UtcNow,
+            Runtime = RuntimeInformation.FrameworkDescription,
+            OperatingSystem = RuntimeInformation.OSDescription,
+            Environment.ProcessorCount,
+            Transport = "ASP.NET Core TestServer; excludes real network and TLS",
+            WarmupIterations,
+            SampleIterations = sampleIterations,
+            Measurements = measurements,
+            Failures = failures
+        };
         await File.WriteAllTextAsync(
             resultPath,
-            JsonSerializer.Serialize(new { Measurements = measurements, Failures = failures }, JsonOptions));
+            JsonSerializer.Serialize(benchmarkRun, JsonOptions));
 
         foreach (ApiLatencyMeasurement measurement in measurements.OrderByDescending(item => item.WarmP95Ms))
         {
             output.WriteLine(
-                $"{measurement.Name}: cold={measurement.ColdMs:F1}ms, " +
-                $"warm median={measurement.WarmMedianMs:F1}ms, p95={measurement.WarmP95Ms:F1}ms, " +
+                $"{measurement.Name}: first-observed={measurement.FirstObservedMs:F1}ms, " +
+                $"warm p50={measurement.WarmP50Ms:F1}ms, p95={measurement.WarmP95Ms:F1}ms, " +
+                $"p99={measurement.WarmP99Ms:F1}ms, " +
                 $"avg SQL={measurement.AverageSqlCommands?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}");
         }
 
@@ -149,6 +205,7 @@ public sealed class ApiLatencyBenchmarkTests
         }
 
         output.WriteLine($"JSON result: {resultPath}");
+        failures.ShouldBeEmpty();
     }
 
     private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(HttpClient client)
@@ -188,28 +245,49 @@ public sealed class ApiLatencyBenchmarkTests
 
     private static ApiLatencyMeasurement CreateMeasurement(
         string name,
-        double coldMs,
+        double firstObservedMs,
         IReadOnlyCollection<double> warmDurations,
         double? sqlCommands)
     {
         double[] ordered = warmDurations.OrderBy(value => value).ToArray();
-        int medianIndex = ordered.Length / 2;
-        int p95Index = (int)Math.Ceiling(ordered.Length * 0.95) - 1;
         return new ApiLatencyMeasurement(
             name,
-            coldMs,
-            ordered[medianIndex],
-            ordered[Math.Max(0, p95Index)],
+            firstObservedMs,
+            Percentile(ordered, 0.50),
+            Percentile(ordered, 0.95),
+            Percentile(ordered, 0.99),
             ordered.Average(),
+            ordered.Length,
             sqlCommands);
     }
 
+    private static double Percentile(double[] orderedValues, double percentile)
+    {
+        int index = Math.Max(0, (int)Math.Ceiling(orderedValues.Length * percentile) - 1);
+        return orderedValues[index];
+    }
+
+    private static int GetSampleIterations()
+    {
+        string? configured = Environment.GetEnvironmentVariable("EIAMS_BENCHMARK_SAMPLES");
+        return int.TryParse(configured, CultureInfo.InvariantCulture, out int samples)
+            ? Math.Clamp(samples, 10, 1_000)
+            : DefaultSampleIterations;
+    }
+
+    private static string GetBuildVersion() =>
+        typeof(ApiLatencyBenchmarkTests).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion ?? "unknown";
+
     private sealed record ApiLatencyMeasurement(
         string Name,
-        double ColdMs,
-        double WarmMedianMs,
+        double FirstObservedMs,
+        double WarmP50Ms,
         double WarmP95Ms,
+        double WarmP99Ms,
         double WarmAverageMs,
+        int SampleCount,
         double? AverageSqlCommands);
 }
 
