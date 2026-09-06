@@ -44,7 +44,7 @@ internal sealed class LoginUserCommandHandler(
             async ct =>
             {
                 await applicationLock.AcquireAsync(UserSessionLock.ForUser(user.Id), ct);
-                return await IssueTokensAsync(user.Id, email, ct);
+                return await IssueTokensAsync(user.Id, email, command.Password, ct);
             },
             cancellationToken);
     }
@@ -52,6 +52,7 @@ internal sealed class LoginUserCommandHandler(
     private async Task<Result<AccessTokensResponse>> IssueTokensAsync(
         Guid userId,
         string normalizedEmail,
+        string password,
         CancellationToken cancellationToken)
     {
         User? user = await context.Users.SingleOrDefaultAsync(
@@ -66,6 +67,11 @@ internal sealed class LoginUserCommandHandler(
         if (user.Status == UserStatus.Suspended)
         {
             return Result.Failure<AccessTokensResponse>(UserErrors.Suspended);
+        }
+
+        if (passwordHasher.NeedsRehash(user.PasswordHash))
+        {
+            user.UpgradePasswordHash(passwordHasher.Hash(password));
         }
 
         string accessToken = tokenProvider.Create(user);

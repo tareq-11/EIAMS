@@ -146,6 +146,8 @@ public sealed class RateLimitingTests : BaseIntegrationTest
             return false;
         }
 
+        public bool NeedsRehash(string passwordHash) => false;
+
         internal void Release() => release.Set();
 
         public void Dispose() => release.Dispose();

@@ -112,6 +112,39 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_UpgradeLegacyPasswordHash_AfterSuccessfulVerification()
+    {
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Password, "hash").Returns(true);
+        passwordHasher.NeedsRehash("hash").Returns(true);
+        passwordHasher.Hash(Password).Returns("versioned-hash");
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        tokenProvider.Create(Arg.Any<User>()).Returns("access-token");
+        tokenProvider.GenerateRefreshToken().Returns("refresh-token");
+        tokenProvider.HashRefreshToken("refresh-token").Returns("hash:refresh-token");
+        IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
+        dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
+        var handler = new LoginUserCommandHandler(
+            context,
+            CreateTransaction(),
+            CreateLock(),
+            passwordHasher,
+            tokenProvider,
+            dateTimeProvider,
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password),
+            CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        (await context.Users.SingleAsync()).PasswordHash.ShouldBe("versioned-hash");
+        passwordHasher.Received(1).Hash(Password);
+    }
+
+    [Fact]
     public async Task Handle_Should_RejectOldEmail_WhenEmailChangesBeforeSessionLock()
     {
         await using TestDbContext context = CreateDbContext();
