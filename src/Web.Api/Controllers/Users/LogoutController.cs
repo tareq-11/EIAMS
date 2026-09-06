@@ -18,7 +18,10 @@ public sealed class LogoutController(ICommandHandler<LogoutUserCommand> handler)
     public sealed record RequestBody(string? RefreshToken);
 
     [HttpPost("logout")]
+    [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestBody? request,

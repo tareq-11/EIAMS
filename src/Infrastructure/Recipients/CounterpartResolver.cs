@@ -186,7 +186,6 @@ internal sealed class CounterpartResolver(
         int normalizedPage = page <= 0 ? 1 : page;
         int normalizedPageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
         int offset = checked((normalizedPage - 1) * normalizedPageSize);
-        int fetchLimit = checked(offset + normalizedPageSize);
         PartyAccessScope access = await scopeAuthorizationService.GetPartyAccessScopeAsync(
             userId,
             cancellationToken);
@@ -199,8 +198,7 @@ internal sealed class CounterpartResolver(
 
         Guid[] allowedSiteIds = access.SiteIds.ToArray();
         Guid[] allowedOrganizationalUnitIds = access.OrganizationalUnitIds.ToArray();
-        var candidates = new List<CounterpartResolution>(fetchLimit * 4);
-        int totalCount = 0;
+        IQueryable<CounterpartSearchRow>? candidates = null;
 
         if (type is null or PartyType.Employee)
         {
@@ -216,14 +214,16 @@ internal sealed class CounterpartResolver(
                     item => allowedOrganizationalUnitIds.Contains(item.OrgUnitId));
             }
 
-            totalCount += await employeeQuery.CountAsync(cancellationToken);
-            candidates.AddRange(await employeeQuery
-                .OrderBy(item => item.FullName)
-                .ThenBy(item => item.Id)
-                .Take(fetchLimit)
-                .Select(item => new CounterpartResolution(
-                    PartyType.Employee, item.Id, item.FullName, item.JobTitle, item.Status))
-                .ToListAsync(cancellationToken));
+            IQueryable<CounterpartSearchRow> employees = employeeQuery
+                .Select(item => new CounterpartSearchRow
+                {
+                    Type = PartyType.Employee,
+                    Id = item.Id,
+                    DisplayName = item.FullName,
+                    SecondaryLabelAr = item.JobTitle,
+                    Status = item.Status
+                });
+            candidates = Append(candidates, employees);
         }
 
         if (type is null or PartyType.OrganizationalUnit)
@@ -237,14 +237,16 @@ internal sealed class CounterpartResolver(
                 unitQuery = unitQuery.Where(item => allowedOrganizationalUnitIds.Contains(item.Id));
             }
 
-            totalCount += await unitQuery.CountAsync(cancellationToken);
-            candidates.AddRange(await unitQuery
-                .OrderBy(item => item.Name)
-                .ThenBy(item => item.Id)
-                .Take(fetchLimit)
-                .Select(item => new CounterpartResolution(
-                    PartyType.OrganizationalUnit, item.Id, item.Name, item.UnitType, item.Status))
-                .ToListAsync(cancellationToken));
+            IQueryable<CounterpartSearchRow> organizationalUnits = unitQuery
+                .Select(item => new CounterpartSearchRow
+                {
+                    Type = PartyType.OrganizationalUnit,
+                    Id = item.Id,
+                    DisplayName = item.Name,
+                    SecondaryLabelAr = item.UnitType,
+                    Status = item.Status
+                });
+            candidates = Append(candidates, organizationalUnits);
         }
 
         if (type is null or PartyType.Site)
@@ -260,14 +262,16 @@ internal sealed class CounterpartResolver(
                 siteQuery = siteQuery.Where(item => allowedSiteIds.Contains(item.Id));
             }
 
-            totalCount += await siteQuery.CountAsync(cancellationToken);
-            candidates.AddRange(await siteQuery
-                .OrderBy(item => item.Name)
-                .ThenBy(item => item.Id)
-                .Take(fetchLimit)
-                .Select(item => new CounterpartResolution(
-                    PartyType.Site, item.Id, item.Name, item.Code, item.Status))
-                .ToListAsync(cancellationToken));
+            IQueryable<CounterpartSearchRow> sites = siteQuery
+                .Select(item => new CounterpartSearchRow
+                {
+                    Type = PartyType.Site,
+                    Id = item.Id,
+                    DisplayName = item.Name,
+                    SecondaryLabelAr = item.Code,
+                    Status = item.Status
+                });
+            candidates = Append(candidates, sites);
         }
 
         if (type is null or PartyType.External)
@@ -278,26 +282,61 @@ internal sealed class CounterpartResolver(
                     EF.Functions.ILike(item.NameAr, $"%{term}%") ||
                     item.Code != null && EF.Functions.ILike(item.Code, $"%{term}%"));
 
-            totalCount += await externalQuery.CountAsync(cancellationToken);
-            candidates.AddRange(await externalQuery
-                .OrderBy(item => item.NameAr)
-                .ThenBy(item => item.Id)
-                .Take(fetchLimit)
-                .Select(item => new CounterpartResolution(
-                    PartyType.External, item.Id, item.NameAr, item.Code, item.Status))
-                .ToListAsync(cancellationToken));
+            IQueryable<CounterpartSearchRow> externalParties = externalQuery
+                .Select(item => new CounterpartSearchRow
+                {
+                    Type = PartyType.External,
+                    Id = item.Id,
+                    DisplayName = item.NameAr,
+                    SecondaryLabelAr = item.Code,
+                    Status = item.Status
+                });
+            candidates = Append(candidates, externalParties);
         }
 
-        var ordered = candidates
-            .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+        if (candidates is null)
+        {
+            return new PagedResult<CounterpartResolution>(
+                [], normalizedPage, normalizedPageSize, 0);
+        }
+
+        int totalCount = await candidates.CountAsync(cancellationToken);
+        List<CounterpartResolution> items = await candidates
+            .OrderBy(item => item.DisplayName)
             .ThenBy(item => item.Type)
             .ThenBy(item => item.Id)
-            .ToList();
+            .Skip(offset)
+            .Take(normalizedPageSize)
+            .Select(item => new CounterpartResolution(
+                item.Type,
+                item.Id,
+                item.DisplayName,
+                item.SecondaryLabelAr,
+                item.Status))
+            .ToListAsync(cancellationToken);
 
         return new PagedResult<CounterpartResolution>(
-            ordered.Skip(offset).Take(normalizedPageSize).ToList(),
+            items,
             normalizedPage,
             normalizedPageSize,
             totalCount);
+    }
+
+    private static IQueryable<CounterpartSearchRow> Append(
+        IQueryable<CounterpartSearchRow>? current,
+        IQueryable<CounterpartSearchRow> next) =>
+        current is null ? next : current.Concat(next);
+
+    private sealed class CounterpartSearchRow
+    {
+        public PartyType Type { get; init; }
+
+        public Guid Id { get; init; }
+
+        public string DisplayName { get; init; } = string.Empty;
+
+        public string? SecondaryLabelAr { get; init; }
+
+        public Status Status { get; init; }
     }
 }

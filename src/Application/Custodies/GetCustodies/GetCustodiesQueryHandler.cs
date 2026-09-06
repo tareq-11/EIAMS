@@ -41,10 +41,8 @@ internal sealed class GetCustodiesQueryHandler(
         int page = query.Page <= 0 ? 1 : query.Page;
         int pageSize = query.PageSize <= 0 ? 20 : Math.Min(query.PageSize, 100);
         int offset = checked((page - 1) * pageSize);
-        int fetchLimit = checked(offset + pageSize);
         string? requestedStatus = string.IsNullOrWhiteSpace(query.Status) ? null : query.Status.Trim();
-        var candidateRows = new List<CustodyPageRow>(fetchLimit * 3);
-        int totalCount = 0;
+        IQueryable<CustodyPageRow>? combinedRows = null;
 
         if (query.SubjectType is null or CustodySubjectType.Asset)
         {
@@ -84,26 +82,38 @@ internal sealed class GetCustodiesQueryHandler(
                     : assetQuery.Where(_ => false);
             }
 
-            totalCount += await assetQuery.CountAsync(cancellationToken);
             IQueryable<CustodyPageRow> projectedAssets = assetQuery
-                .OrderByDescending(row => row.custody.FromUtc)
-                .ThenBy(row => row.custody.Id)
-                .Take(fetchLimit)
-                .Select(row => new CustodyPageRow(
-                CustodySubjectType.Asset, row.asset.Id, row.custody.Id,
-                row.material.Id, row.material.NameAr, row.material.NameEn, row.material.Code,
-                row.material.MaterialKind, row.material.TrackingType,
-                row.asset.SerialNumber, row.asset.AssetNumber,
-                row.warehouse.Id, row.warehouse.Name,
-                row.custody.HolderType, row.custody.HolderId, row.custody.CustodyKind,
-                1m,
-                row.custody.Status == CustodyStatus.Active ? 1m : 0m,
-                row.custody.Status == CustodyStatus.Closed ? 1m : 0m,
-                row.custody.IssueDocumentId, row.document.SystemReferenceNumber,
-                row.custody.Status, null, null,
-                row.custody.FromUtc, row.custody.ToUtc, row.custody.RowVersion));
+                .Select(row => new CustodyPageRow
+                {
+                    SubjectType = CustodySubjectType.Asset,
+                    SubjectId = row.asset.Id,
+                    CustodyId = row.custody.Id,
+                    MaterialId = row.material.Id,
+                    MaterialNameAr = row.material.NameAr,
+                    MaterialNameEn = row.material.NameEn,
+                    MaterialCode = row.material.Code,
+                    MaterialKind = row.material.MaterialKind,
+                    TrackingType = row.material.TrackingType,
+                    SerialNumber = row.asset.SerialNumber,
+                    AssetNumber = row.asset.AssetNumber,
+                    WarehouseId = row.warehouse.Id,
+                    WarehouseName = row.warehouse.Name,
+                    HolderType = row.custody.HolderType,
+                    HolderId = row.custody.HolderId,
+                    CustodyKind = row.custody.CustodyKind,
+                    IssuedQuantity = 1m,
+                    ActiveQuantity = row.custody.Status == CustodyStatus.Active ? 1m : 0m,
+                    ReturnedQuantity = row.custody.Status == CustodyStatus.Closed ? 1m : 0m,
+                    IssueDocumentId = row.custody.IssueDocumentId,
+                    SystemReferenceNumber = row.document.SystemReferenceNumber,
+                    StatusIsFirst = row.custody.Status == CustodyStatus.Active,
+                    StatusIsSecond = row.custody.Status == CustodyStatus.Closed,
+                    FromUtc = row.custody.FromUtc,
+                    ToUtc = row.custody.ToUtc,
+                    RowVersion = row.custody.RowVersion
+                });
 
-            candidateRows.AddRange(await projectedAssets.ToListAsync(cancellationToken));
+            combinedRows = Append(combinedRows, projectedAssets);
         }
 
         if (query.SubjectType is null or CustodySubjectType.TrackedUnit)
@@ -143,26 +153,38 @@ internal sealed class GetCustodiesQueryHandler(
                     : unitQuery.Where(_ => false);
             }
 
-            totalCount += await unitQuery.CountAsync(cancellationToken);
             IQueryable<CustodyPageRow> projectedUnits = unitQuery
-                .OrderByDescending(row => row.unit.FromUtc)
-                .ThenBy(row => row.unit.Id)
-                .Take(fetchLimit)
-                .Select(row => new CustodyPageRow(
-                CustodySubjectType.TrackedUnit, row.unit.Id, row.unit.Id,
-                row.material.Id, row.material.NameAr, row.material.NameEn, row.material.Code,
-                row.material.MaterialKind, row.material.TrackingType,
-                row.unit.SerialNumber, null,
-                row.warehouse.Id, row.warehouse.Name,
-                row.unit.HolderType, row.unit.HolderId, row.unit.CustodyKind,
-                1m,
-                row.unit.Status == TrackedMaterialUnitStatus.Issued ? 1m : 0m,
-                row.unit.Status == TrackedMaterialUnitStatus.Returned ? 1m : 0m,
-                row.unit.IssueDocumentId, row.document.SystemReferenceNumber,
-                null, row.unit.Status, null,
-                row.unit.FromUtc, row.unit.ToUtc, row.unit.RowVersion));
+                .Select(row => new CustodyPageRow
+                {
+                    SubjectType = CustodySubjectType.TrackedUnit,
+                    SubjectId = row.unit.Id,
+                    CustodyId = row.unit.Id,
+                    MaterialId = row.material.Id,
+                    MaterialNameAr = row.material.NameAr,
+                    MaterialNameEn = row.material.NameEn,
+                    MaterialCode = row.material.Code,
+                    MaterialKind = row.material.MaterialKind,
+                    TrackingType = row.material.TrackingType,
+                    SerialNumber = row.unit.SerialNumber,
+                    AssetNumber = null,
+                    WarehouseId = row.warehouse.Id,
+                    WarehouseName = row.warehouse.Name,
+                    HolderType = row.unit.HolderType,
+                    HolderId = row.unit.HolderId,
+                    CustodyKind = row.unit.CustodyKind,
+                    IssuedQuantity = 1m,
+                    ActiveQuantity = row.unit.Status == TrackedMaterialUnitStatus.Issued ? 1m : 0m,
+                    ReturnedQuantity = row.unit.Status == TrackedMaterialUnitStatus.Returned ? 1m : 0m,
+                    IssueDocumentId = row.unit.IssueDocumentId,
+                    SystemReferenceNumber = row.document.SystemReferenceNumber,
+                    StatusIsFirst = row.unit.Status == TrackedMaterialUnitStatus.Issued,
+                    StatusIsSecond = row.unit.Status == TrackedMaterialUnitStatus.Returned,
+                    FromUtc = row.unit.FromUtc,
+                    ToUtc = row.unit.ToUtc,
+                    RowVersion = row.unit.RowVersion
+                });
 
-            candidateRows.AddRange(await projectedUnits.ToListAsync(cancellationToken));
+            combinedRows = Append(combinedRows, projectedUnits);
         }
 
         if (query.SubjectType is null or CustodySubjectType.MaterialQuantity)
@@ -206,32 +228,53 @@ internal sealed class GetCustodiesQueryHandler(
                     : allocationQuery.Where(_ => false);
             }
 
-            totalCount += await allocationQuery.CountAsync(cancellationToken);
             IQueryable<CustodyPageRow> projectedAllocations = allocationQuery
-                .OrderByDescending(row => row.allocation.FromUtc)
-                .ThenBy(row => row.allocation.Id)
-                .Take(fetchLimit)
-                .Select(row => new CustodyPageRow(
-                CustodySubjectType.MaterialQuantity, row.allocation.Id, row.allocation.Id,
-                row.material.Id, row.material.NameAr, row.material.NameEn, row.material.Code,
-                row.material.MaterialKind, row.material.TrackingType,
-                null, null,
-                row.warehouse.Id, row.warehouse.Name,
-                row.allocation.HolderType, row.allocation.HolderId, row.allocation.CustodyKind,
-                row.allocation.IssuedQuantity, row.allocation.ActiveQuantity, row.allocation.ReturnedQuantity,
-                row.allocation.IssueDocumentId, row.document.SystemReferenceNumber,
-                null, null, row.allocation.Status,
-                row.allocation.FromUtc, null, row.allocation.RowVersion));
+                .Select(row => new CustodyPageRow
+                {
+                    SubjectType = CustodySubjectType.MaterialQuantity,
+                    SubjectId = row.allocation.Id,
+                    CustodyId = row.allocation.Id,
+                    MaterialId = row.material.Id,
+                    MaterialNameAr = row.material.NameAr,
+                    MaterialNameEn = row.material.NameEn,
+                    MaterialCode = row.material.Code,
+                    MaterialKind = row.material.MaterialKind,
+                    TrackingType = row.material.TrackingType,
+                    SerialNumber = null,
+                    AssetNumber = null,
+                    WarehouseId = row.warehouse.Id,
+                    WarehouseName = row.warehouse.Name,
+                    HolderType = row.allocation.HolderType,
+                    HolderId = row.allocation.HolderId,
+                    CustodyKind = row.allocation.CustodyKind,
+                    IssuedQuantity = row.allocation.IssuedQuantity,
+                    ActiveQuantity = row.allocation.ActiveQuantity,
+                    ReturnedQuantity = row.allocation.ReturnedQuantity,
+                    IssueDocumentId = row.allocation.IssueDocumentId,
+                    SystemReferenceNumber = row.document.SystemReferenceNumber,
+                    StatusIsFirst = row.allocation.Status == DurableCustodyAllocationStatus.Active,
+                    StatusIsSecond = row.allocation.Status == DurableCustodyAllocationStatus.FullyReturned,
+                    FromUtc = row.allocation.FromUtc,
+                    ToUtc = null,
+                    RowVersion = row.allocation.RowVersion
+                });
 
-            candidateRows.AddRange(await projectedAllocations.ToListAsync(cancellationToken));
+            combinedRows = Append(combinedRows, projectedAllocations);
         }
 
-        var rows = candidateRows
+        if (combinedRows is null)
+        {
+            return new PagedResult<CustodyResponse>([], page, pageSize, 0);
+        }
+
+        int totalCount = await combinedRows.CountAsync(cancellationToken);
+        List<CustodyPageRow> rows = await combinedRows
             .OrderByDescending(row => row.FromUtc)
+            .ThenBy(row => row.SubjectType)
             .ThenBy(row => row.CustodyId)
             .Skip(offset)
             .Take(pageSize)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         CounterpartReference[] holderReferences = rows
             .Select(row => new CounterpartReference(row.HolderType, row.HolderId))
@@ -261,40 +304,63 @@ internal sealed class GetCustodiesQueryHandler(
         return new PagedResult<CustodyResponse>(items, page, pageSize, totalCount);
     }
 
-    private static string GetStatus(CustodyPageRow row) => row.SubjectType switch
-    {
-        CustodySubjectType.Asset => row.AssetStatus?.ToString() ?? "Unknown",
-        CustodySubjectType.TrackedUnit => row.TrackedUnitStatus?.ToString() ?? "Unknown",
-        CustodySubjectType.MaterialQuantity => row.AllocationStatus?.ToString() ?? "Unknown",
-        _ => "Unknown"
-    };
+    private static IQueryable<CustodyPageRow> Append(
+        IQueryable<CustodyPageRow>? current,
+        IQueryable<CustodyPageRow> next) =>
+        current is null ? next : current.Concat(next);
 
-    private sealed record CustodyPageRow(
-        CustodySubjectType SubjectType,
-        Guid SubjectId,
-        Guid CustodyId,
-        Guid MaterialId,
-        string MaterialNameAr,
-        string? MaterialNameEn,
-        string MaterialCode,
-        MaterialKind MaterialKind,
-        TrackingType TrackingType,
-        string? SerialNumber,
-        string? AssetNumber,
-        Guid WarehouseId,
-        string WarehouseName,
-        PartyType HolderType,
-        Guid HolderId,
-        CustodyKind CustodyKind,
-        decimal IssuedQuantity,
-        decimal ActiveQuantity,
-        decimal ReturnedQuantity,
-        Guid IssueDocumentId,
-        string? SystemReferenceNumber,
-        CustodyStatus? AssetStatus,
-        TrackedMaterialUnitStatus? TrackedUnitStatus,
-        DurableCustodyAllocationStatus? AllocationStatus,
-        DateTime FromUtc,
-        DateTime? ToUtc,
-        int RowVersion);
+    private static string GetStatus(CustodyPageRow row)
+    {
+        if (row.SubjectType == CustodySubjectType.Asset)
+        {
+            return row.StatusIsFirst ? "Active" : "Closed";
+        }
+
+        if (row.SubjectType == CustodySubjectType.TrackedUnit)
+        {
+            if (row.StatusIsFirst)
+            {
+                return "Issued";
+            }
+
+            return row.StatusIsSecond ? "Returned" : "Disposed";
+        }
+
+        if (row.SubjectType == CustodySubjectType.MaterialQuantity)
+        {
+            return row.StatusIsFirst ? "Active" : "FullyReturned";
+        }
+
+        return "Unknown";
+    }
+
+    private sealed class CustodyPageRow
+    {
+        public CustodySubjectType SubjectType { get; init; }
+        public Guid SubjectId { get; init; }
+        public Guid CustodyId { get; init; }
+        public Guid MaterialId { get; init; }
+        public required string MaterialNameAr { get; init; }
+        public string? MaterialNameEn { get; init; }
+        public required string MaterialCode { get; init; }
+        public MaterialKind MaterialKind { get; init; }
+        public TrackingType TrackingType { get; init; }
+        public string? SerialNumber { get; init; }
+        public string? AssetNumber { get; init; }
+        public Guid WarehouseId { get; init; }
+        public required string WarehouseName { get; init; }
+        public PartyType HolderType { get; init; }
+        public Guid HolderId { get; init; }
+        public CustodyKind CustodyKind { get; init; }
+        public decimal IssuedQuantity { get; init; }
+        public decimal ActiveQuantity { get; init; }
+        public decimal ReturnedQuantity { get; init; }
+        public Guid IssueDocumentId { get; init; }
+        public string? SystemReferenceNumber { get; init; }
+        public bool StatusIsFirst { get; init; }
+        public bool StatusIsSecond { get; init; }
+        public DateTime FromUtc { get; init; }
+        public DateTime? ToUtc { get; init; }
+        public int RowVersion { get; init; }
+    }
 }

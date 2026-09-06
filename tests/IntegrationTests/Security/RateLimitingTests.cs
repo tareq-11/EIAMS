@@ -55,4 +55,25 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         string body = await rejected.Content.ReadAsStringAsync();
         body.ShouldContain("RATE_LIMIT_EXCEEDED");
     }
+
+    [Fact]
+    public async Task GlobalRateLimit_Should_RunBeforeAuthorizationWork()
+    {
+        await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("RateLimiting:Global:PermitLimit", "1");
+            builder.UseSetting("RateLimiting:Global:WindowInSeconds", "60");
+            builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100");
+        });
+        using HttpClient client = limitedFactory.CreateClient();
+        client.BaseAddress = new Uri("http://localhost/api/v1/");
+
+        HttpResponseMessage first = await client.GetAsync("admin/users");
+        HttpResponseMessage second = await client.GetAsync("admin/users");
+
+        first.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        second.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        string body = await second.Content.ReadAsStringAsync();
+        body.ShouldContain("RATE_LIMIT_EXCEEDED");
+    }
 }

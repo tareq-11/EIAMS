@@ -19,7 +19,10 @@ public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, 
     public sealed record RequestBody(string? RefreshToken);
 
     [HttpPost("refresh")]
+    [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RequestBody? request,

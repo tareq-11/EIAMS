@@ -10,16 +10,28 @@ internal static class ForwardedHeadersExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        string[] knownProxyValues =
+            configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+        string[] knownNetworkValues =
+            configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+
         services.Configure<ForwardedHeadersOptions>(options =>
         {
-            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-
-            // Only explicitly configured proxies are trusted. With an empty configuration no
-            // proxy is trusted, so forwarded headers are ignored and the direct peer is used.
             options.KnownProxies.Clear();
             options.KnownIPNetworks.Clear();
 
-            foreach (string proxy in configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+            if (knownProxyValues.Length == 0 && knownNetworkValues.Length == 0)
+            {
+                // Empty known-proxy collections mean "trust every proxy" in the middleware.
+                // Disable forwarded-header processing instead when no trusted peer is configured.
+                options.ForwardedHeaders = ForwardedHeaders.None;
+                return;
+            }
+
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.ForwardLimit = 1;
+
+            foreach (string proxy in knownProxyValues)
             {
                 if (!IPAddress.TryParse(proxy, out IPAddress? address))
                 {
@@ -31,7 +43,7 @@ internal static class ForwardedHeadersExtensions
                 options.KnownProxies.Add(address);
             }
 
-            foreach (string network in configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+            foreach (string network in knownNetworkValues)
             {
                 if (!IPNetwork.TryParse(network, out IPNetwork parsedNetwork))
                 {

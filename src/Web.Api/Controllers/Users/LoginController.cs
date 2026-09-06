@@ -18,7 +18,10 @@ public sealed class LoginController(ICommandHandler<LoginUserCommand, AccessToke
     public sealed record RequestBody(string Email, string Password);
 
     [HttpPost("login")]
+    [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
