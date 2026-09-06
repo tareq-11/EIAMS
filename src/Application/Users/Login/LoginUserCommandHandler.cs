@@ -11,6 +11,8 @@ namespace Application.Users.Login;
 
 internal sealed class LoginUserCommandHandler(
     IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
     IPasswordHasher passwordHasher,
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
@@ -26,6 +28,7 @@ internal sealed class LoginUserCommandHandler(
     {
         string email = User.NormalizeEmail(command.Email);
         User? user = await context.Users
+            .AsNoTracking()
             .SingleOrDefaultAsync(u => u.Email == email, cancellationToken);
 
         // Always run the expensive password verification. Returning before PBKDF2 for an unknown
@@ -33,6 +36,29 @@ internal sealed class LoginUserCommandHandler(
         bool verified = passwordHasher.Verify(command.Password, user?.PasswordHash ?? DummyPasswordHash);
 
         if (user is null || !verified)
+        {
+            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
+        }
+
+        return await transaction.ExecuteAsync(
+            async ct =>
+            {
+                await applicationLock.AcquireAsync(UserSessionLock.ForUser(user.Id), ct);
+                return await IssueTokensAsync(user.Id, email, ct);
+            },
+            cancellationToken);
+    }
+
+    private async Task<Result<AccessTokensResponse>> IssueTokensAsync(
+        Guid userId,
+        string normalizedEmail,
+        CancellationToken cancellationToken)
+    {
+        User? user = await context.Users.SingleOrDefaultAsync(
+            candidate => candidate.Id == userId,
+            cancellationToken);
+
+        if (user is null || !string.Equals(user.Email, normalizedEmail, StringComparison.Ordinal))
         {
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }

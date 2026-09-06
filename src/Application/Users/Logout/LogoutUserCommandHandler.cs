@@ -10,31 +10,69 @@ namespace Application.Users.Logout;
 
 internal sealed class LogoutUserCommandHandler(
     IApplicationDbContext context,
+    IApplicationTransaction transaction,
+    IApplicationLock applicationLock,
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
     IAuditOperationContextAccessor auditContext) : ICommandHandler<LogoutUserCommand>
 {
-    public async Task<Result> Handle(LogoutUserCommand command, CancellationToken cancellationToken)
+    public Task<Result> Handle(LogoutUserCommand command, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(command.RefreshToken))
         {
-            return Result.Success();
+            return Task.FromResult(Result.Success());
         }
 
         string tokenHash = tokenProvider.HashRefreshToken(command.RefreshToken);
 
-        RefreshToken? refreshToken = await context.RefreshTokens
-            .SingleOrDefaultAsync(rt => rt.Token == tokenHash, cancellationToken);
+        return transaction.ExecuteAsync(ct => LogoutAsync(tokenHash, ct), cancellationToken);
+    }
 
-        if (refreshToken is not null && refreshToken.RevokedOnUtc is null)
+    private async Task<Result> LogoutAsync(string tokenHash, CancellationToken cancellationToken)
+    {
+        await applicationLock.AcquireAsync(UserSessionLock.ForRefreshToken(tokenHash), cancellationToken);
+
+        Guid? userId = await context.RefreshTokens
+            .Where(token => token.Token == tokenHash)
+            .Select(token => (Guid?)token.UserId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (!userId.HasValue)
+        {
+            return Result.Success();
+        }
+
+        await applicationLock.AcquireAsync(UserSessionLock.ForUser(userId.Value), cancellationToken);
+
+        Guid? sessionId = await context.RefreshTokens
+            .Where(token => token.Token == tokenHash)
+            .Select(token => (Guid?)token.SessionId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (!sessionId.HasValue)
+        {
+            return Result.Success();
+        }
+
+        List<RefreshToken> activeTokens = await context.RefreshTokens
+            .Where(token =>
+                token.UserId == userId.Value &&
+                token.SessionId == sessionId.Value &&
+                token.RevokedOnUtc == null)
+            .ToListAsync(cancellationToken);
+
+        if (activeTokens.Count > 0)
         {
             DateTime nowUtc = dateTimeProvider.UtcNow;
-            refreshToken.Revoke(nowUtc);
+            foreach (RefreshToken token in activeTokens)
+            {
+                token.Revoke(nowUtc);
+            }
 
             auditContext.RecordSynthetic(new AuditSyntheticSubject(
-                refreshToken.UserId,
+                userId.Value,
                 "User",
-                refreshToken.UserId,
+                userId.Value,
                 "Logout",
                 nameof(LogoutUserCommand),
                 null));

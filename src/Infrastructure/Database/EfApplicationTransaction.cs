@@ -12,17 +12,30 @@ internal sealed class EfApplicationTransaction(ApplicationDbContext dbContext) :
     {
         await using IDbContextTransaction transaction =
             await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        bool committed = false;
 
-        Result result = await action(cancellationToken);
-
-        if (result.IsFailure)
+        try
         {
-            await transaction.RollbackAsync(cancellationToken);
+            Result result = await action(cancellationToken);
+
+            if (result.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return result;
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            committed = true;
+            await dbContext.FlushPostCommitActionsAsync(CancellationToken.None);
             return result;
         }
-
-        await transaction.CommitAsync(cancellationToken);
-        return result;
+        finally
+        {
+            if (!committed)
+            {
+                dbContext.DiscardPostCommitActions();
+            }
+        }
     }
 
     public async Task<Result<TResult>> ExecuteAsync<TResult>(
@@ -31,18 +44,29 @@ internal sealed class EfApplicationTransaction(ApplicationDbContext dbContext) :
     {
         await using IDbContextTransaction transaction =
             await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        bool committed = false;
 
-        Result<TResult> result = await action(cancellationToken);
-
-        if (result.IsFailure)
+        try
         {
-            await transaction.RollbackAsync(cancellationToken);
+            Result<TResult> result = await action(cancellationToken);
 
+            if (result.IsFailure)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return result;
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            committed = true;
+            await dbContext.FlushPostCommitActionsAsync(CancellationToken.None);
             return result;
         }
-
-        await transaction.CommitAsync(cancellationToken);
-
-        return result;
+        finally
+        {
+            if (!committed)
+            {
+                dbContext.DiscardPostCommitActions();
+            }
+        }
     }
 }

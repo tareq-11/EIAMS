@@ -27,8 +27,22 @@ internal sealed class RefreshTokenCommandHandler(
         Result transactionResult = await transaction.ExecuteAsync(
             async ct =>
             {
-                await applicationLock.AcquireAsync($"security:refresh-token:{tokenHash}", ct);
-                refreshResult = await RefreshAsync(tokenHash, ct);
+                await applicationLock.AcquireAsync(UserSessionLock.ForRefreshToken(tokenHash), ct);
+
+                Guid? userId = await context.RefreshTokens
+                    .Where(token => token.Token == tokenHash)
+                    .Select(token => (Guid?)token.UserId)
+                    .SingleOrDefaultAsync(ct);
+
+                if (userId.HasValue)
+                {
+                    await applicationLock.AcquireAsync(UserSessionLock.ForUser(userId.Value), ct);
+                    refreshResult = await RefreshAsync(tokenHash, ct);
+                }
+                else
+                {
+                    refreshResult = Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
+                }
 
                 // Replay detection intentionally changes persistent state while returning an
                 // authentication failure. Commit that revocation; only exceptions should roll it back.
@@ -104,7 +118,8 @@ internal sealed class RefreshTokenCommandHandler(
             newTokenHash,
             refreshToken.UserId,
             nowUtc.AddDays(RefreshTokenExpirationInDays),
-            nowUtc);
+            nowUtc,
+            refreshToken.SessionId);
 
         context.RefreshTokens.Add(newRefreshTokenEntity);
 

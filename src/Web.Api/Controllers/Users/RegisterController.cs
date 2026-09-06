@@ -27,9 +27,17 @@ public sealed class RegisterController(ICommandHandler<RegisterUserCommand, Guid
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status429TooManyRequests)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
-    public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
+    public async Task<IResult> Handle(
+        RequestBody request,
+        [FromHeader(Name = "X-Bootstrap-Token")] string? bootstrapToken,
+        CancellationToken cancellationToken)
     {
-        var command = new RegisterUserCommand(request.Email, request.FirstName, request.LastName, request.Password);
+        var command = new RegisterUserCommand(
+            request.Email,
+            request.FirstName,
+            request.LastName,
+            request.Password,
+            bootstrapToken);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 

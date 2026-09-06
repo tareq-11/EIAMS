@@ -40,6 +40,25 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
+    public async Task Handle_Should_ReturnForbidden_WhenBootstrapTokenIsNotAuthorized()
+    {
+        await using TestDbContext context = CreateDbContext();
+        IBootstrapAdministratorAuthorizer authorizer = Substitute.For<IBootstrapAdministratorAuthorizer>();
+        authorizer.IsAuthorized(Arg.Any<string?>()).Returns(false);
+        RegisterUserCommandHandler handler = CreateHandler(
+            context,
+            Substitute.For<IPasswordHasher>(),
+            authorizer);
+
+        Result<Guid> result = await handler.Handle(Command, CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.RegistrationClosed);
+        bool userCreated = await context.Users.AnyAsync();
+        userCreated.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Handle_Should_CreateUserWithHashedPasswordAndRaiseDomainEvent_WhenValid()
     {
         // Arrange
@@ -70,7 +89,8 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
 
     private static RegisterUserCommandHandler CreateHandler(
         TestDbContext context,
-        IPasswordHasher passwordHasher)
+        IPasswordHasher passwordHasher,
+        IBootstrapAdministratorAuthorizer? bootstrapAuthorizer = null)
     {
         IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
         transaction.ExecuteAsync(
@@ -82,6 +102,17 @@ public sealed class RegisterUserCommandHandlerTests : BaseHandlerTest
         applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
 
-        return new RegisterUserCommandHandler(context, transaction, applicationLock, passwordHasher);
+        if (bootstrapAuthorizer is null)
+        {
+            bootstrapAuthorizer = Substitute.For<IBootstrapAdministratorAuthorizer>();
+            bootstrapAuthorizer.IsAuthorized(Arg.Any<string?>()).Returns(true);
+        }
+
+        return new RegisterUserCommandHandler(
+            context,
+            transaction,
+            applicationLock,
+            bootstrapAuthorizer,
+            passwordHasher);
     }
 }

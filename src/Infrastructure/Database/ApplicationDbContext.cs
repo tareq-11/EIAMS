@@ -43,6 +43,7 @@ using Domain.Warehouses;
 using Infrastructure.DomainEvents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Logging;
 using SharedKernel;
 
 namespace Infrastructure.Database;
@@ -50,9 +51,12 @@ namespace Infrastructure.Database;
 public sealed class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     IDomainEventsDispatcher domainEventsDispatcher,
-    HybridCache? hybridCache = null)
+    HybridCache? hybridCache = null,
+    ILogger<ApplicationDbContext>? logger = null)
     : DbContext(options), IApplicationDbContext
 {
+    private readonly HashSet<string> pendingCacheInvalidationTags = new(StringComparer.Ordinal);
+
     public DbSet<User> Users { get; set; }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -174,15 +178,76 @@ public sealed class ApplicationDbContext(
         List<IDomainEvent> domainEvents = ExtractDomainEvents();
         int result = await base.SaveChangesAsync(cancellationToken);
 
-        if (hybridCache is not null)
+        if (Database.CurrentTransaction is not null)
         {
-            await Task.WhenAll(invalidatedCacheTags.Select(tag =>
-                hybridCache.RemoveByTagAsync(tag, cancellationToken).AsTask()));
+            pendingCacheInvalidationTags.UnionWith(invalidatedCacheTags);
+        }
+        else
+        {
+            await InvalidateCacheTagsAsync(invalidatedCacheTags, cancellationToken);
         }
 
         await PublishDomainEventsAsync(domainEvents);
 
         return result;
+    }
+
+    internal async Task FlushPostCommitActionsAsync(CancellationToken cancellationToken)
+    {
+        string[] tags = pendingCacheInvalidationTags.ToArray();
+        if (tags.Length == 0)
+        {
+            return;
+        }
+
+        const int maximumAttempts = 3;
+        for (int attempt = 1; attempt <= maximumAttempts; attempt++)
+        {
+            try
+            {
+                await InvalidateCacheTagsAsync(tags, cancellationToken);
+                pendingCacheInvalidationTags.ExceptWith(tags);
+                return;
+            }
+            catch (Exception exception) when (attempt < maximumAttempts)
+            {
+                logger?.LogWarning(
+                    exception,
+                    "Post-commit cache invalidation attempt {Attempt} of {MaximumAttempts} failed",
+                    attempt,
+                    maximumAttempts);
+                await Task.Delay(TimeSpan.FromMilliseconds(50 * attempt), CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                // The database transaction is already committed. Returning a 500 here would invite
+                // clients to retry a write that actually succeeded. Keep this as a visible operational
+                // failure; durable/multi-instance invalidation is handled as a separate deployment concern.
+                logger?.LogCritical(
+                    exception,
+                    "Post-commit cache invalidation failed after {MaximumAttempts} attempts for {TagCount} tags",
+                    maximumAttempts,
+                    tags.Length);
+                pendingCacheInvalidationTags.ExceptWith(tags);
+                return;
+            }
+        }
+    }
+
+    internal void DiscardPostCommitActions() => pendingCacheInvalidationTags.Clear();
+
+    private async Task InvalidateCacheTagsAsync(
+        string[] tags,
+        CancellationToken cancellationToken)
+    {
+        HybridCache? cache = hybridCache;
+        if (cache is null || tags.Length == 0)
+        {
+            return;
+        }
+
+        await Task.WhenAll(tags.Select(tag =>
+            cache.RemoveByTagAsync(tag, cancellationToken).AsTask()));
     }
 
     private string[] GetInvalidatedCacheTags() => ChangeTracker.Entries()
