@@ -2,6 +2,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Reports.Dashboard;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -18,6 +19,7 @@ public sealed class GetDashboardReportController(
     [ProducesResponseType<ApiResponse<DashboardReportResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
+    [EnableRateLimiting(RateLimitingPolicies.Reporting)]
     public async Task<IResult> Handle([FromQuery] Guid? warehouseId, CancellationToken cancellationToken)
     {
         Result<DashboardReportResponse> result = await handler.Handle(

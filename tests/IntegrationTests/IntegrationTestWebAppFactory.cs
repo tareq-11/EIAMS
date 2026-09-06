@@ -47,6 +47,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         // Relax rate limiting so the test suite is not throttled.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
+        builder.UseSetting("RateLimiting:Authentication:ConcurrencyLimit", "100000");
+        builder.UseSetting("RateLimiting:Concurrency:Reporting", "100000");
+        builder.UseSetting("RateLimiting:Concurrency:Upload", "100000");
+        builder.UseSetting("RateLimiting:Concurrency:Posting", "100000");
 
         builder.ConfigureServices(services =>
         {
