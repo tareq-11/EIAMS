@@ -88,6 +88,9 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         await dbContext.SaveChangesAsync();
     }
 
+    internal WebApplicationFactory<Program> CreateSiblingFactory() =>
+        new SiblingWebAppFactory(_dbContainer.GetConnectionString());
+
     public new async Task DisposeAsync()
     {
         await _dbContainer.DisposeAsync();
@@ -96,6 +99,28 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         if (Directory.Exists(attachmentStoragePath))
         {
             Directory.Delete(attachmentStoragePath, recursive: true);
+        }
+    }
+
+    private sealed class SiblingWebAppFactory(string connectionString) : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseSetting("ConnectionStrings:Database", connectionString);
+            builder.UseSetting("Jwt:Secret", JwtSecret);
+            builder.UseSetting("Jwt:Issuer", JwtIssuer);
+            builder.UseSetting("Jwt:Audience", JwtAudience);
+            builder.UseSetting("Jwt:ExpirationInMinutes", "60");
+            builder.UseSetting(
+                "AttachmentStorage:Local:RootPath",
+                Path.Combine(Path.GetTempPath(), $"eiams-sibling-attachments-{Guid.NewGuid():N}"));
+            builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
+            builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
+            builder.UseSetting("RateLimiting:Authentication:ConcurrencyLimit", "100000");
+            builder.UseSetting("RateLimiting:Authentication:GlobalConcurrencyLimit", "100000");
+            builder.UseSetting("RateLimiting:Concurrency:Reporting", "100000");
+            builder.UseSetting("RateLimiting:Concurrency:Upload", "100000");
+            builder.UseSetting("RateLimiting:Concurrency:Posting", "100000");
         }
     }
 }
