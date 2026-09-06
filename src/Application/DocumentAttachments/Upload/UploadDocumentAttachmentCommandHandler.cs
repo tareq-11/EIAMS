@@ -188,16 +188,17 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
 
     private static string SanitizeFilename(string filename)
     {
-        string name = Path.GetFileName(filename);
+        string name = Path.GetFileName(filename.Replace('\\', '/'));
         char[] invalidChars = Path.GetInvalidFileNameChars();
         Span<char> buffer = name.Length <= 300 ? stackalloc char[name.Length] : new char[300];
         int length = Math.Min(name.Length, buffer.Length);
 
         for (int i = 0; i < length; i++)
         {
-            buffer[i] = invalidChars.Contains(name[i]) ? '_' : name[i];
+            buffer[i] = invalidChars.Contains(name[i]) || char.IsControl(name[i]) ? '_' : name[i];
         }
 
-        return new string(buffer[..length]);
+        string sanitized = new(buffer[..length]);
+        return string.IsNullOrWhiteSpace(sanitized) ? "attachment" : sanitized;
     }
 }

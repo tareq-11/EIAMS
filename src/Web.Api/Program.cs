@@ -101,7 +101,9 @@ app.UseStatusCodePages(async statusCodeContext =>
 
 app.UseCors(CorsExtensions.PolicyName);
 
-app.UseResponseCompression();
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api/v1/auth"),
+    branch => branch.UseResponseCompression());
 
 app.UseAuthentication();
 

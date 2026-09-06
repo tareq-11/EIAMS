@@ -104,7 +104,13 @@ internal sealed class LocalFileStorage(
         }
 
 #pragma warning disable CA2000 // Ownership transfers to the caller, who is responsible for disposing the stream.
-        Stream stream = File.OpenRead(filePath);
+        Stream stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81_920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
 #pragma warning restore CA2000
 
         return Task.FromResult(Result.Success(stream));

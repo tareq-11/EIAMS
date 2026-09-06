@@ -82,6 +82,18 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         HttpResponseMessage outsideDetailResponse = await HttpClient.GetAsync(
             $"inventory/movements/{seed.OutsideMovementId}");
         outsideDetailResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        HttpResponseMessage allowedAttachments = await HttpClient.GetAsync(
+            $"warehouse-documents/{seed.AllowedDocumentId}/attachments");
+        allowedAttachments.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        HttpResponseMessage outsideAttachments = await HttpClient.GetAsync(
+            $"warehouse-documents/{seed.OutsideDocumentId}/attachments");
+        outsideAttachments.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        HttpResponseMessage swappedAttachment = await HttpClient.GetAsync(
+            $"warehouse-documents/{seed.AllowedDocumentId}/attachments/{seed.OutsideAttachmentId}/content");
+        swappedAttachment.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -360,6 +372,9 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             allowedMovement.Value.Id,
             outsideMovement.Value.Id,
             allowedReference,
+            allowedDocument.Id,
+            outsideDocument.Id,
+            outsideAttachment.Id,
             allowedAsset.Value.Id,
             outsideAsset.Value.Id,
             allowedAdjustment.Value.Id,
@@ -420,6 +435,9 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Guid AllowedMovementId,
         Guid OutsideMovementId,
         string AllowedDocumentReference,
+        Guid AllowedDocumentId,
+        Guid OutsideDocumentId,
+        Guid OutsideAttachmentId,
         Guid AllowedAssetId,
         Guid OutsideAssetId,
         Guid AllowedAdjustmentId,

@@ -16,8 +16,28 @@ internal static class FileSignatureValidator
 
         long originalPosition = content.Position;
         byte[] header = new byte[MaximumSignatureLength];
-        int bytesRead = await content.ReadAsync(header, cancellationToken);
-        content.Position = originalPosition;
+        int bytesRead = 0;
+
+        try
+        {
+            while (bytesRead < header.Length)
+            {
+                int currentRead = await content.ReadAsync(
+                    header.AsMemory(bytesRead, header.Length - bytesRead),
+                    cancellationToken);
+
+                if (currentRead == 0)
+                {
+                    break;
+                }
+
+                bytesRead += currentRead;
+            }
+        }
+        finally
+        {
+            content.Position = originalPosition;
+        }
 
         ReadOnlySpan<byte> actual = header.AsSpan(0, bytesRead);
 
