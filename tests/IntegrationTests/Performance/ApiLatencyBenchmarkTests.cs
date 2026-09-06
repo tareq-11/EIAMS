@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 
@@ -33,8 +34,12 @@ public sealed class ApiLatencyBenchmarkTests
     public async Task MeasureRepresentativeApiLatency()
     {
         DateTime startedAtUtc = DateTime.UtcNow;
-        using HttpClient client = factory.CreateClient();
-        client.BaseAddress = new Uri("http://localhost/api/v1/");
+        SqlCommandCounterInterceptor commandCounter = factory.Services
+            .GetRequiredService<SqlCommandCounterInterceptor>();
+        using WebApplicationFactory<Program> benchmarkFactory = factory.CreateSiblingFactory(commandCounter);
+        benchmarkFactory.UseKestrel(0);
+        using HttpClient client = benchmarkFactory.CreateClient();
+        client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
         int sampleIterations = GetSampleIterations();
         var measurements = new List<ApiLatencyMeasurement>();
         var failures = new List<string>();
@@ -76,9 +81,6 @@ public sealed class ApiLatencyBenchmarkTests
         }
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        SqlCommandCounterInterceptor commandCounter = factory.Services
-            .GetRequiredService<SqlCommandCounterInterceptor>();
-
         string[] endpoints =
         [
             "health/live",
@@ -180,7 +182,7 @@ public sealed class ApiLatencyBenchmarkTests
             Runtime = RuntimeInformation.FrameworkDescription,
             OperatingSystem = RuntimeInformation.OSDescription,
             Environment.ProcessorCount,
-            Transport = "ASP.NET Core TestServer; excludes real network and TLS",
+            Transport = "Kestrel over loopback HTTP; includes the network stack and excludes TLS",
             WarmupIterations,
             SampleIterations = sampleIterations,
             Measurements = measurements,

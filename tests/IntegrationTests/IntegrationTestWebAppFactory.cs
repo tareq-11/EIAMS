@@ -88,8 +88,9 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         await dbContext.SaveChangesAsync();
     }
 
-    internal WebApplicationFactory<Program> CreateSiblingFactory() =>
-        new SiblingWebAppFactory(_dbContainer.GetConnectionString());
+    internal WebApplicationFactory<Program> CreateSiblingFactory(
+        SqlCommandCounterInterceptor? commandCounter = null) =>
+        new SiblingWebAppFactory(_dbContainer.GetConnectionString(), commandCounter);
 
     public new async Task DisposeAsync()
     {
@@ -102,7 +103,9 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         }
     }
 
-    private sealed class SiblingWebAppFactory(string connectionString) : WebApplicationFactory<Program>
+    private sealed class SiblingWebAppFactory(
+        string connectionString,
+        SqlCommandCounterInterceptor? commandCounter) : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -121,6 +124,15 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
             builder.UseSetting("RateLimiting:Concurrency:Reporting", "100000");
             builder.UseSetting("RateLimiting:Concurrency:Upload", "100000");
             builder.UseSetting("RateLimiting:Concurrency:Posting", "100000");
+
+            if (commandCounter is not null)
+            {
+                builder.ConfigureServices(services =>
+                {
+                    services.AddSingleton(commandCounter);
+                    services.AddSingleton<DbCommandInterceptor>(commandCounter);
+                });
+            }
         }
     }
 }
