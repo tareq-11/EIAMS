@@ -105,9 +105,9 @@ app.UseResponseCompression();
 
 app.UseAuthentication();
 
-app.UseAuthorization();
-
 app.UseRateLimiter();
+
+app.UseAuthorization();
 
 app.MapControllers();
 

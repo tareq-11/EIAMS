@@ -19,12 +19,14 @@ public sealed class RegisterController(ICommandHandler<RegisterUserCommand, Guid
     public sealed record RegisterUserResponse(Guid Id);
 
     [HttpPost("register")]
+    [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     [ProducesResponseType<ApiResponse<RegisterUserResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
         var command = new RegisterUserCommand(request.Email, request.FirstName, request.LastName, request.Password);

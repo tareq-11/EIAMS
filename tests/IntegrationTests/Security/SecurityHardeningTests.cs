@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using System.Text;
+using Web.Api.Infrastructure;
 
 namespace IntegrationTests.Security;
 
@@ -60,6 +62,18 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
         response.Headers.GetValues("X-Frame-Options").Single().ShouldBe("DENY");
         response.Headers.GetValues("Referrer-Policy").Single().ShouldBe("no-referrer");
         response.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("default-src 'none'");
+    }
+
+    [Fact]
+    public async Task Login_Should_RejectOversizedCredentialsBeforePasswordVerification()
+    {
+        string oversizedJson =
+            $"{{\"email\":\"user@example.com\",\"password\":\"{new string('x', (int)AuthRequestLimits.MaximumBodySize)}\"}}";
+        using var content = new StringContent(oversizedJson, Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response = await HttpClient.PostAsync("auth/login", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]

@@ -16,12 +16,14 @@ public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid
     public sealed record ResponseBody(Guid Id);
 
     [HttpPost]
+    [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [HasPermission(PermissionCodes.Users.Access)]
     [ProducesResponseType<ApiResponse<ResponseBody>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
         var command = new CreateUserCommand(
