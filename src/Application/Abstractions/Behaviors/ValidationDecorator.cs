@@ -15,7 +15,7 @@ internal static class ValidationDecorator
     {
         public async Task<Result<TResponse>> Handle(TCommand command, CancellationToken cancellationToken)
         {
-            ValidationFailure[] validationFailures = await ValidateAsync(command, validators);
+            ValidationFailure[] validationFailures = await ValidateAsync(command, validators, cancellationToken);
 
             if (validationFailures.Length == 0)
             {
@@ -34,7 +34,7 @@ internal static class ValidationDecorator
     {
         public async Task<Result> Handle(TCommand command, CancellationToken cancellationToken)
         {
-            ValidationFailure[] validationFailures = await ValidateAsync(command, validators);
+            ValidationFailure[] validationFailures = await ValidateAsync(command, validators, cancellationToken);
 
             if (validationFailures.Length == 0)
             {
@@ -45,19 +45,39 @@ internal static class ValidationDecorator
         }
     }
 
-    private static async Task<ValidationFailure[]> ValidateAsync<TCommand>(
-        TCommand command,
-        IEnumerable<IValidator<TCommand>> validators)
+    internal sealed class QueryHandler<TQuery, TResponse>(
+        IQueryHandler<TQuery, TResponse> innerHandler,
+        IEnumerable<IValidator<TQuery>> validators)
+        : IQueryHandler<TQuery, TResponse>
+        where TQuery : IQuery<TResponse>
+    {
+        public async Task<Result<TResponse>> Handle(TQuery query, CancellationToken cancellationToken)
+        {
+            ValidationFailure[] validationFailures = await ValidateAsync(query, validators, cancellationToken);
+
+            if (validationFailures.Length == 0)
+            {
+                return await innerHandler.Handle(query, cancellationToken);
+            }
+
+            return Result.Failure<TResponse>(CreateValidationError(validationFailures));
+        }
+    }
+
+    private static async Task<ValidationFailure[]> ValidateAsync<TRequest>(
+        TRequest request,
+        IEnumerable<IValidator<TRequest>> validators,
+        CancellationToken cancellationToken)
     {
         if (!validators.Any())
         {
             return [];
         }
 
-        var context = new ValidationContext<TCommand>(command);
+        var context = new ValidationContext<TRequest>(request);
 
         ValidationResult[] validationResults = await Task.WhenAll(
-            validators.Select(validator => validator.ValidateAsync(context)));
+            validators.Select(validator => validator.ValidateAsync(context, cancellationToken)));
 
         ValidationFailure[] validationFailures = validationResults
             .Where(validationResult => !validationResult.IsValid)

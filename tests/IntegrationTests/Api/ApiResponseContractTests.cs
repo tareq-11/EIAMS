@@ -98,6 +98,22 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
     }
 
     [Fact]
+    public async Task OversizedSearch_Should_ReturnValidationErrorBeforeQueryExecution()
+    {
+        await AuthenticateAsAdministratorAsync();
+        string search = new('x', 201);
+
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"admin/users?search={search}&page=1&pageSize=20");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        using JsonDocument body = await ReadJsonAsync(response);
+        JsonElement error = body.RootElement.GetProperty("error");
+        error.GetProperty("code").GetString().ShouldBe("VALIDATION_GENERAL");
+        error.GetProperty("details").EnumerateObject().ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public async Task UnauthorizedRequest_Should_ReturnStructuredAuthenticationError()
     {
         HttpResponseMessage response = await HttpClient.GetAsync("warehouses");
