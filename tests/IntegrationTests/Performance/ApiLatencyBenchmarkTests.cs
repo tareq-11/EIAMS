@@ -6,6 +6,9 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Application.Abstractions.Authentication;
+using Domain.Users;
+using Infrastructure.Database;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
@@ -74,11 +77,40 @@ public sealed class ApiLatencyBenchmarkTests
         if (repeatedLoginDurations.Count > 0)
         {
             measurements.Add(CreateMeasurement(
-                "POST /api/v1/auth/login",
+                "POST /api/v1/auth/login [valid]",
                 firstLoginMs,
                 repeatedLoginDurations,
                 sqlCommands: null));
         }
+
+        await MeasureRejectedLoginAsync(
+            client,
+            "POST /api/v1/auth/login [missing-user]",
+            $"missing-{Guid.NewGuid():N}@example.com",
+            IntegrationTestWebAppFactory.AdministratorPassword,
+            HttpStatusCode.NotFound,
+            sampleIterations,
+            measurements,
+            failures);
+        await MeasureRejectedLoginAsync(
+            client,
+            "POST /api/v1/auth/login [wrong-password]",
+            IntegrationTestWebAppFactory.AdministratorEmail,
+            "WrongPassword1!",
+            HttpStatusCode.NotFound,
+            sampleIterations,
+            measurements,
+            failures);
+        (string suspendedEmail, string suspendedPassword) = await CreateSuspendedUserAsync();
+        await MeasureRejectedLoginAsync(
+            client,
+            "POST /api/v1/auth/login [suspended]",
+            suspendedEmail,
+            suspendedPassword,
+            HttpStatusCode.Forbidden,
+            sampleIterations,
+            measurements,
+            failures);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         string[] endpoints =
@@ -211,16 +243,96 @@ public sealed class ApiLatencyBenchmarkTests
     }
 
     private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(HttpClient client)
+        => await LoginAsync(
+            client,
+            IntegrationTestWebAppFactory.AdministratorEmail,
+            IntegrationTestWebAppFactory.AdministratorPassword);
+
+    private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(
+        HttpClient client,
+        string email,
+        string password)
     {
         var stopwatch = Stopwatch.StartNew();
         HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new
         {
-            email = IntegrationTestWebAppFactory.AdministratorEmail,
-            password = IntegrationTestWebAppFactory.AdministratorPassword
+            email,
+            password
         });
         await response.Content.LoadIntoBufferAsync();
         stopwatch.Stop();
         return (response, stopwatch.Elapsed.TotalMilliseconds);
+    }
+
+    private static async Task MeasureRejectedLoginAsync(
+        HttpClient client,
+        string name,
+        string email,
+        string password,
+        HttpStatusCode expectedStatus,
+        int sampleIterations,
+        List<ApiLatencyMeasurement> measurements,
+        List<string> failures)
+    {
+        (HttpResponseMessage firstResponse, double firstObservedMs) = await LoginAsync(client, email, password);
+        using (firstResponse)
+        {
+            if (firstResponse.StatusCode != expectedStatus)
+            {
+                failures.Add($"{name}: first HTTP {(int)firstResponse.StatusCode}");
+                return;
+            }
+        }
+
+        for (int iteration = 0; iteration < WarmupIterations; iteration++)
+        {
+            (HttpResponseMessage response, _) = await LoginAsync(client, email, password);
+            using (response)
+            {
+                if (response.StatusCode != expectedStatus)
+                {
+                    failures.Add($"{name}: warmup HTTP {(int)response.StatusCode}");
+                    return;
+                }
+            }
+        }
+
+        var durations = new List<double>(sampleIterations);
+        for (int iteration = 0; iteration < sampleIterations; iteration++)
+        {
+            (HttpResponseMessage response, double elapsedMs) = await LoginAsync(client, email, password);
+            using (response)
+            {
+                if (response.StatusCode != expectedStatus)
+                {
+                    failures.Add($"{name}: sample HTTP {(int)response.StatusCode}");
+                    return;
+                }
+            }
+
+            durations.Add(elapsedMs);
+        }
+
+        measurements.Add(CreateMeasurement(name, firstObservedMs, durations, sqlCommands: null));
+    }
+
+    private async Task<(string Email, string Password)> CreateSuspendedUserAsync()
+    {
+        const string password = "SuspendedPassword1!";
+        string email = $"suspended-{Guid.NewGuid():N}@example.com";
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var user = User.Create(
+            Guid.NewGuid(),
+            email,
+            "Suspended",
+            "Benchmark",
+            passwordHasher.Hash(password));
+        user.SetStatus(UserStatus.Suspended);
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        return (email, password);
     }
 
     private static async Task<string> ReadAccessTokenAsync(HttpResponseMessage response)
