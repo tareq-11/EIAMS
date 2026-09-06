@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Domain.Common;
 using Domain.AssetMovementHistories;
@@ -94,6 +95,22 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         HttpResponseMessage swappedAttachment = await HttpClient.GetAsync(
             $"warehouse-documents/{seed.AllowedDocumentId}/attachments/{seed.OutsideAttachmentId}/content");
         swappedAttachment.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        using var upload = new MultipartFormDataContent();
+        using var file = new ByteArrayContent("%PDF-1.7\nscoped-test"u8.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        upload.Add(file, "File", "outside.pdf");
+        upload.Add(new StringContent("SignedOriginal"), "AttachmentType");
+        upload.Add(new StringContent("1"), "ExpectedRowVersion");
+        HttpResponseMessage outsideUpload = await HttpClient.PostAsync(
+            $"warehouse-documents/{seed.OutsideDocumentId}/attachments",
+            upload);
+        outsideUpload.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        HttpResponseMessage outsideDelete = await HttpClient.DeleteAsync(
+            $"warehouse-documents/{seed.OutsideDocumentId}/attachments/{seed.OutsideAttachmentId}" +
+            "?expectedRowVersion=1");
+        outsideDelete.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -392,6 +409,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             RolePermission.Create(roleId, WellKnownPermissions.AssetsViewId),
             RolePermission.Create(roleId, WellKnownPermissions.CustodiesViewId),
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
+            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
             RolePermission.Create(roleId, WellKnownPermissions.InventoryCountsViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
