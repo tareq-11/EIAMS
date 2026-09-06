@@ -38,8 +38,29 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Restore pinned .NET tools
+        run: dotnet tool restore
+
       - name: Restore
         run: dotnet restore CleanArchitectureTemplate.slnx
+
+      - name: Generate CycloneDX SBOM
+        run: >-
+          dotnet tool run dotnet-CycloneDX CleanArchitectureTemplate.slnx
+          --output artifacts/sbom
+          --filename bom.json
+          --output-format Json
+          --disable-package-restore
+          --set-name EIAMS
+          --set-version "${GITHUB_SHA}"
+
+      - name: Retain SBOM
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: cyclonedx-sbom-${{ github.sha }}
+          path: artifacts/sbom/bom.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Audit NuGet dependencies
         shell: bash
