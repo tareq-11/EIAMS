@@ -13,7 +13,7 @@ on:
       - main
 
 env:
-  DOTNET_VERSION: "10.x"
+  DOTNET_VERSION: "10.0.107"
 
 jobs:
   build:
@@ -44,6 +44,8 @@ jobs:
               --include-transitive \
               --format json \
               --no-restore | jq -e '
+              (.version == 1) and
+              (((.projects // []) | length) == 1) and
               ((.problems // []) | length == 0) and
               ([
                 .projects[]?.frameworks[]?.topLevelPackages[]?,

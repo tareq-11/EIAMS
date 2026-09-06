@@ -33,7 +33,9 @@ internal sealed class PasswordHasher : IPasswordHasher
     {
         if (TryParseVersionedHash(passwordHash, out _, out _, out int iterations))
         {
-            return iterations != Iterations;
+            // Never replace a valid hash with one using fewer iterations. A future algorithm
+            // migration must be represented by a new supported version rather than a downgrade.
+            return iterations < Iterations;
         }
 
         return TryParseLegacyHash(passwordHash, out _, out _);

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Application.Abstractions.Authentication;
 using Microsoft.AspNetCore.Hosting;
@@ -119,6 +120,63 @@ public sealed class RateLimitingTests : BaseIntegrationTest
             blockingHasher.Release();
             completedStatus = await firstRequest;
             client.Dispose();
+        }
+
+        completedStatus.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GlobalAuthenticationConcurrencyLimit_Should_ApplyAcrossDifferentClientPartitions()
+    {
+        AccessTokens administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorEmail);
+        using var blockingHasher = new BlockingPasswordHasher();
+        await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("RateLimiting:Global:PermitLimit", "100");
+            builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100");
+            builder.UseSetting("RateLimiting:Authentication:ConcurrencyLimit", "4");
+            builder.UseSetting("RateLimiting:Authentication:GlobalConcurrencyLimit", "1");
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IPasswordHasher>();
+                services.AddSingleton<IPasswordHasher>(blockingHasher);
+            });
+        });
+        HttpClient anonymousClient = limitedFactory.CreateClient();
+        anonymousClient.BaseAddress = new Uri("http://localhost/api/v1/");
+        using HttpClient authenticatedClient = limitedFactory.CreateClient();
+        authenticatedClient.BaseAddress = new Uri("http://localhost/api/v1/");
+        authenticatedClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", administratorTokens.AccessToken);
+        var credentials = new
+        {
+            email = "global-concurrency-missing@example.com",
+            password = "Password123!"
+        };
+        Task<HttpStatusCode> firstRequest = SendLoginAsync(anonymousClient, credentials);
+        HttpStatusCode? completedStatus = null;
+
+        try
+        {
+            await blockingHasher.Entered.WaitAsync(TimeSpan.FromSeconds(10));
+            using HttpResponseMessage rejected = await authenticatedClient.PostAsJsonAsync(
+                "admin/users/register",
+                new
+                {
+                    email = "bootstrap-concurrency@example.com",
+                    firstName = "Concurrency",
+                    lastName = "Test",
+                    password = "Password123!"
+                });
+
+            rejected.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+            (await rejected.Content.ReadAsStringAsync()).ShouldContain("RATE_LIMIT_EXCEEDED");
+        }
+        finally
+        {
+            blockingHasher.Release();
+            completedStatus = await firstRequest;
+            anonymousClient.Dispose();
         }
 
         completedStatus.ShouldBe(HttpStatusCode.NotFound);

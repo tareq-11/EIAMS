@@ -8,13 +8,17 @@ namespace Infrastructure.Authorization;
 
 internal sealed class ScopeAuthorizationService(
     ApplicationDbContext context,
-    HybridCache hybridCache) : IScopeAuthorizationService
+    HybridCache hybridCache,
+    AuthorizationVersionProvider authorizationVersionProvider) : IScopeAuthorizationService
 {
     public async Task<UserAuthorizationAssignment?> GetUserAssignmentAsync(
         Guid userId,
-        CancellationToken cancellationToken) =>
-        await GetOrCreateAsync(
-            $"auth:user-assignment:{userId}",
+        CancellationToken cancellationToken)
+    {
+        long authorizationVersion = await authorizationVersionProvider.GetCurrentAsync(cancellationToken);
+
+        return await GetOrCreateAsync(
+            $"auth:user-assignment:{userId}:v{authorizationVersion}",
             "user_assignment",
             async ct => await context.UserRoleScopes
                 .AsNoTracking()
@@ -33,6 +37,7 @@ internal sealed class ScopeAuthorizationService(
             },
             tags: [$"user:{userId}", "auth-roles"],
             cancellationToken: cancellationToken);
+    }
 
     public async Task<bool> HasPermissionAsync(
         Guid userId,
@@ -483,9 +488,12 @@ internal sealed class ScopeAuthorizationService(
 
     private async Task<List<UserPermissionScopeGrant>> GetAllGrantsAsync(
         Guid userId,
-        CancellationToken cancellationToken) =>
-        await GetOrCreateAsync(
-            $"auth:user-grants:{userId}",
+        CancellationToken cancellationToken)
+    {
+        long authorizationVersion = await authorizationVersionProvider.GetCurrentAsync(cancellationToken);
+
+        return await GetOrCreateAsync(
+            $"auth:user-grants:{userId}:v{authorizationVersion}",
             "user_grants",
             async ct => await (
                 from user in context.Users.AsNoTracking()
@@ -508,6 +516,7 @@ internal sealed class ScopeAuthorizationService(
             },
             tags: [$"user:{userId}", "auth-roles"],
             cancellationToken: cancellationToken);
+    }
 
     private async Task<T> GetOrCreateAsync<T>(
         string cacheKey,

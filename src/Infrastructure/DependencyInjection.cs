@@ -347,6 +347,8 @@ public static class DependencyInjection
     {
         services.AddAuthorization();
 
+        services.AddScoped<AuthorizationVersionProvider>();
+
         services.AddScoped<IScopeAuthorizationService, ScopeAuthorizationService>();
 
         services.AddTransient<IAuthorizationHandler, PermissionAuthorizationHandler>();

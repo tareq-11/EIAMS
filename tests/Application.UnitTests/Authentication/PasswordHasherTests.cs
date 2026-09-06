@@ -57,4 +57,12 @@ public sealed class PasswordHasherTests
 
         hasher.Verify("password", maliciousHash).ShouldBeFalse();
     }
+
+    [Fact]
+    public void NeedsRehash_Should_NotDowngradeHashWithMoreIterations()
+    {
+        string strongerHash = $"pbkdf2-sha512$750000${new string('0', 64)}${new string('0', 32)}";
+
+        hasher.NeedsRehash(strongerHash).ShouldBeFalse();
+    }
 }

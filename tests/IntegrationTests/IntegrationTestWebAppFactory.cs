@@ -48,6 +48,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:ConcurrencyLimit", "100000");
+        builder.UseSetting("RateLimiting:Authentication:GlobalConcurrencyLimit", "100000");
         builder.UseSetting("RateLimiting:Concurrency:Reporting", "100000");
         builder.UseSetting("RateLimiting:Concurrency:Upload", "100000");
         builder.UseSetting("RateLimiting:Concurrency:Posting", "100000");

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Web.Api.Infrastructure;
 
 namespace Web.Api.Extensions;
@@ -16,6 +17,8 @@ internal static class RateLimitingExtensions
         int authPermitLimit = configuration.GetValue<int?>("RateLimiting:Authentication:PermitLimit") ?? 10;
         int authWindowSeconds = configuration.GetValue<int?>("RateLimiting:Authentication:WindowInSeconds") ?? 60;
         int authConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Authentication:ConcurrencyLimit") ?? 4;
+        int authGlobalConcurrencyLimit = configuration.GetValue<int?>(
+            "RateLimiting:Authentication:GlobalConcurrencyLimit") ?? 16;
         int reportingConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Concurrency:Reporting") ?? 8;
         int uploadConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Concurrency:Upload") ?? 2;
         int postingConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Concurrency:Posting") ?? 4;
@@ -25,6 +28,7 @@ internal static class RateLimitingExtensions
         ValidatePositive(authPermitLimit, "RateLimiting:Authentication:PermitLimit");
         ValidatePositive(authWindowSeconds, "RateLimiting:Authentication:WindowInSeconds");
         ValidatePositive(authConcurrencyLimit, "RateLimiting:Authentication:ConcurrencyLimit");
+        ValidatePositive(authGlobalConcurrencyLimit, "RateLimiting:Authentication:GlobalConcurrencyLimit");
         ValidatePositive(reportingConcurrencyLimit, "RateLimiting:Concurrency:Reporting");
         ValidatePositive(uploadConcurrencyLimit, "RateLimiting:Concurrency:Upload");
         ValidatePositive(postingConcurrencyLimit, "RateLimiting:Concurrency:Posting");
@@ -44,7 +48,8 @@ internal static class RateLimitingExtensions
             };
 
             // A global fixed-window limiter, partitioned by authenticated user or client IP.
-            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+            var requestRateLimiter =
+                PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: GetPartitionKey(httpContext),
                     factory: _ => new FixedWindowRateLimiterOptions
@@ -54,6 +59,22 @@ internal static class RateLimitingExtensions
                         QueueLimit = 0,
                         AutoReplenishment = true
                     }));
+
+            var authenticationConcurrencyLimiter =
+                PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+                    UsesAuthenticationPolicy(httpContext)
+                        ? RateLimitPartition.GetConcurrencyLimiter(
+                            partitionKey: "authentication-global",
+                            factory: _ => new ConcurrencyLimiterOptions
+                            {
+                                PermitLimit = authGlobalConcurrencyLimit,
+                                QueueLimit = 0
+                            })
+                        : RateLimitPartition.GetNoLimiter("non-authentication"));
+
+            options.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+                requestRateLimiter,
+                authenticationConcurrencyLimiter);
 
             // Authentication needs both a request-rate ceiling and a concurrency ceiling because
             // password verification deliberately consumes significant CPU.
@@ -83,7 +104,7 @@ internal static class RateLimitingExtensions
     }
 
     private static void AddConcurrencyPolicy(
-        Microsoft.AspNetCore.RateLimiting.RateLimiterOptions options,
+        RateLimiterOptions options,
         string policyName,
         int permitLimit)
     {
@@ -98,6 +119,12 @@ internal static class RateLimitingExtensions
                     QueueLimit = 0
                 }));
     }
+
+    private static bool UsesAuthenticationPolicy(HttpContext httpContext) =>
+        string.Equals(
+            httpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName,
+            RateLimitingPolicies.Authentication,
+            StringComparison.Ordinal);
 
     private static string GetPartitionKey(HttpContext httpContext)
     {
