@@ -27,15 +27,21 @@ internal sealed class LoginUserCommandHandler(
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
         string email = User.NormalizeEmail(command.Email);
-        User? user = await context.Users
+        long phaseStartedAt = LoginMetrics.Start();
+        LoginCredentialSnapshot? credentials = await context.Users
             .AsNoTracking()
-            .SingleOrDefaultAsync(u => u.Email == email, cancellationToken);
+            .Where(user => user.Email == email)
+            .Select(user => new LoginCredentialSnapshot(user.Id, user.PasswordHash))
+            .SingleOrDefaultAsync(cancellationToken);
+        LoginMetrics.Record("user_lookup", phaseStartedAt);
 
         // Always run the expensive password verification. Returning before PBKDF2 for an unknown
         // email creates a measurable timing oracle that reveals which accounts exist.
-        bool verified = passwordHasher.Verify(command.Password, user?.PasswordHash ?? DummyPasswordHash);
+        phaseStartedAt = LoginMetrics.Start();
+        bool verified = passwordHasher.Verify(command.Password, credentials?.PasswordHash ?? DummyPasswordHash);
+        LoginMetrics.Record("password_verification", phaseStartedAt);
 
-        if (user is null || !verified)
+        if (credentials is null || !verified)
         {
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }
@@ -43,12 +49,14 @@ internal sealed class LoginUserCommandHandler(
         return await transaction.ExecuteAsync(
             async ct =>
             {
-                await applicationLock.AcquireAsync(UserSessionLock.ForUser(user.Id), ct);
+                long lockStartedAt = LoginMetrics.Start();
+                await applicationLock.AcquireAsync(UserSessionLock.ForUser(credentials.UserId), ct);
+                LoginMetrics.Record("session_lock", lockStartedAt);
                 return await IssueTokensAsync(
-                    user.Id,
+                    credentials.UserId,
                     email,
                     command.Password,
-                    user.PasswordHash,
+                    credentials.PasswordHash,
                     ct);
             },
             cancellationToken);
@@ -61,9 +69,11 @@ internal sealed class LoginUserCommandHandler(
         string previouslyVerifiedPasswordHash,
         CancellationToken cancellationToken)
     {
+        long phaseStartedAt = LoginMetrics.Start();
         User? user = await context.Users.SingleOrDefaultAsync(
             candidate => candidate.Id == userId,
             cancellationToken);
+        LoginMetrics.Record("user_recheck", phaseStartedAt);
 
         if (user is null || !string.Equals(user.Email, normalizedEmail, StringComparison.Ordinal))
         {
@@ -76,16 +86,19 @@ internal sealed class LoginUserCommandHandler(
         }
 
         if (!string.Equals(user.PasswordHash, previouslyVerifiedPasswordHash, StringComparison.Ordinal) &&
-            !passwordHasher.Verify(password, user.PasswordHash))
+            !VerifyChangedPassword(password, user.PasswordHash))
         {
             return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
         }
 
         if (passwordHasher.NeedsRehash(user.PasswordHash))
         {
+            phaseStartedAt = LoginMetrics.Start();
             user.UpgradePasswordHash(passwordHasher.Hash(password));
+            LoginMetrics.Record("password_rehash", phaseStartedAt);
         }
 
+        phaseStartedAt = LoginMetrics.Start();
         string accessToken = tokenProvider.Create(user);
         string refreshToken = tokenProvider.GenerateRefreshToken();
         string tokenHash = tokenProvider.HashRefreshToken(refreshToken);
@@ -98,6 +111,7 @@ internal sealed class LoginUserCommandHandler(
             user.Id,
             nowUtc.AddDays(RefreshTokenExpirationInDays),
             nowUtc);
+        LoginMetrics.Record("token_issuance", phaseStartedAt);
 
         context.RefreshTokens.Add(refreshTokenEntity);
 
@@ -109,10 +123,22 @@ internal sealed class LoginUserCommandHandler(
             nameof(LoginUserCommand),
             null));
 
+        phaseStartedAt = LoginMetrics.Start();
         await context.SaveChangesAsync(cancellationToken);
+        LoginMetrics.Record("persistence", phaseStartedAt);
 
         return new AccessTokensResponse(accessToken, refreshToken);
     }
 
+    private bool VerifyChangedPassword(string password, string passwordHash)
+    {
+        long phaseStartedAt = LoginMetrics.Start();
+        bool verified = passwordHasher.Verify(password, passwordHash);
+        LoginMetrics.Record("password_reverification", phaseStartedAt);
+        return verified;
+    }
+
     private const int RefreshTokenExpirationInDays = 7;
+
+    private sealed record LoginCredentialSnapshot(Guid UserId, string PasswordHash);
 }
