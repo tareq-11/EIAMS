@@ -1,10 +1,15 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Application.Abstractions.Authentication;
 using Domain.Permissions;
 using Domain.Roles;
+using Domain.Users;
+using Infrastructure.Database;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace IntegrationTests.Security;
@@ -26,9 +31,53 @@ public sealed class BootstrapAndAdministratorSafetyTests
             using HttpClient client = factory.CreateApiClient();
 
             RegistrationAttempt response = await RegisterAsync(client, "blocked-bootstrap@example.com");
+            RegistrationAttempt recovery = await RecoverAsync(client, "blocked-recovery@example.com");
 
             response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
             response.UserId.ShouldBeNull();
+            recovery.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+            recovery.UserId.ShouldBeNull();
+        }
+        finally
+        {
+            await factory.ShutdownAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Recovery_Should_CreateOnlyOneNewAdministrator_RevokeRefreshTokens_AndAuditTheOperation()
+    {
+        var factory = new EmptySystemWebAppFactory(
+            bootstrapEnabled: false,
+            recoveryEnabled: true);
+
+        try
+        {
+            await factory.StartAsync();
+            using HttpClient firstClient = factory.CreateApiClient();
+            using HttpClient secondClient = factory.CreateApiClient();
+            await firstClient.GetAsync("health/live");
+            await factory.SeedOrdinaryUserWithRefreshTokenAsync();
+
+#pragma warning disable CA2025 // Both client-bound tasks are awaited together before either client leaves scope.
+            Task<RegistrationAttempt> firstRequest = RecoverAsync(firstClient, "first-recovery@example.com");
+            Task<RegistrationAttempt> secondRequest = RecoverAsync(secondClient, "second-recovery@example.com");
+#pragma warning restore CA2025
+            RegistrationAttempt[] responses = await Task.WhenAll(firstRequest, secondRequest);
+
+            responses.Count(response => response.StatusCode == HttpStatusCode.Created).ShouldBe(1);
+            responses.Count(response => response.StatusCode == HttpStatusCode.Forbidden).ShouldBe(1);
+
+            string administratorEmail = responses[0].StatusCode == HttpStatusCode.Created
+                ? "first-recovery@example.com"
+                : "second-recovery@example.com";
+
+            await factory.AssertRecoveryStateAsync();
+            LoginResponse login = await LoginAsync(firstClient, administratorEmail);
+            login.Data.AccessToken.ShouldNotBeNullOrWhiteSpace();
+
+            RegistrationAttempt replay = await RecoverAsync(firstClient, "replayed-recovery@example.com");
+            replay.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         }
         finally
         {
@@ -125,6 +174,33 @@ public sealed class BootstrapAndAdministratorSafetyTests
         return new RegistrationAttempt(response.StatusCode, userId);
     }
 
+    private static async Task<RegistrationAttempt> RecoverAsync(HttpClient client, string email)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "admin/recovery/administrator")
+        {
+            Content = JsonContent.Create(new
+            {
+                email,
+                firstName = "Recovered",
+                lastName = "Administrator",
+                password = Password
+            })
+        };
+        request.Headers.Add("X-Administrator-Recovery-Token", BootstrapToken);
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        Guid? userId = null;
+
+        if (response.StatusCode == HttpStatusCode.Created)
+        {
+            BootstrapResponse? body = await response.Content.ReadFromJsonAsync<BootstrapResponse>();
+            body.ShouldNotBeNull();
+            userId = body.Data.Id;
+        }
+
+        return new RegistrationAttempt(response.StatusCode, userId);
+    }
+
     private static async Task<LoginResponse> LoginAsync(HttpClient client, string email)
     {
         HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new { email, password = Password });
@@ -148,7 +224,9 @@ public sealed class BootstrapAndAdministratorSafetyTests
 
     private sealed record Assignment(Guid Id);
 
-    private sealed class EmptySystemWebAppFactory(bool bootstrapEnabled = true) : WebApplicationFactory<Program>
+    private sealed class EmptySystemWebAppFactory(
+        bool bootstrapEnabled = true,
+        bool recoveryEnabled = false) : WebApplicationFactory<Program>
     {
         private readonly string attachmentStoragePath = Path.Combine(
             Path.GetTempPath(),
@@ -172,6 +250,11 @@ public sealed class BootstrapAndAdministratorSafetyTests
             builder.UseSetting("RateLimiting:Authentication:PermitLimit", "1000");
             builder.UseSetting("BootstrapAdministrator:Enabled", bootstrapEnabled.ToString());
             builder.UseSetting("BootstrapAdministrator:Token", BootstrapToken);
+            builder.UseSetting("AdministratorRecovery:Enabled", recoveryEnabled.ToString());
+            builder.UseSetting("AdministratorRecovery:Token", BootstrapToken);
+            builder.UseSetting(
+                "AdministratorRecovery:ExpiresAtUtc",
+                DateTime.UtcNow.AddMinutes(10).ToString("O"));
         }
 
         internal Task StartAsync() => database.StartAsync();
@@ -181,6 +264,47 @@ public sealed class BootstrapAndAdministratorSafetyTests
             HttpClient client = CreateClient();
             client.BaseAddress = new Uri("http://localhost/api/v1/");
             return client;
+        }
+
+        internal async Task SeedOrdinaryUserWithRefreshTokenAsync()
+        {
+            using IServiceScope scope = Services.CreateScope();
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+            var user = User.Create(
+                Guid.NewGuid(),
+                "ordinary-before-recovery@example.com",
+                "Ordinary",
+                "User",
+                passwordHasher.Hash(Password));
+            context.Users.Add(user);
+            context.RefreshTokens.Add(RefreshToken.Create(
+                Guid.NewGuid(),
+                new string('A', 64),
+                user.Id,
+                DateTime.UtcNow.AddDays(7),
+                DateTime.UtcNow));
+            await context.SaveChangesAsync();
+        }
+
+        internal async Task AssertRecoveryStateAsync()
+        {
+            using IServiceScope scope = Services.CreateScope();
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            int activeAdministrators = await (
+                    from assignment in context.UserRoleScopes
+                    join user in context.Users on assignment.UserId equals user.Id
+                    where assignment.RoleId == WellKnownRoles.AdministratorId &&
+                          assignment.ScopeType == Domain.Common.ScopeType.Enterprise &&
+                          user.Status == UserStatus.Active
+                    select assignment.Id)
+                .CountAsync();
+
+            activeAdministrators.ShouldBe(1);
+            (await context.RefreshTokens.CountAsync(token => token.RevokedOnUtc == null)).ShouldBe(0);
+            (await context.AuditLogs.AnyAsync(log =>
+                log.CommandName == "RecoverAdministratorCommand")).ShouldBeTrue();
         }
 
         internal async Task ShutdownAsync()

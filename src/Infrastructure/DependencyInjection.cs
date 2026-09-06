@@ -62,6 +62,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IBootstrapAdministratorAuthorizer, BootstrapAdministratorAuthorizer>();
 
+        services.AddSingleton<IAdministratorRecoveryAuthorizer, AdministratorRecoveryAuthorizer>();
+
         services.AddScoped<IAuditOperationContextAccessor, AuditOperationContextAccessor>();
 
         services.AddScoped<IRequestAuditContext, RequestAuditContext>();
@@ -230,6 +232,21 @@ public static class DependencyInjection
                 options => !options.Enabled ||
                            BootstrapAdministratorOptions.TryDecodeToken(options.Token, out _),
                 $"BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled.")
+            .ValidateOnStart();
+
+        services.AddOptions<AdministratorRecoveryOptions>()
+            .Bind(configuration.GetSection(AdministratorRecoveryOptions.SectionName))
+            .Validate(
+                options => !options.Enabled ||
+                           AdministratorRecoveryOptions.TryDecodeToken(options.Token, out _),
+                $"AdministratorRecovery:Token must be Base64 for exactly {AdministratorRecoveryOptions.TokenBytes} random bytes when recovery is enabled.")
+            .Validate(
+                options => !options.Enabled ||
+                           options.ExpiresAtUtc.Offset == TimeSpan.Zero,
+                "AdministratorRecovery:ExpiresAtUtc must be an explicit UTC timestamp when recovery is enabled.")
+            .Validate(
+                options => !options.Enabled || options.ExpiresAtUtc > DateTime.UtcNow,
+                "AdministratorRecovery:ExpiresAtUtc must be in the future when recovery is enabled.")
             .ValidateOnStart();
 
 #pragma warning disable EXTEXP0018 // HybridCache is released; the API is stable in .NET 10.

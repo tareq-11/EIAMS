@@ -24,6 +24,10 @@ public static class UserErrors
         "Users.RegistrationClosed",
         "Public registration is closed. User accounts must be created by an administrator.");
 
+    public static readonly Error AdministratorRecoveryUnavailable = Error.Forbidden(
+        "Users.AdministratorRecoveryUnavailable",
+        "Administrator recovery is unavailable.");
+
     public static readonly Error EmployeeAlreadyLinked = Error.Conflict(
         "Users.EmployeeAlreadyLinked",
         "The employee is already linked to another user account");
