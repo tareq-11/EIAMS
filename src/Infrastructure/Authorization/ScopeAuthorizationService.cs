@@ -9,7 +9,8 @@ namespace Infrastructure.Authorization;
 internal sealed class ScopeAuthorizationService(
     ApplicationDbContext context,
     HybridCache hybridCache,
-    AuthorizationVersionProvider authorizationVersionProvider) : IScopeAuthorizationService
+    AuthorizationVersionProvider authorizationVersionProvider,
+    AuthorizationCacheCoalescingTracker coalescingTracker) : IScopeAuthorizationService
 {
     public async Task<UserAuthorizationAssignment?> GetUserAssignmentAsync(
         Guid userId,
@@ -526,26 +527,26 @@ internal sealed class ScopeAuthorizationService(
         IEnumerable<string> tags,
         CancellationToken cancellationToken)
     {
-        bool factoryInvoked = false;
+        AuthorizationCacheCoalescingTracker.CacheLookup lookup = coalescingTracker.Begin(cacheKey, keyType);
 
-        T value = await hybridCache.GetOrCreateAsync(
-            cacheKey,
-            async ct =>
-            {
-                factoryInvoked = true;
-                AuthorizationCacheMetrics.RecordMiss(keyType);
-                return await factory(ct);
-            },
-            options,
-            tags,
-            cancellationToken);
-
-        if (!factoryInvoked)
+        try
         {
-            AuthorizationCacheMetrics.RecordHit(keyType);
+            return await hybridCache.GetOrCreateAsync(
+                cacheKey,
+                async ct =>
+                {
+                    coalescingTracker.RecordFactoryExecution(lookup);
+                    AuthorizationCacheMetrics.RecordMiss(keyType);
+                    return await factory(ct);
+                },
+                options,
+                tags,
+                cancellationToken);
         }
-
-        return value;
+        finally
+        {
+            coalescingTracker.Complete(lookup);
+        }
     }
 
     private sealed record UserPermissionScopeGrant(

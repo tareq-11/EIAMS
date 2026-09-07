@@ -390,6 +390,8 @@ public static class DependencyInjection
 
         services.AddScoped<AuthorizationVersionProvider>();
 
+        services.AddSingleton<AuthorizationCacheCoalescingTracker>();
+
         services.AddScoped<IScopeAuthorizationService, ScopeAuthorizationService>();
 
         services.AddTransient<IAuthorizationHandler, PermissionAuthorizationHandler>();

@@ -268,6 +268,11 @@ public sealed class AuthorizationCacheIntegrationTests
             item.KeyType == "user_grants" &&
             item.TagCount == 1).ShouldBeTrue();
         measurements.Any(item =>
+            item.InstrumentName == "authorization.cache.factory_executions" &&
+            item.Value == 1 &&
+            item.KeyType == "user_grants" &&
+            item.TagCount == 1).ShouldBeTrue();
+        measurements.Any(item =>
             item.InstrumentName == "authorization.cache.hits" &&
             item.Value == 1 &&
             item.KeyType == "user_grants" &&
