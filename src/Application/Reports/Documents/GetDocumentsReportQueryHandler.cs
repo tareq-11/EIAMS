@@ -46,7 +46,7 @@ internal sealed class GetDocumentsReportQueryHandler(
                 document.DocumentStatus
             }
             into grouped
-            orderby grouped.Key.Code, grouped.Key.DocumentType, grouped.Key.DocumentStatus
+            orderby grouped.Key.Code, grouped.Key.DocumentType, grouped.Key.DocumentStatus, grouped.Key.Id
             select new DocumentsReportRow(
                 grouped.Key.Id,
                 grouped.Key.Code,
