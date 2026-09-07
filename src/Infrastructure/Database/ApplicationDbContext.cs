@@ -42,6 +42,7 @@ using Domain.WarehouseDocuments;
 using Domain.WarehouseMaterialSettings;
 using Domain.Warehouses;
 using Infrastructure.DomainEvents;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -58,6 +59,7 @@ public sealed class ApplicationDbContext(
 {
     private readonly HashSet<string> pendingCacheInvalidationTags = new(StringComparer.Ordinal);
     private readonly List<IDomainEvent> pendingDomainEvents = [];
+    private long? pendingCacheInvalidationStartedTimestamp;
 
     public DbSet<User> Users { get; set; }
 
@@ -179,10 +181,18 @@ public sealed class ApplicationDbContext(
         {
             pendingCacheInvalidationTags.UnionWith(invalidatedCacheTags);
             pendingDomainEvents.AddRange(domainEvents);
+            if (invalidatedCacheTags.Length > 0)
+            {
+                pendingCacheInvalidationStartedTimestamp ??= Stopwatch.GetTimestamp();
+            }
         }
         else
         {
-            await InvalidateCacheTagsAsync(invalidatedCacheTags, cancellationToken);
+            await InvalidateCacheTagsWithMetricsAsync(
+                invalidatedCacheTags,
+                phase: "immediate",
+                pendingStartedTimestamp: null,
+                cancellationToken);
             await PublishDomainEventsAsync(domainEvents, cancellationToken);
         }
 
@@ -198,6 +208,7 @@ public sealed class ApplicationDbContext(
     private async Task FlushCacheInvalidationAsync(CancellationToken cancellationToken)
     {
         string[] tags = pendingCacheInvalidationTags.ToArray();
+        long? pendingStartedTimestamp = pendingCacheInvalidationStartedTimestamp;
         if (tags.Length == 0)
         {
             return;
@@ -208,8 +219,13 @@ public sealed class ApplicationDbContext(
         {
             try
             {
-                await InvalidateCacheTagsAsync(tags, cancellationToken);
+                await InvalidateCacheTagsWithMetricsAsync(
+                    tags,
+                    phase: "post_commit",
+                    pendingStartedTimestamp,
+                    cancellationToken);
                 pendingCacheInvalidationTags.ExceptWith(tags);
+                pendingCacheInvalidationStartedTimestamp = null;
                 return;
             }
             catch (Exception exception) when (attempt < maximumAttempts)
@@ -232,6 +248,7 @@ public sealed class ApplicationDbContext(
                     maximumAttempts,
                     tags.Length);
                 pendingCacheInvalidationTags.ExceptWith(tags);
+                pendingCacheInvalidationStartedTimestamp = null;
                 return;
             }
         }
@@ -266,7 +283,33 @@ public sealed class ApplicationDbContext(
     internal void DiscardPostCommitActions()
     {
         pendingCacheInvalidationTags.Clear();
+        pendingCacheInvalidationStartedTimestamp = null;
         pendingDomainEvents.Clear();
+    }
+
+    private async Task InvalidateCacheTagsWithMetricsAsync(
+        string[] tags,
+        string phase,
+        long? pendingStartedTimestamp,
+        CancellationToken cancellationToken)
+    {
+        long startedTimestamp = Stopwatch.GetTimestamp();
+        bool succeeded = false;
+
+        try
+        {
+            await InvalidateCacheTagsAsync(tags, cancellationToken);
+            succeeded = true;
+        }
+        finally
+        {
+            CacheInvalidationMetrics.Record(
+                phase,
+                tags.Length,
+                startedTimestamp,
+                succeeded,
+                pendingStartedTimestamp);
+        }
     }
 
     private async Task InvalidateCacheTagsAsync(

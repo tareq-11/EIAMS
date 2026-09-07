@@ -24,6 +24,7 @@ internal static class OpenTelemetryExtensions
                 .AddMeter("CleanArchitecture.Application")
                 .AddMeter("CleanArchitecture.Application.Authentication")
                 .AddMeter("CleanArchitecture.Infrastructure.Authorization")
+                .AddMeter("CleanArchitecture.Infrastructure.Cache")
                 .AddMeter("Npgsql")
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
