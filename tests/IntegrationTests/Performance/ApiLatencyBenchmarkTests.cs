@@ -40,12 +40,24 @@ public sealed class ApiLatencyBenchmarkTests
         SqlCommandCounterInterceptor commandCounter = factory.Services
             .GetRequiredService<SqlCommandCounterInterceptor>();
         using WebApplicationFactory<Program> benchmarkFactory = factory.CreateSiblingFactory(commandCounter);
+        var hostStartupAndJitStopwatch = Stopwatch.StartNew();
         benchmarkFactory.UseKestrel(0);
         using HttpClient client = benchmarkFactory.CreateClient();
+        hostStartupAndJitStopwatch.Stop();
         client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
         int sampleIterations = GetSampleIterations();
         var measurements = new List<ApiLatencyMeasurement>();
         var failures = new List<string>();
+        (HttpStatusCode firstDatabaseProbeStatus, double firstDatabaseProbeMs, _) =
+            await GetAsync(client, "health/ready", commandCounter);
+        if (firstDatabaseProbeStatus != HttpStatusCode.OK)
+        {
+            failures.Add($"GET health/ready: first database health probe HTTP {(int)firstDatabaseProbeStatus}");
+        }
+
+        IReadOnlyList<BenchmarkPhaseResult> phases = BenchmarkPhaseMetadata.Create(
+            hostStartupAndJitStopwatch.Elapsed.TotalMilliseconds,
+            firstDatabaseProbeMs);
 
         (HttpResponseMessage firstLogin, double firstLoginMs) = await LoginAsync(client);
         firstLogin.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -150,10 +162,10 @@ public sealed class ApiLatencyBenchmarkTests
 
         foreach (string endpoint in endpoints)
         {
-            (HttpStatusCode coldStatus, double coldMs, _) = await GetAsync(client, endpoint, commandCounter);
-            if (coldStatus != HttpStatusCode.OK)
+            (HttpStatusCode firstRequestStatus, double firstRequestMs, _) = await GetAsync(client, endpoint, commandCounter);
+            if (firstRequestStatus != HttpStatusCode.OK)
             {
-                failures.Add($"GET {endpoint}: HTTP {(int)coldStatus}");
+                failures.Add($"GET {endpoint}: first request HTTP {(int)firstRequestStatus}");
                 continue;
             }
 
@@ -195,7 +207,7 @@ public sealed class ApiLatencyBenchmarkTests
 
             measurements.Add(CreateMeasurement(
                 $"GET {endpoint}",
-                coldMs,
+                firstRequestMs,
                 warmDurations,
                 warmSqlCounts.Average()));
         }
@@ -215,6 +227,7 @@ public sealed class ApiLatencyBenchmarkTests
             OperatingSystem = RuntimeInformation.OSDescription,
             Environment.ProcessorCount,
             Transport = "Kestrel over loopback HTTP; includes the network stack and excludes TLS",
+            Phases = phases,
             WarmupIterations,
             SampleIterations = sampleIterations,
             Measurements = measurements,
@@ -227,7 +240,7 @@ public sealed class ApiLatencyBenchmarkTests
         foreach (ApiLatencyMeasurement measurement in measurements.OrderByDescending(item => item.WarmP95Ms))
         {
             output.WriteLine(
-                $"{measurement.Name}: first-observed={measurement.FirstObservedMs:F1}ms, " +
+                $"{measurement.Name}: first-request-for-scenario={measurement.FirstRequestForScenarioMs:F1}ms, " +
                 $"warm p50={measurement.WarmP50Ms:F1}ms, p95={measurement.WarmP95Ms:F1}ms, " +
                 $"p99={measurement.WarmP99Ms:F1}ms, " +
                 $"avg SQL={measurement.AverageSqlCommands?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}");
@@ -359,14 +372,14 @@ public sealed class ApiLatencyBenchmarkTests
 
     private static ApiLatencyMeasurement CreateMeasurement(
         string name,
-        double firstObservedMs,
+        double firstRequestForScenarioMs,
         IReadOnlyCollection<double> warmDurations,
         double? sqlCommands)
     {
         double[] ordered = warmDurations.OrderBy(value => value).ToArray();
         return new ApiLatencyMeasurement(
             name,
-            firstObservedMs,
+            firstRequestForScenarioMs,
             Percentile(ordered, 0.50),
             Percentile(ordered, 0.95),
             Percentile(ordered, 0.99),
@@ -396,7 +409,7 @@ public sealed class ApiLatencyBenchmarkTests
 
     private sealed record ApiLatencyMeasurement(
         string Name,
-        double FirstObservedMs,
+        double FirstRequestForScenarioMs,
         double WarmP50Ms,
         double WarmP95Ms,
         double WarmP99Ms,
