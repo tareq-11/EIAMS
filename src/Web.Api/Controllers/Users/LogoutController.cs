@@ -13,7 +13,9 @@ namespace Web.Api.Controllers.Users;
 [AllowAnonymous]
 [Route("auth")]
 [Tags(Tags.Users)]
-public sealed class LogoutController(ICommandHandler<LogoutUserCommand> handler) : ControllerBase
+public sealed class LogoutController(
+    ICommandHandler<LogoutUserCommand> handler,
+    RefreshTokenTransport refreshTokenTransport) : ControllerBase
 {
     public sealed record RequestBody(string? RefreshToken);
 
@@ -27,7 +29,18 @@ public sealed class LogoutController(ICommandHandler<LogoutUserCommand> handler)
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestBody? request,
         CancellationToken cancellationToken)
     {
-        string? token = AuthCookies.GetRefreshTokenFromCookieOrBody(HttpContext, request?.RefreshToken);
+        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext, request?.RefreshToken);
+
+        if (!resolution.IsAccepted)
+        {
+            return ApiResults.Error(
+                HttpContext,
+                resolution.ErrorStatusCode,
+                resolution.ErrorCode!,
+                resolution.ErrorMessage!);
+        }
+
+        string? token = resolution.Token;
 
         var command = new LogoutUserCommand(token);
 

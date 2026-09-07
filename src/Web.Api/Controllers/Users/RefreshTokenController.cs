@@ -13,14 +13,16 @@ namespace Web.Api.Controllers.Users;
 [AllowAnonymous]
 [Route("auth")]
 [Tags(Tags.Users)]
-public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler)
+public sealed class RefreshTokenController(
+    ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler,
+    RefreshTokenTransport refreshTokenTransport)
     : ControllerBase
 {
     public sealed record RequestBody(string? RefreshToken);
 
     [HttpPost("refresh")]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
-    [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<AuthenticationTokensResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
@@ -28,7 +30,18 @@ public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, 
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RequestBody? request,
         CancellationToken cancellationToken)
     {
-        string? token = AuthCookies.GetRefreshTokenFromCookieOrBody(HttpContext, request?.RefreshToken);
+        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext, request?.RefreshToken);
+
+        if (!resolution.IsAccepted)
+        {
+            return ApiResults.Error(
+                HttpContext,
+                resolution.ErrorStatusCode,
+                resolution.ErrorCode!,
+                resolution.ErrorMessage!);
+        }
+
+        string? token = resolution.Token;
 
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -48,6 +61,8 @@ public sealed class RefreshTokenController(ICommandHandler<RefreshTokenCommand, 
             AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
         }
 
-        return result.ToApiResponse(HttpContext);
+        return result.Match(
+            tokens => ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(tokens)),
+            failure => CustomResults.Problem(failure, HttpContext));
     }
 }

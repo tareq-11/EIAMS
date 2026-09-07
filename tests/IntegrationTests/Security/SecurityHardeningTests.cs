@@ -42,6 +42,61 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task CookieRefresh_Should_RejectUntrustedOriginWithoutConsumingToken()
+    {
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+        HttpResponseMessage login = await HttpClient.PostAsJsonAsync("auth/login", new
+        {
+            email,
+            password = IntegrationTestWebAppFactory.AdministratorPassword
+        });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        using var crossSiteRequest = new HttpRequestMessage(HttpMethod.Post, "auth/refresh");
+        crossSiteRequest.Headers.Add("Origin", "https://untrusted.example");
+        crossSiteRequest.Headers.Add("Sec-Fetch-Site", "cross-site");
+        HttpResponseMessage crossSite = await HttpClient.SendAsync(crossSiteRequest);
+        crossSite.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        using var sameOriginRequest = new HttpRequestMessage(HttpMethod.Post, "auth/refresh");
+        sameOriginRequest.Headers.Add("Origin", "http://localhost");
+        sameOriginRequest.Headers.Add("Sec-Fetch-Site", "same-origin");
+        HttpResponseMessage sameOrigin = await HttpClient.SendAsync(sameOriginRequest);
+        sameOrigin.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task CookieOnlyTransitionMode_Should_OmitResponseTokenAndRejectBodyTransport()
+    {
+        await using WebApplicationFactory<Program> cookieOnlyFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Authentication:RefreshTokenTransport:AllowRequestBody", "false");
+            builder.UseSetting("Authentication:RefreshTokenTransport:IncludeInResponseBody", "false");
+        });
+        using HttpClient cookieClient = CreateVersionedClient(cookieOnlyFactory);
+
+        HttpResponseMessage login = await cookieClient.PostAsJsonAsync("auth/login", new
+        {
+            email = IntegrationTestWebAppFactory.AdministratorEmail,
+            password = IntegrationTestWebAppFactory.AdministratorPassword
+        });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var loginJson = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        loginJson.RootElement.GetProperty("data").TryGetProperty("refreshToken", out _).ShouldBeFalse();
+        login.Headers.GetValues("Set-Cookie").ShouldContain(value =>
+            value.StartsWith("eiams_refresh_token=", StringComparison.Ordinal));
+
+        using HttpClient bodyClient = CreateVersionedClient(cookieOnlyFactory);
+        HttpResponseMessage bodyRefresh = await bodyClient.PostAsJsonAsync(
+            "auth/refresh",
+            new { refreshToken = "body-transport-is-disabled" });
+        bodyRefresh.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await bodyRefresh.Content.ReadAsStringAsync()).ShouldContain("REFRESH_TOKEN_BODY_DISABLED");
+    }
+
+    [Fact]
     public async Task HealthResponse_Should_NotExposeDependencyNamesOrDetailedEntries()
     {
         HttpResponseMessage response = await HttpClient.GetAsync("health/ready");

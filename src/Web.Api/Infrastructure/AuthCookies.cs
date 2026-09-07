@@ -21,26 +21,6 @@ internal static class AuthCookies
         context.Response.Cookies.Append(CookieName, refreshToken, cookieOptions);
     }
 
-    public static string? GetRefreshTokenFromCookieOrBody(HttpContext context, string? bodyToken)
-    {
-        if (!string.IsNullOrWhiteSpace(bodyToken))
-        {
-            return bodyToken.Trim();
-        }
-
-        if (context.Request.Cookies.TryGetValue(CookieName, out string? cookieToken) && !string.IsNullOrWhiteSpace(cookieToken))
-        {
-            return cookieToken.Trim();
-        }
-
-        if (context.Request.Cookies.TryGetValue(LegacyCookieName, out string? legacyCookieToken) && !string.IsNullOrWhiteSpace(legacyCookieToken))
-        {
-            return legacyCookieToken.Trim();
-        }
-
-        return null;
-    }
-
     public static void ClearRefreshTokenCookies(HttpContext context)
     {
         DeleteCookie(context, CookieName, CookiePath);
