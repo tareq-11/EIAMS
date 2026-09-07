@@ -140,9 +140,7 @@ internal sealed class LocalFileStorage(
     }
 
     private string ResolveRootPath() =>
-        Path.IsPathRooted(options.Value.RootPath)
-            ? options.Value.RootPath
-            : Path.GetFullPath(Path.Combine(hostEnvironment.ContentRootPath, options.Value.RootPath));
+        LocalFileStoragePath.Resolve(options.Value.RootPath, hostEnvironment.ContentRootPath);
 
     private static bool IsValidStorageKey(string storageKey) =>
         storageKey.Length == 32 && Guid.TryParseExact(storageKey, "N", out _);

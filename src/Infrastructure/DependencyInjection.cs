@@ -41,6 +41,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using SharedKernel;
 
@@ -149,6 +150,8 @@ public static class DependencyInjection
         services.AddScoped<AssetPostingSelectionService>();
 
         services.AddScoped<IFileStorage, LocalFileStorage>();
+
+        services.AddSingleton<IValidateOptions<LocalFileStorageOptions>, LocalFileStorageOptionsValidator>();
 
         services.AddScoped<IAttachmentFileCleanup, AttachmentFileCleanup>();
 
