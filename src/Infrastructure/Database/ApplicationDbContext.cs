@@ -57,6 +57,7 @@ public sealed class ApplicationDbContext(
     : DbContext(options), IApplicationDbContext
 {
     private readonly HashSet<string> pendingCacheInvalidationTags = new(StringComparer.Ordinal);
+    private readonly List<IDomainEvent> pendingDomainEvents = [];
 
     public DbSet<User> Users { get; set; }
 
@@ -167,15 +168,8 @@ public sealed class ApplicationDbContext(
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // When should you publish domain events?
-        //
-        // 1. BEFORE calling SaveChangesAsync
-        //     - domain events are part of the same transaction
-        //     - immediate consistency
-        // 2. AFTER calling SaveChangesAsync
-        //     - domain events are a separate transaction
-        //     - eventual consistency
-        //     - handlers can fail
+        // Persist state first. With an explicit application transaction, domain-event handlers are
+        // deferred until commit so external side effects cannot extend locks or roll back valid data.
 
         string[] invalidatedCacheTags = GetInvalidatedCacheTags();
         List<IDomainEvent> domainEvents = ExtractDomainEvents();
@@ -184,18 +178,24 @@ public sealed class ApplicationDbContext(
         if (Database.CurrentTransaction is not null)
         {
             pendingCacheInvalidationTags.UnionWith(invalidatedCacheTags);
+            pendingDomainEvents.AddRange(domainEvents);
         }
         else
         {
             await InvalidateCacheTagsAsync(invalidatedCacheTags, cancellationToken);
+            await PublishDomainEventsAsync(domainEvents, cancellationToken);
         }
-
-        await PublishDomainEventsAsync(domainEvents);
 
         return result;
     }
 
     internal async Task FlushPostCommitActionsAsync(CancellationToken cancellationToken)
+    {
+        await FlushCacheInvalidationAsync(cancellationToken);
+        await FlushDomainEventsAsync(cancellationToken);
+    }
+
+    private async Task FlushCacheInvalidationAsync(CancellationToken cancellationToken)
     {
         string[] tags = pendingCacheInvalidationTags.ToArray();
         if (tags.Length == 0)
@@ -237,7 +237,37 @@ public sealed class ApplicationDbContext(
         }
     }
 
-    internal void DiscardPostCommitActions() => pendingCacheInvalidationTags.Clear();
+    private async Task FlushDomainEventsAsync(CancellationToken cancellationToken)
+    {
+        IDomainEvent[] domainEvents = pendingDomainEvents.ToArray();
+        pendingDomainEvents.Clear();
+
+        if (domainEvents.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await PublishDomainEventsAsync(domainEvents, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // The database transaction has committed. Propagating the exception would invite the
+            // caller to retry a write that already succeeded. Side effects requiring guaranteed
+            // delivery must use a durable outbox rather than an in-memory domain-event handler.
+            logger?.LogCritical(
+                exception,
+                "Post-commit domain event dispatch failed for {DomainEventCount} events",
+                domainEvents.Length);
+        }
+    }
+
+    internal void DiscardPostCommitActions()
+    {
+        pendingCacheInvalidationTags.Clear();
+        pendingDomainEvents.Clear();
+    }
 
     private async Task InvalidateCacheTagsAsync(
         string[] tags,
@@ -276,9 +306,11 @@ public sealed class ApplicationDbContext(
         .Distinct(StringComparer.Ordinal)
         .ToArray();
 
-    private async Task PublishDomainEventsAsync(IEnumerable<IDomainEvent> domainEvents)
+    private async Task PublishDomainEventsAsync(
+        IEnumerable<IDomainEvent> domainEvents,
+        CancellationToken cancellationToken)
     {
-        await domainEventsDispatcher.DispatchAsync(domainEvents);
+        await domainEventsDispatcher.DispatchAsync(domainEvents, cancellationToken);
     }
 
     private List<IDomainEvent> ExtractDomainEvents()

@@ -34,6 +34,8 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         .WithPassword("postgres")
         .Build();
 
+    internal string DatabaseConnectionString => _dbContainer.GetConnectionString();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("ConnectionStrings:Database", _dbContainer.GetConnectionString());
