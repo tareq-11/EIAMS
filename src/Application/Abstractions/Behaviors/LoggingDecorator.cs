@@ -1,6 +1,5 @@
 using Application.Abstractions.Messaging;
 using Microsoft.Extensions.Logging;
-using Serilog.Context;
 using SharedKernel;
 
 namespace Application.Abstractions.Behaviors;
@@ -27,10 +26,10 @@ internal static class LoggingDecorator
             }
             else
             {
-                using (LogContext.PushProperty("Error", result.Error, true))
-                {
-                    logger.LogError("Completed command {Command} with error", commandName);
-                }
+                logger.LogError(
+                    "Completed command {Command} with error code {ErrorCode}",
+                    commandName,
+                    result.Error.Code);
             }
 
             return result;
@@ -57,10 +56,10 @@ internal static class LoggingDecorator
             }
             else
             {
-                using (LogContext.PushProperty("Error", result.Error, true))
-                {
-                    logger.LogError("Completed command {Command} with error", commandName);
-                }
+                logger.LogError(
+                    "Completed command {Command} with error code {ErrorCode}",
+                    commandName,
+                    result.Error.Code);
             }
 
             return result;
@@ -87,10 +86,10 @@ internal static class LoggingDecorator
             }
             else
             {
-                using (LogContext.PushProperty("Error", result.Error, true))
-                {
-                    logger.LogError("Completed query {Query} with error", queryName);
-                }
+                logger.LogError(
+                    "Completed query {Query} with error code {ErrorCode}",
+                    queryName,
+                    result.Error.Code);
             }
 
             return result;

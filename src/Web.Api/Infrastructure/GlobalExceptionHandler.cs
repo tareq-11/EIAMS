@@ -13,9 +13,9 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         if (exception is BadHttpRequestException badRequestException)
         {
             logger.LogWarning(
-                exception,
-                "HTTP request was rejected with status code {StatusCode}",
-                badRequestException.StatusCode);
+                "HTTP request was rejected with status code {StatusCode} and exception type {ExceptionType}",
+                badRequestException.StatusCode,
+                badRequestException.GetType().Name);
 
             IResult badRequestResult = badRequestException.StatusCode == StatusCodes.Status413PayloadTooLarge
                 ? ApiResults.Error(
@@ -30,7 +30,10 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
             return true;
         }
 
-        logger.LogError(exception, "Unhandled exception occurred");
+        logger.LogError(
+            "Unhandled exception of type {ExceptionType} occurred for request {RequestId}",
+            exception.GetType().Name,
+            ApiRequestContext.GetRequestId(httpContext));
 
         IResult result = ApiResults.Error(
             httpContext,
