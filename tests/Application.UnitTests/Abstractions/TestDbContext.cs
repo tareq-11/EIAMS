@@ -16,6 +16,7 @@ using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
+using Domain.Idempotency;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -54,6 +55,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
     public DbSet<User> Users { get; set; }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; }
 
     public DbSet<Organization> Organizations { get; set; }
 
@@ -240,5 +243,6 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
         modelBuilder.Entity<AuditLog>().HasKey(auditLog => auditLog.Id);
         modelBuilder.Entity<AuditLogEntry>().HasKey(entry => entry.Id);
+        modelBuilder.Entity<IdempotencyRecord>().HasKey(record => record.Key);
     }
 }

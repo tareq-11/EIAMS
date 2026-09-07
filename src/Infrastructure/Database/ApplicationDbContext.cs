@@ -16,6 +16,7 @@ using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
+using Domain.Idempotency;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -60,6 +61,8 @@ public sealed class ApplicationDbContext(
     public DbSet<User> Users { get; set; }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; }
 
     public DbSet<Organization> Organizations { get; set; }
 

@@ -1,4 +1,5 @@
 using SharedKernel;
+using Application.Abstractions.Idempotency;
 
 namespace Application.Abstractions.Posting;
 
@@ -15,5 +16,12 @@ public interface IDocumentPostingCoordinator
         Guid documentId,
         int expectedRowVersion,
         Guid postedBy,
+        CancellationToken cancellationToken);
+
+    Task<Result<PostingOutcome>> PostAsync(
+        Guid documentId,
+        int expectedRowVersion,
+        Guid postedBy,
+        IdempotencyRequest? idempotencyRequest,
         CancellationToken cancellationToken);
 }

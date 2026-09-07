@@ -15,6 +15,7 @@ using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
+using Domain.Idempotency;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -47,6 +48,7 @@ public interface IApplicationDbContext
 {
     DbSet<User> Users { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
+    DbSet<IdempotencyRecord> IdempotencyRecords { get; }
     DbSet<Organization> Organizations { get; }
     DbSet<Site> Sites { get; }
     DbSet<OrganizationalUnit> OrganizationalUnits { get; }

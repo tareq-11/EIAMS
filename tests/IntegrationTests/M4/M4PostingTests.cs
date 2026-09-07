@@ -1,4 +1,5 @@
 using Application.Abstractions.Posting;
+using Application.Abstractions.Idempotency;
 using Domain.Assets;
 using Domain.Common;
 using Domain.DocumentAttachments;
@@ -80,6 +81,70 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
         assets.Select(item => item.AssetNumber).Distinct().Count().ShouldBe(2);
         assets.ShouldAllBe(item => item.MaterialId == seed.AssetMaterialId);
         assets.ShouldAllBe(item => item.WarehouseId == seed.WarehouseId);
+    }
+
+    [Fact]
+    public async Task PostingWithSameIdempotencyKey_Should_ReplayResponseWithoutDuplicatingEffects()
+    {
+        M4Seed seed = await SeedCatalogAsync(includeReceivingCapability: true);
+        SubmittedDocument document = await CreateSubmittedDocumentAsync(
+            seed,
+            DocumentType.Receiving,
+            [new LineSpec(seed.NormalMaterialId, 3m)]);
+        var key = Guid.NewGuid();
+
+        Result<PostingOutcome> first = await PostWithIdempotencyAsync(
+            document,
+            seed.UserId,
+            key,
+            canonicalRequest: $"{document.Id:D}|{document.RowVersion}|any");
+        Result<PostingOutcome> replay = await PostWithIdempotencyAsync(
+            document,
+            seed.UserId,
+            key,
+            canonicalRequest: $"{document.Id:D}|{document.RowVersion}|any");
+        Result<PostingOutcome> conflictingReuse = await PostWithIdempotencyAsync(
+            document,
+            seed.UserId,
+            key,
+            canonicalRequest: $"{document.Id:D}|999|any");
+
+        first.IsSuccess.ShouldBeTrue();
+        replay.IsSuccess.ShouldBeTrue();
+        replay.Value.DocumentId.ShouldBe(first.Value.DocumentId);
+        replay.Value.Warnings.ShouldBe(first.Value.Warnings);
+        conflictingReuse.IsFailure.ShouldBeTrue();
+        conflictingReuse.Error.Code.ShouldBe("Idempotency.KeyReused");
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.StockMovements.CountAsync(movement => movement.DocumentId == document.Id)).ShouldBe(1);
+        (await context.IdempotencyRecords.CountAsync(record => record.Key == key)).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ConcurrentPostingWithSameIdempotencyKey_Should_CommitEffectsOnceAndReplayBothResponses()
+    {
+        M4Seed seed = await SeedCatalogAsync(includeReceivingCapability: true);
+        SubmittedDocument document = await CreateSubmittedDocumentAsync(
+            seed,
+            DocumentType.Receiving,
+            [new LineSpec(seed.NormalMaterialId, 4m)]);
+        var key = Guid.NewGuid();
+        string canonicalRequest = $"{document.Id:D}|{document.RowVersion}|any";
+
+        Result<PostingOutcome>[] results = await Task.WhenAll(
+            PostWithIdempotencyAsync(document, seed.UserId, key, canonicalRequest),
+            PostWithIdempotencyAsync(document, seed.UserId, key, canonicalRequest));
+
+        results.ShouldAllBe(result => result.IsSuccess);
+        results[0].Value.DocumentId.ShouldBe(results[1].Value.DocumentId);
+        results[0].Value.Warnings.ShouldBe(results[1].Value.Warnings);
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.StockMovements.CountAsync(movement => movement.DocumentId == document.Id)).ShouldBe(1);
+        (await context.IdempotencyRecords.CountAsync(record => record.Key == key)).ShouldBe(1);
     }
 
     [Fact]
@@ -666,6 +731,28 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
         return result.IsFailure
             ? Result.Failure<Guid>(result.Error)
             : result.Value.DocumentId;
+    }
+
+    private async Task<Result<PostingOutcome>> PostWithIdempotencyAsync(
+        SubmittedDocument document,
+        Guid postedBy,
+        Guid key,
+        string canonicalRequest)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        IDocumentPostingCoordinator coordinator =
+            scope.ServiceProvider.GetRequiredService<IDocumentPostingCoordinator>();
+        var request = IdempotencyRequest.Create(
+            key,
+            "warehouse-document.post",
+            canonicalRequest);
+
+        return await coordinator.PostAsync(
+            document.Id,
+            document.RowVersion,
+            postedBy,
+            request,
+            CancellationToken.None);
     }
 
     private sealed record M4Seed(

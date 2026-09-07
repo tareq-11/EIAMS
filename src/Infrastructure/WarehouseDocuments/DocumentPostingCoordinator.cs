@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Application.Abstractions.Assets;
 using Application.Abstractions.Data;
 using Application.Abstractions.InventoryCounts;
+using Application.Abstractions.Idempotency;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Posting;
 using Application.DocumentLines;
@@ -23,6 +24,7 @@ internal sealed class DocumentPostingCoordinator(
     IDocumentPostingScopeResolver postingScopeResolver,
     IWarehouseOperationLock warehouseOperationLock,
     IInventoryFreezePolicyService freezePolicyService,
+    IIdempotencyService idempotencyService,
     IInventoryLedgerWriter ledgerWriter,
     IEnumerable<IDocumentPostingStrategy> strategies,
     IEnumerable<IDocumentSubmissionValidator> submissionValidators,
@@ -37,19 +39,48 @@ internal sealed class DocumentPostingCoordinator(
         int expectedRowVersion,
         Guid postedBy,
         CancellationToken cancellationToken) =>
+        PostAsync(documentId, expectedRowVersion, postedBy, idempotencyRequest: null, cancellationToken);
+
+    public Task<Result<PostingOutcome>> PostAsync(
+        Guid documentId,
+        int expectedRowVersion,
+        Guid postedBy,
+        IdempotencyRequest? idempotencyRequest,
+        CancellationToken cancellationToken) =>
         transaction.ExecuteAsync(
-            ct => PostInTransactionAsync(documentId, expectedRowVersion, postedBy, ct),
+            ct => PostInTransactionAsync(documentId, expectedRowVersion, postedBy, idempotencyRequest, ct),
             cancellationToken);
 
     private async Task<Result<PostingOutcome>> PostInTransactionAsync(
         Guid documentId,
         int expectedRowVersion,
         Guid postedBy,
+        IdempotencyRequest? idempotencyRequest,
         CancellationToken cancellationToken)
     {
         using Activity? activity = ActivitySource.StartActivity("PostDocument");
         activity?.SetTag("document.id", documentId);
         activity?.SetTag("posted_by.id", postedBy);
+
+        if (idempotencyRequest is not null)
+        {
+            Result<IdempotencyReplay<PostingOutcome>> beginResult =
+                await idempotencyService.TryBeginAsync<PostingOutcome>(
+                    idempotencyRequest,
+                    postedBy,
+                    cancellationToken);
+
+            if (beginResult.IsFailure)
+            {
+                return Result.Failure<PostingOutcome>(beginResult.Error);
+            }
+
+            if (beginResult.Value.HasResponse)
+            {
+                return beginResult.Value.Response!;
+            }
+        }
+
         Result<WarehouseDocument> lockResult = await documentLock.LockAsync(documentId, cancellationToken);
 
         if (lockResult.IsFailure)
@@ -207,9 +238,7 @@ internal sealed class DocumentPostingCoordinator(
             return Result.Failure<PostingOutcome>(markPostedResult.Error);
         }
 
-        await context.SaveChangesAsync(cancellationToken);
-
-        return new PostingOutcome(
+        var outcome = new PostingOutcome(
             document.Id,
             freezeEvaluation.Warnings
                 .Select(warning => new PostingWarning(
@@ -218,5 +247,14 @@ internal sealed class DocumentPostingCoordinator(
                     warning.CountId,
                     warning.WarehouseId))
                 .ToList());
+
+        if (idempotencyRequest is not null)
+        {
+            idempotencyService.Complete(idempotencyRequest, postedBy, outcome);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        return outcome;
     }
 }

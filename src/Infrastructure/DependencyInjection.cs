@@ -5,6 +5,7 @@ using Application.Abstractions.Audit;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Idempotency;
 using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Numbering;
@@ -22,6 +23,7 @@ using Infrastructure.Database;
 using Infrastructure.DomainEvents;
 using Infrastructure.DocumentLifecycleEvents;
 using Infrastructure.InventoryCounts;
+using Infrastructure.Idempotency;
 using Infrastructure.Ledger;
 using Infrastructure.Numbering;
 using Infrastructure.Policies;
@@ -85,6 +87,10 @@ public static class DependencyInjection
         services.AddScoped<IApplicationTransaction, EfApplicationTransaction>();
 
         services.AddScoped<IApplicationLock, PostgresApplicationLock>();
+
+        services.AddScoped<IIdempotencyService, IdempotencyService>();
+
+        services.AddHostedService<IdempotencyCleanupWorker>();
 
         services.AddScoped<IDocumentLock, ApplicationDocumentLock>();
 
@@ -232,6 +238,16 @@ public static class DependencyInjection
                 options => !options.Enabled ||
                            BootstrapAdministratorOptions.TryDecodeToken(options.Token, out _),
                 $"BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled.")
+            .ValidateOnStart();
+
+        services.AddOptions<IdempotencyCleanupOptions>()
+            .Bind(configuration.GetSection(IdempotencyCleanupOptions.SectionName))
+            .Validate(options => options.InitialDelay >= TimeSpan.Zero,
+                "Idempotency:Cleanup:InitialDelay must not be negative.")
+            .Validate(options => options.Interval > TimeSpan.Zero,
+                "Idempotency:Cleanup:Interval must be greater than zero.")
+            .Validate(options => options.BatchSize is > 0 and <= 10_000,
+                "Idempotency:Cleanup:BatchSize must be between 1 and 10000.")
             .ValidateOnStart();
 
         services.AddOptions<AdministratorRecoveryOptions>()
