@@ -52,26 +52,43 @@ internal sealed class ApiLoadTestExecutor(
         throw new ArgumentNullException(nameof(executeScenario));
     private readonly ApiLoadTestExecutorOptions options = options ?? ApiLoadTestExecutorOptions.Default;
 
+    internal Task<ApiLoadTestExecutionResult> ExecuteAsync(
+        ApiLoadTestRunDefinition run,
+        CancellationToken cancellationToken) =>
+        ExecuteAsync(run, beforePhase: null, afterPhase: null, cancellationToken);
+
     internal async Task<ApiLoadTestExecutionResult> ExecuteAsync(
         ApiLoadTestRunDefinition run,
+        Action<ApiLoadTestPhaseKind>? beforePhase = null,
+        Action<ApiLoadTestPhaseKind>? afterPhase = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(run);
         ValidateOptions(options);
 
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        beforePhase?.Invoke(ApiLoadTestPhaseKind.Warmup);
         PhaseAccumulator warmup = await ExecutePhaseAsync(
             run,
             run.Warmup,
             executionCancellation,
             cancellationToken).ConfigureAwait(false);
-        PhaseAccumulator measurement = executionCancellation.IsCancellationRequested
-            ? new PhaseAccumulator()
-            : await ExecutePhaseAsync(
+        afterPhase?.Invoke(ApiLoadTestPhaseKind.Warmup);
+        PhaseAccumulator measurement;
+        if (executionCancellation.IsCancellationRequested)
+        {
+            measurement = new PhaseAccumulator();
+        }
+        else
+        {
+            beforePhase?.Invoke(ApiLoadTestPhaseKind.Measurement);
+            measurement = await ExecutePhaseAsync(
                 run,
                 run.Measurement,
                 executionCancellation,
                 cancellationToken).ConfigureAwait(false);
+            afterPhase?.Invoke(ApiLoadTestPhaseKind.Measurement);
+        }
 
         return new ApiLoadTestExecutionResult(
             warmup.ToSummary(),

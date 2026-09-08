@@ -76,7 +76,8 @@ public sealed class ApiLatencyBenchmarkTests
             IntegrationTestWebAppFactory.AdministratorEmail,
             IntegrationTestWebAppFactory.AdministratorPassword,
             HttpStatusCode.OK,
-            sampleIterations);
+            sampleIterations,
+            commandCounter);
         measurements.Add(CreateMeasurement(
             "POST /api/v1/auth/login [valid]",
             firstLoginMs,
@@ -91,7 +92,8 @@ public sealed class ApiLatencyBenchmarkTests
             HttpStatusCode.NotFound,
             sampleIterations,
             measurements,
-            failures);
+            failures,
+            commandCounter);
         await MeasureRejectedLoginAsync(
             client,
             "POST /api/v1/auth/login [wrong-password]",
@@ -100,7 +102,8 @@ public sealed class ApiLatencyBenchmarkTests
             HttpStatusCode.NotFound,
             sampleIterations,
             measurements,
-            failures);
+            failures,
+            commandCounter);
         (string suspendedEmail, string suspendedPassword) = await CreateSuspendedUserAsync();
         await MeasureRejectedLoginAsync(
             client,
@@ -110,7 +113,8 @@ public sealed class ApiLatencyBenchmarkTests
             HttpStatusCode.Forbidden,
             sampleIterations,
             measurements,
-            failures);
+            failures,
+            commandCounter);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         string[] endpoints =
@@ -207,9 +211,9 @@ public sealed class ApiLatencyBenchmarkTests
                 ProcessSnapshots = "CPU, resident-set (RSS/working-set), allocations, GC, and ThreadPool snapshots and deltas are process-wide; they are not endpoint attribution.",
                 MeasurementModel = "Single-client sequential closed-loop sampling; throughput is not open-loop or concurrent-capacity throughput.",
                 ThroughputDefinitions = "attempted=all started samples/window; completed=HTTP responses/window; successful=expected HTTP responses/window.",
-                SqlCommandCounts = "Average command count is successful HTTP samples only; SQL duration is not_measured.",
-                NpgsqlPool = "not_measured",
-                DatabaseLocks = "not_measured",
+                SqlCommandDurations = "EF/Npgsql command execution duration from DbCommandInterceptor; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound (never below the selected bucket's observed durations). The measurement collector is reset after setup/warmup and snapshotted after each sequential scenario window.",
+                NpgsqlPoolWait = "not_measured",
+                PostgreSqlLockWait = "not_measured",
                 RawSql = "not_measured"
             }
         };
@@ -233,7 +237,8 @@ public sealed class ApiLatencyBenchmarkTests
                 $"timeouts_or_cancellations={measurement.Window.TimeoutOrCancellationCount}, " +
                 $"transport_failures={measurement.Window.TransportFailureCount}, " +
                 $"http_429={measurement.Window.RateLimitedCount}, " +
-                $"avg SQL (successful)={measurement.AverageSqlCommands?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}");
+                $"sql_commands={measurement.SqlCommands.Count}, sql_p95={measurement.SqlCommands.ApproximateP95Ms?.ToString("F3", CultureInfo.InvariantCulture) ?? "n/a"}ms, " +
+                $"sql_total={measurement.SqlCommands.TotalDurationMs:F3}ms");
         }
 
         foreach (string failure in failures)
@@ -275,7 +280,8 @@ public sealed class ApiLatencyBenchmarkTests
         HttpStatusCode expectedStatus,
         int sampleIterations,
         List<ApiLatencyMeasurement> measurements,
-        List<string> failures)
+        List<string> failures,
+        SqlCommandCounterInterceptor commandCounter)
     {
         (HttpResponseMessage firstResponse, double firstObservedMs) = await LoginAsync(client, email, password);
         using (firstResponse)
@@ -305,7 +311,8 @@ public sealed class ApiLatencyBenchmarkTests
             email,
             password,
             expectedStatus,
-            sampleIterations);
+            sampleIterations,
+            commandCounter);
         measurements.Add(CreateMeasurement(name, firstObservedMs, window));
         AddWindowFailures(name, window.Metrics, failures);
     }
@@ -355,16 +362,18 @@ public sealed class ApiLatencyBenchmarkTests
         string name,
         double firstRequestForScenarioMs,
         ApiBenchmarkScenarioWindow window) =>
-        new(name, firstRequestForScenarioMs, window.Metrics, window.AverageSuccessfulSqlCommands);
+        new(name, firstRequestForScenarioMs, window.Metrics, window.SqlCommands);
 
     private static async Task<ApiBenchmarkScenarioWindow> MeasureLoginWindowAsync(
         HttpClient client,
         string email,
         string password,
         HttpStatusCode expectedStatus,
-        int sampleIterations) =>
+        int sampleIterations,
+        SqlCommandCounterInterceptor commandCounter) =>
         await MeasureWindowAsync(
             sampleIterations,
+            commandCounter,
             () => ObserveAsync(
                 () => client.PostAsJsonAsync("auth/login", new { email, password }),
                 expectedStatus,
@@ -378,9 +387,9 @@ public sealed class ApiLatencyBenchmarkTests
         int sampleIterations) =>
         await MeasureWindowAsync(
             sampleIterations,
+            commandCounter,
             async () =>
             {
-                commandCounter.Reset();
                 return await ObserveAsync(
                     () => client.GetAsync(endpoint),
                     expectedStatus,
@@ -389,27 +398,24 @@ public sealed class ApiLatencyBenchmarkTests
 
     private static async Task<ApiBenchmarkScenarioWindow> MeasureWindowAsync(
         int sampleIterations,
+        SqlCommandCounterInterceptor? commandCounter,
         Func<Task<ApiBenchmarkObservedSample>> measureSample)
     {
         var samples = new List<ApiBenchmarkSample>(sampleIterations);
-        var successfulSqlCounts = new List<int>(sampleIterations);
+        // Explicit phase boundary: setup, first request, and warm-up are excluded.
+        commandCounter?.Reset();
         ApiBenchmarkProcessSnapshot before = ApiLatencyBenchmarkMetrics.CaptureProcessSnapshot();
         var stopwatch = Stopwatch.StartNew();
         for (int iteration = 0; iteration < sampleIterations; iteration++)
         {
             ApiBenchmarkObservedSample observed = await measureSample();
             samples.Add(observed.Sample);
-            if (observed.Sample.Classification == ApiBenchmarkResponseClassification.ExpectedResponse &&
-                observed.SqlCommands is not null)
-            {
-                successfulSqlCounts.Add(observed.SqlCommands.Value);
-            }
         }
         stopwatch.Stop();
         ApiBenchmarkProcessSnapshot after = ApiLatencyBenchmarkMetrics.CaptureProcessSnapshot();
         return new ApiBenchmarkScenarioWindow(
             ApiLatencyBenchmarkMetrics.Calculate(samples, stopwatch.Elapsed, before, after),
-            successfulSqlCounts.Count == 0 ? null : successfulSqlCounts.Average());
+            commandCounter?.Snapshot() ?? new SqlCommandDurationSnapshot(0, 0, 0, 0, 0, null, null, null, 0));
     }
 
     private static async Task<ApiBenchmarkObservedSample> ObserveAsync(
@@ -502,13 +508,13 @@ public sealed class ApiLatencyBenchmarkTests
 
     private sealed record ApiBenchmarkScenarioWindow(
         ApiLatencyWindowMetrics Metrics,
-        double? AverageSuccessfulSqlCommands);
+        SqlCommandDurationSnapshot SqlCommands);
 
     private sealed record ApiLatencyMeasurement(
         string Name,
         double FirstRequestForScenarioMs,
         ApiLatencyWindowMetrics Window,
-        double? AverageSqlCommands);
+        SqlCommandDurationSnapshot SqlCommands);
 }
 
 [AttributeUsage(AttributeTargets.Method)]

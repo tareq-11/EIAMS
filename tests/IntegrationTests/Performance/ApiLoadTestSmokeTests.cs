@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit.Abstractions;
 
@@ -28,7 +29,8 @@ public sealed class ApiLoadTestSmokeTests(
             // It is deliberately never included in output labels or result JSON.
             $"smoke-{Guid.NewGuid():N}"[..22],
             MaximumPostRequests: 100);
-        using WebApplicationFactory<Program> smokeFactory = factory.CreateSiblingFactory();
+        SqlCommandCounterInterceptor commandCollector = factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        using WebApplicationFactory<Program> smokeFactory = factory.CreateSiblingFactory(commandCollector);
         smokeFactory.UseKestrel(0);
         using HttpClient client = smokeFactory.CreateClient();
         client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
@@ -44,7 +46,22 @@ public sealed class ApiLoadTestSmokeTests(
             new ApiLoadTestPhase(ApiLoadTestPhaseKind.Measurement, TimeSpan.FromSeconds(2)),
             ApiLoadTestScenarioMix.Weights);
         var executor = new ApiLoadTestExecutor(new StopwatchApiLoadTestClock(), adapter.ExecuteAsync);
-        ApiLoadTestExecutionResult execution = await executor.ExecuteAsync(run);
+        SqlCommandDurationSnapshot? warmupSql = null;
+        SqlCommandDurationSnapshot? measurementSql = null;
+        ApiLoadTestExecutionResult execution = await executor.ExecuteAsync(
+            run,
+            beforePhase: _ => commandCollector.Reset(),
+            afterPhase: phase =>
+            {
+                if (phase == ApiLoadTestPhaseKind.Warmup)
+                {
+                    warmupSql = commandCollector.Snapshot();
+                }
+                else
+                {
+                    measurementSql = commandCollector.Snapshot();
+                }
+            });
 
         ApiLoadTestHttpMetrics metrics = adapter.GetMetrics();
         IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> scenarioMetrics = adapter.GetScenarioMetrics();
@@ -55,7 +72,15 @@ public sealed class ApiLoadTestSmokeTests(
             Scenarios = new[] { "login", "read-list", "read-detail", "report", "post" },
             Metrics = metrics,
             ScenarioMetrics = scenarioMetrics,
-            Execution = execution
+            Execution = execution,
+            SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
+            MeasurementMetadata = new
+            {
+                SqlCommandDuration = "EF/Npgsql DbCommandInterceptor execution duration; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound. Authentication, migrations, and seeding are excluded by reset at phase boundaries.",
+                NpgsqlPoolWait = "not_measured",
+                PostgreSqlLockWait = "not_measured",
+                RawSql = "not_measured"
+            }
         };
         string resultPath = Path.Combine(
             Path.GetTempPath(),

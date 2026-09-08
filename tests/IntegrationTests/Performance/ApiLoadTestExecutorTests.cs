@@ -154,6 +154,61 @@ public sealed class ApiLoadTestExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_PhaseHooksFollowPhaseOrderAndDoNotClaimCancelledMeasurement()
+    {
+        var clock = new DeterministicClock();
+        var events = new List<string>();
+        var executor = new ApiLoadTestExecutor(clock, (_, _) =>
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            return Task.FromResult(new ApiLoadTestExecutionSample(Succeeded: true));
+        });
+
+        await executor.ExecuteAsync(
+            CreateClosedLoopRun(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)),
+            phase => events.Add($"before:{phase}"),
+            phase => events.Add($"after:{phase}"));
+
+        events.ShouldBe([
+            "before:Warmup", "after:Warmup", "before:Measurement", "after:Measurement"
+        ]);
+
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        events.Clear();
+        await executor.ExecuteAsync(
+            CreateClosedLoopRun(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)),
+            phase => events.Add($"before:{phase}"),
+            phase => events.Add($"after:{phase}"),
+            cancellation.Token);
+
+        events.ShouldBe(["before:Warmup", "after:Warmup"]);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PhaseHooksCanResetSqlCollectorWithoutMixingPhaseSnapshots()
+    {
+        var clock = new DeterministicClock();
+        var collector = new SqlCommandCounterInterceptor();
+        var snapshots = new List<SqlCommandDurationSnapshot>();
+        var executor = new ApiLoadTestExecutor(clock, (_, _) =>
+        {
+            collector.RecordForTest(TimeSpan.FromMilliseconds(1), SqlCommandCompletionKind.Succeeded);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            return Task.FromResult(new ApiLoadTestExecutionSample(Succeeded: true));
+        });
+
+        await executor.ExecuteAsync(
+            CreateClosedLoopRun(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)),
+            _ => collector.Reset(),
+            _ => snapshots.Add(collector.Snapshot()));
+
+        snapshots.Count.ShouldBe(2);
+        snapshots[0].Count.ShouldBe(1);
+        snapshots[1].Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ShouldSelectTheSameMeasurementScenariosForTheSameRunSeed()
     {
         ApiLoadTestRunDefinition run = CreateClosedLoopRun(
