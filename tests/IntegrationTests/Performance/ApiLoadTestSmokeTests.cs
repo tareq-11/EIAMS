@@ -30,6 +30,7 @@ public sealed class ApiLoadTestSmokeTests(
             $"smoke-{Guid.NewGuid():N}"[..22],
             MaximumPostRequests: 100);
         SqlCommandCounterInterceptor commandCollector = factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        using var poolCollector = new NpgsqlPoolStateCollector();
         using WebApplicationFactory<Program> smokeFactory = factory.CreateSiblingFactory(commandCollector);
         smokeFactory.UseKestrel(0);
         using HttpClient client = smokeFactory.CreateClient();
@@ -48,18 +49,22 @@ public sealed class ApiLoadTestSmokeTests(
         var executor = new ApiLoadTestExecutor(new StopwatchApiLoadTestClock(), adapter.ExecuteAsync);
         SqlCommandDurationSnapshot? warmupSql = null;
         SqlCommandDurationSnapshot? measurementSql = null;
+        NpgsqlPoolStateSnapshot? warmupPoolState = null;
+        NpgsqlPoolStateSnapshot? measurementPoolState = null;
         ApiLoadTestExecutionResult execution = await executor.ExecuteAsync(
             run,
-            beforePhase: _ => commandCollector.Reset(),
+            beforePhase: _ => { commandCollector.Reset(); poolCollector.Reset(); },
             afterPhase: phase =>
             {
                 if (phase == ApiLoadTestPhaseKind.Warmup)
                 {
                     warmupSql = commandCollector.Snapshot();
+                    warmupPoolState = poolCollector.Snapshot();
                 }
                 else
                 {
                     measurementSql = commandCollector.Snapshot();
+                    measurementPoolState = poolCollector.Snapshot();
                 }
             });
 
@@ -74,10 +79,12 @@ public sealed class ApiLoadTestSmokeTests(
             ScenarioMetrics = scenarioMetrics,
             Execution = execution,
             SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
+            NpgsqlPoolStateByPhase = new { Warmup = warmupPoolState, Measurement = measurementPoolState },
             MeasurementMetadata = new
             {
                 SqlCommandDuration = "EF/Npgsql DbCommandInterceptor execution duration; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound. Authentication, migrations, and seeding are excluded by reset at phase boundaries.",
-                NpgsqlPoolWait = "not_measured",
+                NpgsqlPoolWait = "not_available: Npgsql 10.0.3 Meter exposes pool state/timeouts but no connection-acquisition wait duration.",
+                NpgsqlPoolState = "Npgsql Meter process-wide aggregate across all pools per snapshot: db.client.connection.count state=idle|used, db.client.connection.max, and phase timeouts. Provider tags are discarded; this is neither endpoint/pool attribution nor pool-wait duration.",
                 PostgreSqlLockWait = "not_measured",
                 RawSql = "not_measured"
             }

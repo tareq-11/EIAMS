@@ -39,6 +39,7 @@ public sealed class ApiLatencyBenchmarkTests
         DateTime startedAtUtc = DateTime.UtcNow;
         SqlCommandCounterInterceptor commandCounter = factory.Services
             .GetRequiredService<SqlCommandCounterInterceptor>();
+        using var poolCollector = new NpgsqlPoolStateCollector();
         using WebApplicationFactory<Program> benchmarkFactory = factory.CreateSiblingFactory(commandCounter);
         var hostStartupAndJitStopwatch = Stopwatch.StartNew();
         benchmarkFactory.UseKestrel(0);
@@ -77,7 +78,7 @@ public sealed class ApiLatencyBenchmarkTests
             IntegrationTestWebAppFactory.AdministratorPassword,
             HttpStatusCode.OK,
             sampleIterations,
-            commandCounter);
+            commandCounter, poolCollector);
         measurements.Add(CreateMeasurement(
             "POST /api/v1/auth/login [valid]",
             firstLoginMs,
@@ -93,7 +94,7 @@ public sealed class ApiLatencyBenchmarkTests
             sampleIterations,
             measurements,
             failures,
-            commandCounter);
+            commandCounter, poolCollector);
         await MeasureRejectedLoginAsync(
             client,
             "POST /api/v1/auth/login [wrong-password]",
@@ -103,7 +104,7 @@ public sealed class ApiLatencyBenchmarkTests
             sampleIterations,
             measurements,
             failures,
-            commandCounter);
+            commandCounter, poolCollector);
         (string suspendedEmail, string suspendedPassword) = await CreateSuspendedUserAsync();
         await MeasureRejectedLoginAsync(
             client,
@@ -114,7 +115,7 @@ public sealed class ApiLatencyBenchmarkTests
             sampleIterations,
             measurements,
             failures,
-            commandCounter);
+            commandCounter, poolCollector);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         string[] endpoints =
@@ -180,6 +181,7 @@ public sealed class ApiLatencyBenchmarkTests
                 client,
                 endpoint,
                 commandCounter,
+                poolCollector,
                 HttpStatusCode.OK,
                 sampleIterations);
             measurements.Add(CreateMeasurement($"GET {endpoint}", firstRequestMs, window));
@@ -212,7 +214,8 @@ public sealed class ApiLatencyBenchmarkTests
                 MeasurementModel = "Single-client sequential closed-loop sampling; throughput is not open-loop or concurrent-capacity throughput.",
                 ThroughputDefinitions = "attempted=all started samples/window; completed=HTTP responses/window; successful=expected HTTP responses/window.",
                 SqlCommandDurations = "EF/Npgsql command execution duration from DbCommandInterceptor; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound (never below the selected bucket's observed durations). The measurement collector is reset after setup/warmup and snapshotted after each sequential scenario window.",
-                NpgsqlPoolWait = "not_measured",
+                NpgsqlPoolWait = "not_available: Npgsql 10.0.3 Meter exposes pool state/timeouts but no connection-acquisition wait duration.",
+                NpgsqlPoolState = "Npgsql Meter process-wide aggregate across all pools per snapshot: db.client.connection.count state=idle|used, db.client.connection.max, and phase timeouts. Provider tags are discarded; this is neither endpoint/pool attribution nor pool-wait duration.",
                 PostgreSqlLockWait = "not_measured",
                 RawSql = "not_measured"
             }
@@ -281,7 +284,8 @@ public sealed class ApiLatencyBenchmarkTests
         int sampleIterations,
         List<ApiLatencyMeasurement> measurements,
         List<string> failures,
-        SqlCommandCounterInterceptor commandCounter)
+        SqlCommandCounterInterceptor commandCounter,
+        NpgsqlPoolStateCollector poolCollector)
     {
         (HttpResponseMessage firstResponse, double firstObservedMs) = await LoginAsync(client, email, password);
         using (firstResponse)
@@ -312,7 +316,8 @@ public sealed class ApiLatencyBenchmarkTests
             password,
             expectedStatus,
             sampleIterations,
-            commandCounter);
+            commandCounter,
+            poolCollector);
         measurements.Add(CreateMeasurement(name, firstObservedMs, window));
         AddWindowFailures(name, window.Metrics, failures);
     }
@@ -362,7 +367,7 @@ public sealed class ApiLatencyBenchmarkTests
         string name,
         double firstRequestForScenarioMs,
         ApiBenchmarkScenarioWindow window) =>
-        new(name, firstRequestForScenarioMs, window.Metrics, window.SqlCommands);
+        new(name, firstRequestForScenarioMs, window.Metrics, window.SqlCommands, window.PoolState);
 
     private static async Task<ApiBenchmarkScenarioWindow> MeasureLoginWindowAsync(
         HttpClient client,
@@ -370,10 +375,12 @@ public sealed class ApiLatencyBenchmarkTests
         string password,
         HttpStatusCode expectedStatus,
         int sampleIterations,
-        SqlCommandCounterInterceptor commandCounter) =>
+        SqlCommandCounterInterceptor commandCounter,
+        NpgsqlPoolStateCollector poolCollector) =>
         await MeasureWindowAsync(
             sampleIterations,
             commandCounter,
+            poolCollector,
             () => ObserveAsync(
                 () => client.PostAsJsonAsync("auth/login", new { email, password }),
                 expectedStatus,
@@ -383,11 +390,13 @@ public sealed class ApiLatencyBenchmarkTests
         HttpClient client,
         string endpoint,
         SqlCommandCounterInterceptor commandCounter,
+        NpgsqlPoolStateCollector poolCollector,
         HttpStatusCode expectedStatus,
         int sampleIterations) =>
         await MeasureWindowAsync(
             sampleIterations,
             commandCounter,
+            poolCollector,
             async () =>
             {
                 return await ObserveAsync(
@@ -399,11 +408,13 @@ public sealed class ApiLatencyBenchmarkTests
     private static async Task<ApiBenchmarkScenarioWindow> MeasureWindowAsync(
         int sampleIterations,
         SqlCommandCounterInterceptor? commandCounter,
+        NpgsqlPoolStateCollector? poolCollector,
         Func<Task<ApiBenchmarkObservedSample>> measureSample)
     {
         var samples = new List<ApiBenchmarkSample>(sampleIterations);
         // Explicit phase boundary: setup, first request, and warm-up are excluded.
         commandCounter?.Reset();
+        poolCollector?.Reset();
         ApiBenchmarkProcessSnapshot before = ApiLatencyBenchmarkMetrics.CaptureProcessSnapshot();
         var stopwatch = Stopwatch.StartNew();
         for (int iteration = 0; iteration < sampleIterations; iteration++)
@@ -415,7 +426,8 @@ public sealed class ApiLatencyBenchmarkTests
         ApiBenchmarkProcessSnapshot after = ApiLatencyBenchmarkMetrics.CaptureProcessSnapshot();
         return new ApiBenchmarkScenarioWindow(
             ApiLatencyBenchmarkMetrics.Calculate(samples, stopwatch.Elapsed, before, after),
-            commandCounter?.Snapshot() ?? new SqlCommandDurationSnapshot(0, 0, 0, 0, 0, null, null, null, 0));
+            commandCounter?.Snapshot() ?? new SqlCommandDurationSnapshot(0, 0, 0, 0, 0, null, null, null, 0),
+            poolCollector?.Snapshot() ?? new NpgsqlPoolStateSnapshot(false, false, false, 0, 0, 0, 0));
     }
 
     private static async Task<ApiBenchmarkObservedSample> ObserveAsync(
@@ -508,13 +520,15 @@ public sealed class ApiLatencyBenchmarkTests
 
     private sealed record ApiBenchmarkScenarioWindow(
         ApiLatencyWindowMetrics Metrics,
-        SqlCommandDurationSnapshot SqlCommands);
+        SqlCommandDurationSnapshot SqlCommands,
+        NpgsqlPoolStateSnapshot PoolState);
 
     private sealed record ApiLatencyMeasurement(
         string Name,
         double FirstRequestForScenarioMs,
         ApiLatencyWindowMetrics Window,
-        SqlCommandDurationSnapshot SqlCommands);
+        SqlCommandDurationSnapshot SqlCommands,
+        NpgsqlPoolStateSnapshot PoolState);
 }
 
 [AttributeUsage(AttributeTargets.Method)]
