@@ -1,4 +1,6 @@
 using Domain.Common;
+using Domain.Permissions;
+using Domain.Roles;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,8 +33,8 @@ public sealed class SyntheticDatasetSeederTests
 
         // Act
         SyntheticDatasetSeedResult[] results = await Task.WhenAll(
-            SyntheticDatasetSeeder.SeedSmallAsync(options),
-            SyntheticDatasetSeeder.SeedSmallAsync(options));
+            SyntheticDatasetSeeder.SeedAsync(DatasetProfile.Small, options),
+            SyntheticDatasetSeeder.SeedAsync(DatasetProfile.Small, options));
         SyntheticDatasetSeedResult first = results.Single(result => !result.WasAlreadySeeded);
         SyntheticDatasetSeedResult second = results.Single(result => result.WasAlreadySeeded);
 
@@ -44,7 +46,7 @@ public sealed class SyntheticDatasetSeederTests
         second.AuditRecordCount.ShouldBe(manifest.Definition.AuditRecordCount);
         second.WasAlreadySeeded.ShouldBeTrue();
         await Should.ThrowAsync<InvalidOperationException>(() =>
-            SyntheticDatasetSeeder.SeedSmallAsync(options with { Seed = Seed + 1 }));
+            SyntheticDatasetSeeder.SeedAsync(DatasetProfile.Small, options with { Seed = Seed + 1 }));
 
         SyntheticDatasetManifest sameManifest = SyntheticDatasetManifestFactory.Create(DatasetProfile.Small, Seed);
         SyntheticDatasetManifest differentManifest = SyntheticDatasetManifestFactory.Create(DatasetProfile.Small, Seed + 1);
@@ -97,6 +99,75 @@ public sealed class SyntheticDatasetSeederTests
                 };
                 scopeResourceExists.ShouldBeTrue();
             }
+        }
+
+        List<RoleAllowedScopeType> allowedScopeTypes = await context.RoleAllowedScopeTypes
+            .Where(item => manifest.RoleIds.Contains(item.RoleId))
+            .ToListAsync();
+        List<RolePermission> rolePermissions = await context.RolePermissions
+            .Where(item => manifest.RoleIds.Contains(item.RoleId))
+            .ToListAsync();
+        Guid[] expectedReadPermissionIds =
+        [
+            WellKnownPermissions.WarehousesViewId,
+            WellKnownPermissions.MaterialsViewId,
+            WellKnownPermissions.InventoryViewId,
+            WellKnownPermissions.WarehouseDocumentsViewId,
+            WellKnownPermissions.AuditLogsViewId
+        ];
+
+        foreach (SyntheticUserScopeAssignment assignment in manifest.UserScopeAssignments)
+        {
+            allowedScopeTypes.ShouldContain(item =>
+                item.RoleId == assignment.RoleId && item.ScopeType == assignment.ScopeType);
+        }
+
+        foreach (Guid roleId in manifest.RoleIds)
+        {
+            foreach (Guid permissionId in expectedReadPermissionIds)
+            {
+                rolePermissions.ShouldContain(item =>
+                    item.RoleId == roleId && item.PermissionId == permissionId);
+            }
+        }
+
+        // Compatibility: v1 created this table before run_id existed. The upgrade adds a nullable
+        // column, identifies the marker as legacy, and refuses to treat it as an idempotent run.
+        await context.Database.ExecuteSqlRawAsync("DROP TABLE synthetic_dataset_runs");
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE synthetic_dataset_runs (
+                profile text PRIMARY KEY,
+                manifest_hash character(64) NOT NULL,
+                seed bigint NOT NULL,
+                created_at_utc timestamp with time zone NOT NULL
+            );
+
+            INSERT INTO synthetic_dataset_runs (profile, manifest_hash, seed, created_at_utc)
+            VALUES ('Small', {0}, {1}, {2});
+            """,
+            SyntheticDatasetSeeder.ComputeManifestHash(manifest),
+            Seed,
+            new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        await SyntheticDatasetSeeder.EnsureRunTableAsync(context, CancellationToken.None);
+        await context.Database.OpenConnectionAsync();
+        try
+        {
+            SyntheticDatasetRunMarker? legacyMarker = await SyntheticDatasetSeeder.GetRunAsync(
+                context,
+                DatasetProfile.Small,
+                CancellationToken.None);
+            legacyMarker.ShouldNotBeNull();
+            legacyMarker.RunId.ShouldBeNull();
+            Should.Throw<InvalidOperationException>(() =>
+                SyntheticDatasetSeeder.EnsureExistingRunCanBeReused(
+                    legacyMarker,
+                    SyntheticDatasetSeeder.ComputeManifestHash(manifest),
+                    DatasetProfile.Small));
+        }
+        finally
+        {
+            await context.Database.CloseConnectionAsync();
         }
     }
 }

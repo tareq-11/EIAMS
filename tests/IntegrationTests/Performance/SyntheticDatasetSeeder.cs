@@ -11,6 +11,7 @@ using Domain.MaterialFamilies;
 using Domain.Materials;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
+using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
 using Domain.StockMovements;
@@ -30,16 +31,25 @@ using SharedKernel;
 namespace IntegrationTests.Performance;
 
 /// <summary>
-/// Explicit, test-only runner for the Small synthetic benchmark dataset. It deliberately accepts
+/// Explicit, test-only runner for synthetic benchmark datasets. It deliberately accepts
 /// a connection string only from its caller so it cannot be reached by normal application paths.
 /// </summary>
 internal static class SyntheticDatasetSeeder
 {
-    private const int BatchSize = 250;
-    private const string GeneratorVersion = "synthetic-dataset-generator-v2";
-    private const string DatasetSchemaVersion = "synthetic-dataset-schema-v1";
+    internal const int DefaultBatchSize = 250;
+    private const int MaximumBatchSize = 1_000;
+    private const string GeneratorVersion = "synthetic-dataset-generator-v3";
+    private const string DatasetSchemaVersion = "synthetic-dataset-schema-v2";
     private const string IdentityAlgorithmVersion = "sha256-guid-v1";
     private const string AdvisoryLockResource = "integration-tests:synthetic-dataset-seeder";
+    private static readonly Guid[] SyntheticReadPermissionIds =
+    [
+        WellKnownPermissions.WarehousesViewId,
+        WellKnownPermissions.MaterialsViewId,
+        WellKnownPermissions.InventoryViewId,
+        WellKnownPermissions.WarehouseDocumentsViewId,
+        WellKnownPermissions.AuditLogsViewId
+    ];
     private static readonly string[] IdentityKindLabels =
     [
         "organization",
@@ -63,14 +73,16 @@ internal static class SyntheticDatasetSeeder
     ];
     private static readonly DateTime SeedTimestampUtc = new(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    internal static async Task<SyntheticDatasetSeedResult> SeedSmallAsync(
+    internal static async Task<SyntheticDatasetSeedResult> SeedAsync(
+        DatasetProfile profile,
         SyntheticDatasetSeedOptions options,
         CancellationToken cancellationToken = default)
     {
-        ValidateOptions(options);
+        ValidateOptions(profile, options);
 
-        SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(DatasetProfile.Small, options.Seed);
+        SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(profile, options.Seed);
         string manifestHash = ComputeManifestHash(manifest);
+        Guid runId = CreateRunId(manifestHash);
 
         DbContextOptions<ApplicationDbContext> contextOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(
@@ -88,23 +100,23 @@ internal static class SyntheticDatasetSeeder
         {
             await AcquireDatasetLockAsync(context, cancellationToken);
             await EnsureRunTableAsync(context, cancellationToken);
-            string? existingHash = await GetRunHashAsync(context, manifest.Profile, cancellationToken);
-            if (existingHash is not null)
+            SyntheticDatasetRunMarker? existingRun = await GetRunAsync(context, manifest.Profile, cancellationToken);
+            if (existingRun is not null)
             {
-                if (!string.Equals(existingHash, manifestHash, StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException(
-                        "A different synthetic dataset manifest is already registered for the Small profile. " +
-                        "Use a fresh test database rather than mixing benchmark datasets.");
-                }
+                EnsureExistingRunCanBeReused(existingRun, manifestHash, manifest.Profile);
 
                 await transaction.CommitAsync(cancellationToken);
                 context.DiscardPostCommitActions();
-                return await GetResultAsync(context, manifest, wasAlreadySeeded: true, cancellationToken);
+                return await GetResultAsync(
+                    context,
+                    manifest,
+                    existingRun.RunId!.Value,
+                    wasAlreadySeeded: true,
+                    cancellationToken);
             }
 
-            await SeedAsync(context, manifest, cancellationToken);
-            await RegisterRunAsync(context, manifest, manifestHash, cancellationToken);
+            await SeedManifestAsync(context, manifest, runId, options.BatchSize, cancellationToken);
+            await RegisterRunAsync(context, manifest, manifestHash, runId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         catch
@@ -114,212 +126,310 @@ internal static class SyntheticDatasetSeeder
         }
 
         context.DiscardPostCommitActions();
-        return await GetResultAsync(context, manifest, wasAlreadySeeded: false, cancellationToken);
+        return await GetResultAsync(context, manifest, runId, wasAlreadySeeded: false, cancellationToken);
     }
 
-    private static async Task SeedAsync(
+    private static async Task SeedManifestAsync(
         ApplicationDbContext context,
         SyntheticDatasetManifest manifest,
+        Guid runId,
+        int batchSize,
         CancellationToken cancellationToken)
     {
-        string organizationIdPrefix = manifest.GetOrganizationId(0).ToString("N")[..8];
-        string prefix = $"syn-{manifest.Seed:x}-{organizationIdPrefix}";
+        string prefix = GetDatasetPrefix(manifest);
         Guid unitId = DeterministicGuid(manifest, "unit", 0);
         Guid materialDomainId = DeterministicGuid(manifest, "material-domain", 0);
         Guid materialCategoryId = DeterministicGuid(manifest, "material-category", 0);
         Guid materialFamilyId = DeterministicGuid(manifest, "material-family", 0);
 
-        context.Organizations.AddRange(Enumerable.Range(0, manifest.Definition.OrganizationCount)
-            .Select(index => Organization.Create(
-                manifest.GetOrganizationId(index),
-                $"Synthetic organization {index + 1}",
-                $"{prefix}-org-{index + 1}")));
+        await SeedReferenceDataAsync(
+            context,
+            manifest,
+            prefix,
+            unitId,
+            materialDomainId,
+            materialCategoryId,
+            materialFamilyId,
+            batchSize,
+            cancellationToken);
 
-        context.Sites.AddRange(manifest.Sites.Select((site, index) => Site.Create(
-            site.SiteId,
-            site.OrganizationId,
-            $"Synthetic site {index + 1}",
-            $"{prefix}-site-{index + 1}",
-            location: "Synthetic test location")));
+        SyntheticDatasetWarehouse[] warehouses = manifest.Sites.SelectMany(site => site.Warehouses).ToArray();
+        foreach (SyntheticDatasetBatch batch in CreateBatchPlan(manifest.Definition.OperationalMovementCount, batchSize))
+        {
+            await SeedOperationalBatchAsync(context, manifest, prefix, unitId, warehouses, batch, cancellationToken);
+        }
 
-        context.OrganizationalUnits.AddRange(manifest.Sites.SelectMany((site, siteIndex) =>
-            site.OrganizationalUnitIds.Select((unit, unitIndex) => OrganizationalUnit.Create(
-                unit,
-                site.SiteId,
-                parentId: null,
-                $"Synthetic unit {siteIndex + 1}-{unitIndex + 1}",
-                "Benchmark"))));
+        foreach (SyntheticDatasetBatch batch in CreateBatchPlan(manifest.Definition.AuditRecordCount, batchSize))
+        {
+            await SeedAuditBatchAsync(context, manifest, runId, batch, cancellationToken);
+        }
+    }
 
-        context.Warehouses.AddRange(manifest.Sites.SelectMany((site, siteIndex) =>
-            site.Warehouses.Select((warehouse, warehouseIndex) => Warehouse.Create(
-                warehouse.WarehouseId,
-                site.SiteId,
-                $"Synthetic warehouse {siteIndex + 1}-{warehouseIndex + 1}",
-                $"{prefix}-wh-{siteIndex + 1}-{warehouseIndex + 1}",
-                "Benchmark",
-                canHoldStock: true,
-                organizationalUnitId: warehouse.OrganizationalUnitId))));
-
-        context.Roles.AddRange(manifest.RoleIds.Select((roleId, index) => Role.Create(
-            roleId,
-            $"SYN_{prefix}_{index + 1}",
-            "Synthetic benchmark role.")));
-
-        context.Users.AddRange(Enumerable.Range(0, manifest.Definition.UserCount).Select(index => User.Create(
-            manifest.GetUserId(index),
-            $"{prefix}-user-{index + 1}@synthetic.test",
-            "Synthetic",
-            $"User{index + 1}",
-            "synthetic-dataset-not-for-login")));
-
-        context.UserRoleScopes.AddRange(manifest.UserScopeAssignments.Select((assignment, index) =>
-            UserRoleScope.Create(
+    private static async Task SeedReferenceDataAsync(
+        ApplicationDbContext context,
+        SyntheticDatasetManifest manifest,
+        string prefix,
+        Guid unitId,
+        Guid materialDomainId,
+        Guid materialCategoryId,
+        Guid materialFamilyId,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        await SaveBoundedAsync(
+            context.Organizations,
+            Enumerable.Range(0, manifest.Definition.OrganizationCount).Select(index =>
+                Organization.Create(manifest.GetOrganizationId(index), $"Synthetic organization {index + 1}", $"{prefix}-org-{index + 1}")),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.Sites,
+            manifest.Sites.Select((site, index) =>
+                Site.Create(site.SiteId, site.OrganizationId, $"Synthetic site {index + 1}", $"{prefix}-site-{index + 1}", "Synthetic test location")),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.OrganizationalUnits,
+            manifest.Sites.SelectMany((site, siteIndex) => site.OrganizationalUnitIds.Select((unit, unitIndex) =>
+                OrganizationalUnit.Create(unit, site.SiteId, null, $"Synthetic unit {siteIndex + 1}-{unitIndex + 1}", "Benchmark"))),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.Warehouses,
+            manifest.Sites.SelectMany((site, siteIndex) => site.Warehouses.Select((warehouse, warehouseIndex) =>
+                Warehouse.Create(warehouse.WarehouseId, site.SiteId, $"Synthetic warehouse {siteIndex + 1}-{warehouseIndex + 1}", $"{prefix}-wh-{siteIndex + 1}-{warehouseIndex + 1}", "Benchmark", true, warehouse.OrganizationalUnitId))),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.Roles,
+            manifest.RoleIds.Select((roleId, index) =>
+                Role.Create(roleId, $"SYN_{prefix}_{index + 1}", "Synthetic benchmark role.")),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.RoleAllowedScopeTypes,
+            manifest.RoleIds.Select((roleId, index) =>
+                RoleAllowedScopeType.Create(roleId, GetSyntheticRoleScopeType(index))),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.RolePermissions,
+            manifest.RoleIds.SelectMany(roleId => SyntheticReadPermissionIds.Select(permissionId =>
+                RolePermission.Create(roleId, permissionId))),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.Users,
+            Enumerable.Range(0, manifest.Definition.UserCount).Select(index =>
+                User.Create(manifest.GetUserId(index), $"{prefix}-user-{index + 1}@synthetic.test", "Synthetic", $"User{index + 1}", "synthetic-dataset-not-for-login")),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(
+            context.UserRoleScopes,
+            manifest.UserScopeAssignments.Select((assignment, index) => UserRoleScope.Create(
                 DeterministicGuid(manifest, "user-role-scope", index),
                 assignment.UserId,
                 assignment.RoleId,
                 assignment.ScopeType,
-                assignment.ScopeId)));
+                assignment.ScopeId)),
+            context,
+            batchSize,
+            cancellationToken);
+        await SaveBoundedAsync(context.UnitsOfMeasure, [UnitOfMeasure.Create(unitId, "Synthetic unit", "syn", "Quantity")], context, batchSize, cancellationToken);
+        await SaveBoundedAsync(context.MaterialDomains, [MaterialDomain.Create(materialDomainId, "Synthetic domain", $"{prefix}-domain")], context, batchSize, cancellationToken);
+        await SaveBoundedAsync(context.MaterialCategories, [MaterialCategory.Create(materialCategoryId, materialDomainId, null, "Synthetic category", $"{prefix}-category")], context, batchSize, cancellationToken);
+        await SaveBoundedAsync(context.MaterialFamilies, [MaterialFamily.Create(materialFamilyId, materialCategoryId, "Synthetic family", $"{prefix}-family", unitId)], context, batchSize, cancellationToken);
+        await SaveBoundedAsync(
+            context.Materials,
+            Enumerable.Range(0, manifest.Definition.MaterialCount).Select(index => Material.Create(
+                manifest.GetMaterialId(index), materialFamilyId, unitId, $"Synthetic material {index + 1}",
+                $"Synthetic material {index + 1}", $"{prefix}-mat-{index + 1}", MaterialKind.Consumable,
+                TrackingType.Quantity, false, "{\"dataset\":\"synthetic\"}")),
+            context,
+            batchSize,
+            cancellationToken);
+    }
 
-        context.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, "Synthetic unit", "syn", "Quantity"));
-        context.MaterialDomains.Add(MaterialDomain.Create(materialDomainId, "Synthetic domain", $"{prefix}-domain"));
-        context.MaterialCategories.Add(MaterialCategory.Create(
-            materialCategoryId,
-            materialDomainId,
-            parentCategoryId: null,
-            "Synthetic category",
-            $"{prefix}-category"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(
-            materialFamilyId,
-            materialCategoryId,
-            "Synthetic family",
-            $"{prefix}-family",
-            unitId));
-
-        context.Materials.AddRange(Enumerable.Range(0, manifest.Definition.MaterialCount).Select(index => Material.Create(
-            manifest.GetMaterialId(index),
-            materialFamilyId,
-            unitId,
-            $"Synthetic material {index + 1}",
-            $"Synthetic material {index + 1}",
-            $"{prefix}-mat-{index + 1}",
-            MaterialKind.Consumable,
-            TrackingType.Quantity,
-            hasExpiry: false,
-            attributes: "{\"dataset\":\"synthetic\"}")));
-
-        await context.SaveChangesAsync(cancellationToken);
-
-        List<WarehouseDocument> documents = new(manifest.Definition.OperationalMovementCount);
-        var lines = new List<DocumentLine>(manifest.Definition.OperationalMovementCount);
-        SyntheticDatasetWarehouse[] warehouses = manifest.Sites.SelectMany(site => site.Warehouses).ToArray();
-        for (int index = 0; index < manifest.Definition.OperationalMovementCount; index++)
+    private static async Task SeedOperationalBatchAsync(
+        ApplicationDbContext context, SyntheticDatasetManifest manifest, string prefix, Guid unitId,
+        SyntheticDatasetWarehouse[] warehouses, SyntheticDatasetBatch batch, CancellationToken cancellationToken)
+    {
+        // This is intentionally the only per-operational-batch materialization. It is capped by
+        // MaximumBatchSize and lets lifecycle transitions use the same domain instances without
+        // a database IN query or a movement-sized collection of document ids.
+        var documents = new List<WarehouseDocument>(batch.Count);
+        for (int index = batch.StartIndex; index < batch.EndExclusive; index++)
         {
-            Guid documentId = DeterministicGuid(manifest, "document", index);
-            Guid materialId = manifest.GetMaterialId(index % manifest.Definition.MaterialCount);
-            var document = WarehouseDocument.CreateDraft(
-                documentId,
-                warehouses[index % warehouses.Length].WarehouseId,
-                DocumentType.Receiving,
-                $"{prefix}-doc-{index + 1}");
-            EnsureSuccess(document.UpdatePaperReference($"SYN-{index + 1}", 2025));
-            documents.Add(document);
-            lines.Add(DocumentLine.Create(
-                DeterministicGuid(manifest, "document-line", index),
-                documentId,
-                materialId,
-                DocumentLineType.Normal,
-                quantity: 1m,
-                unitId,
-                baseQuantity: 1m,
-                unitPrice: 1m,
-                batchNumber: null,
-                expiryDate: null).Value);
+            documents.Add(CreateDocument(manifest, prefix, warehouses, index));
         }
 
-        await SaveInBatchesAsync(context.WarehouseDocuments, documents, context, cancellationToken);
-        await SaveInBatchesAsync(context.DocumentLines, lines, context, cancellationToken);
+        await SaveAndClearAsync(context.WarehouseDocuments, documents, context, cancellationToken);
+        await SaveBoundedAsync(context.DocumentLines, EnumerateBatch(batch).Select(index => CreateDocumentLine(manifest, unitId, index)), context, batch.Count, cancellationToken);
+        await SaveBoundedAsync(context.DocumentAttachments, EnumerateBatch(batch).Select(index => CreateAttachment(manifest, index)), context, batch.Count, cancellationToken);
 
-        var attachments = documents.Select((document, index) => DocumentAttachment.Create(
+        context.WarehouseDocuments.AttachRange(documents);
+        for (int offset = 0; offset < documents.Count; offset++)
+        {
+            WarehouseDocument document = documents[offset];
+            int index = batch.StartIndex + offset;
+            EnsureSuccess(document.SetSignedCopy(DeterministicGuid(manifest, "attachment", index)));
+            EnsureSuccess(document.Submit());
+            EnsureSuccess(document.MarkPosted(manifest.GetUserId(index % manifest.Definition.UserCount), SeedTimestampUtc.AddSeconds(index)));
+        }
+        await context.SaveChangesAsync(cancellationToken);
+        context.ChangeTracker.Clear();
+        context.DiscardPostCommitActions();
+
+        await SaveBoundedAsync(
+            context.StockMovements,
+            EnumerateBatch(batch).Select(index => StockMovement.Create(
+                manifest.GetOperationalMovementId(index),
+                warehouses[index % warehouses.Length].WarehouseId,
+                manifest.GetMaterialId(index % manifest.Definition.MaterialCount),
+                DeterministicGuid(manifest, "document", index),
+                DeterministicGuid(manifest, "document-line", index),
+                MovementType.Receipt,
+                1m,
+                manifest.GetUserId(index % manifest.Definition.UserCount),
+                SeedTimestampUtc.AddSeconds(index)).Value),
+            context,
+            batch.Count,
+            cancellationToken);
+    }
+
+    private static async Task SeedAuditBatchAsync(
+        ApplicationDbContext context,
+        SyntheticDatasetManifest manifest,
+        Guid runId,
+        SyntheticDatasetBatch batch,
+        CancellationToken cancellationToken)
+    {
+        // Audit rows are explicit because this fixture measures a realistic append-only audit workload;
+        // it does not bypass the audit trigger or depend on application request interception.
+        await SaveBoundedAsync(
+            context.AuditLogs,
+            EnumerateBatch(batch).Select(index => AuditLog.Create(
+                manifest.GetAuditRecordId(index),
+                DeterministicGuid(manifest, "audit-operation", index),
+                null,
+                manifest.GetUserId(index % manifest.Definition.UserCount),
+                "StockMovement",
+                manifest.GetOperationalMovementId(index % manifest.Definition.OperationalMovementCount),
+                "WarehouseDocument",
+                DeterministicGuid(manifest, "document", index % manifest.Definition.OperationalMovementCount),
+                AuditActions.Post,
+                GetAuditCommandName(runId),
+                $"{{\"datasetRunId\":\"{runId:N}\"}}",
+                null,
+                SeedTimestampUtc.AddSeconds(index)).Value),
+            context,
+            batch.Count,
+            cancellationToken);
+    }
+
+    private static IEnumerable<int> EnumerateBatch(SyntheticDatasetBatch batch) =>
+        Enumerable.Range(batch.StartIndex, batch.Count);
+
+    private static ScopeType GetSyntheticRoleScopeType(int roleIndex)
+    {
+        ScopeType[] scopeTypes = Enum.GetValues<ScopeType>();
+        return scopeTypes[roleIndex % scopeTypes.Length];
+    }
+
+    private static WarehouseDocument CreateDocument(SyntheticDatasetManifest manifest, string prefix, SyntheticDatasetWarehouse[] warehouses, int index)
+    {
+        var document = WarehouseDocument.CreateDraft(DeterministicGuid(manifest, "document", index), warehouses[index % warehouses.Length].WarehouseId, DocumentType.Receiving, $"{prefix}-doc-{index + 1}");
+        EnsureSuccess(document.UpdatePaperReference($"SYN-{index + 1}", 2025));
+        return document;
+    }
+
+    private static DocumentLine CreateDocumentLine(SyntheticDatasetManifest manifest, Guid unitId, int index) =>
+        DocumentLine.Create(
+            DeterministicGuid(manifest, "document-line", index),
+            DeterministicGuid(manifest, "document", index),
+            manifest.GetMaterialId(index % manifest.Definition.MaterialCount),
+            DocumentLineType.Normal,
+            1m,
+            unitId,
+            1m,
+            1m,
+            null,
+            null).Value;
+
+    private static DocumentAttachment CreateAttachment(SyntheticDatasetManifest manifest, int index) =>
+        DocumentAttachment.Create(
             DeterministicGuid(manifest, "attachment", index),
-            document.Id,
+            DeterministicGuid(manifest, "document", index),
             AttachmentType.SignedOriginal,
             $"synthetic/{manifest.Profile.ToString().ToUpperInvariant()}/{manifest.Seed}/{index + 1}.pdf",
             "synthetic.pdf",
             "application/pdf",
-            fileSize: 1,
-            checksum: $"synthetic-{index + 1:x}",
-            uploadedBy: manifest.GetUserId(index % manifest.Definition.UserCount),
-            uploadedAtUtc: SeedTimestampUtc.AddSeconds(index))).ToList();
-        await SaveInBatchesAsync(context.DocumentAttachments, attachments, context, cancellationToken);
+            1,
+            $"synthetic-{index + 1:x}",
+            manifest.GetUserId(index % manifest.Definition.UserCount),
+            SeedTimestampUtc.AddSeconds(index));
 
-        for (int index = 0; index < documents.Count; index++)
-        {
-            EnsureSuccess(documents[index].SetSignedCopy(attachments[index].Id));
-            EnsureSuccess(documents[index].Submit());
-            EnsureSuccess(documents[index].MarkPosted(
-                manifest.GetUserId(index % manifest.Definition.UserCount),
-                SeedTimestampUtc.AddSeconds(index)));
-        }
-
-        await context.SaveChangesAsync(cancellationToken);
-
-        var movements = new List<StockMovement>(manifest.Definition.OperationalMovementCount);
-        for (int index = 0; index < manifest.Definition.OperationalMovementCount; index++)
-        {
-            movements.Add(StockMovement.Create(
-                manifest.GetOperationalMovementId(index),
-                warehouses[index % warehouses.Length].WarehouseId,
-                manifest.GetMaterialId(index % manifest.Definition.MaterialCount),
-                documents[index].Id,
-                lines[index].Id,
-                MovementType.Receipt,
-                quantityDelta: 1m,
-                postedBy: manifest.GetUserId(index % manifest.Definition.UserCount),
-                postedAtUtc: SeedTimestampUtc.AddSeconds(index)).Value);
-        }
-
-        await SaveInBatchesAsync(context.StockMovements, movements, context, cancellationToken);
-
-        var auditLogs = new List<AuditLog>(manifest.Definition.AuditRecordCount);
-        for (int index = 0; index < manifest.Definition.AuditRecordCount; index++)
-        {
-            Guid movementId = manifest.GetOperationalMovementId(index % manifest.Definition.OperationalMovementCount);
-            auditLogs.Add(AuditLog.Create(
-                manifest.GetAuditRecordId(index),
-                DeterministicGuid(manifest, "audit-operation", index),
-                requestId: null,
-                userId: manifest.GetUserId(index % manifest.Definition.UserCount),
-                entityType: "StockMovement",
-                entityId: movementId,
-                aggregateType: "WarehouseDocument",
-                aggregateId: documents[index % documents.Count].Id,
-                action: AuditActions.Post,
-                commandName: "SyntheticDatasetSeed",
-                summary: "{\"dataset\":\"synthetic\"}",
-                ipAddress: null,
-                createdAtUtc: SeedTimestampUtc.AddSeconds(index)).Value);
-        }
-
-        await SaveInBatchesAsync(context.AuditLogs, auditLogs, context, cancellationToken);
-    }
-
-    private static async Task SaveInBatchesAsync<TEntity>(
-        DbSet<TEntity> set,
-        IReadOnlyList<TEntity> entities,
-        ApplicationDbContext context,
-        CancellationToken cancellationToken)
-        where TEntity : class
+    private static async Task SaveBoundedAsync<TEntity>(DbSet<TEntity> set, IEnumerable<TEntity> entities, ApplicationDbContext context, int batchSize, CancellationToken cancellationToken) where TEntity : class
     {
-        for (int offset = 0; offset < entities.Count; offset += BatchSize)
+        var batch = new List<TEntity>(batchSize);
+        foreach (TEntity entity in entities)
         {
-            set.AddRange(entities.Skip(offset).Take(BatchSize));
-            await context.SaveChangesAsync(cancellationToken);
+            batch.Add(entity);
+            if (batch.Count == batchSize)
+            {
+                await SaveBatchAsync(set, batch, context, cancellationToken);
+            }
+        }
+
+        if (batch.Count > 0)
+        {
+            await SaveBatchAsync(set, batch, context, cancellationToken);
         }
     }
 
-    private static void ValidateOptions(SyntheticDatasetSeedOptions options)
+    private static async Task SaveBatchAsync<TEntity>(DbSet<TEntity> set, List<TEntity> batch, ApplicationDbContext context, CancellationToken cancellationToken) where TEntity : class
+    {
+        await SaveAndClearAsync(set, batch, context, cancellationToken);
+        batch.Clear();
+    }
+
+    private static async Task SaveAndClearAsync<TEntity>(DbSet<TEntity> set, IEnumerable<TEntity> entities, ApplicationDbContext context, CancellationToken cancellationToken) where TEntity : class
+    {
+        set.AddRange(entities);
+        await context.SaveChangesAsync(cancellationToken);
+        context.ChangeTracker.Clear();
+        // The test-only seeder persists under one transaction and intentionally has no external
+        // post-commit side effects; clear deferred domain/cache work so it cannot grow with rows.
+        context.DiscardPostCommitActions();
+    }
+
+    internal static IEnumerable<SyntheticDatasetBatch> CreateBatchPlan(int itemCount, int batchSize)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(itemCount);
+        ValidateBatchSize(batchSize);
+
+        for (int startIndex = 0; startIndex < itemCount; startIndex += batchSize)
+        {
+            yield return new SyntheticDatasetBatch(startIndex, Math.Min(batchSize, itemCount - startIndex));
+        }
+    }
+
+    internal static void ValidateOptions(DatasetProfile profile, SyntheticDatasetSeedOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (!Enum.IsDefined(profile))
+        {
+            throw new ArgumentOutOfRangeException(nameof(profile));
+        }
+
         if (options.Seed <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(options), "The synthetic dataset seed must be positive.");
@@ -343,33 +453,75 @@ internal static class SyntheticDatasetSeeder
             throw new InvalidOperationException(
                 "Synthetic dataset seeding requires an explicit connection to a database whose name contains 'test'.");
         }
+
+        if ((connection.Host?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? [])
+            .Any(host => host.EndsWith(".neon.tech", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("Synthetic dataset seeding is forbidden against Neon connections.");
+        }
+
+        ValidateBatchSize(options.BatchSize);
     }
 
-    private static async Task EnsureRunTableAsync(ApplicationDbContext context, CancellationToken cancellationToken)
+    private static void ValidateBatchSize(int batchSize)
+    {
+        if (batchSize is < 1 or > MaximumBatchSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), $"Batch size must be between 1 and {MaximumBatchSize}.");
+        }
+    }
+
+    internal static async Task EnsureRunTableAsync(ApplicationDbContext context, CancellationToken cancellationToken)
     {
         const string sql = """
             CREATE TABLE IF NOT EXISTS synthetic_dataset_runs (
                 profile text PRIMARY KEY,
                 manifest_hash character(64) NOT NULL,
+                run_id uuid NULL,
                 seed bigint NOT NULL,
                 created_at_utc timestamp with time zone NOT NULL
-            )
+            );
+
+            ALTER TABLE synthetic_dataset_runs
+            ADD COLUMN IF NOT EXISTS run_id uuid NULL;
             """;
         await context.Database.ExecuteSqlRawAsync(sql, cancellationToken);
     }
 
-    private static async Task<string?> GetRunHashAsync(
+    internal static async Task<SyntheticDatasetRunMarker?> GetRunAsync(
         ApplicationDbContext context,
         DatasetProfile profile,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
-            "SELECT manifest_hash FROM synthetic_dataset_runs WHERE profile = @profile",
+            "SELECT manifest_hash, run_id FROM synthetic_dataset_runs WHERE profile = @profile",
             (NpgsqlConnection)context.Database.GetDbConnection(),
             (NpgsqlTransaction?)context.Database.CurrentTransaction?.GetDbTransaction());
         command.Parameters.AddWithValue("profile", profile.ToString());
-        object? result = await command.ExecuteScalarAsync(cancellationToken);
-        return result as string;
+        await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        Guid? runId = await reader.IsDBNullAsync(1, cancellationToken)
+            ? null
+            : await reader.GetFieldValueAsync<Guid>(1, cancellationToken);
+        return new SyntheticDatasetRunMarker(reader.GetString(0), runId);
+    }
+
+    internal static void EnsureExistingRunCanBeReused(
+        SyntheticDatasetRunMarker existingRun,
+        string manifestHash,
+        DatasetProfile profile)
+    {
+        if (!string.Equals(existingRun.ManifestHash, manifestHash, StringComparison.Ordinal) ||
+            existingRun.RunId is null)
+        {
+            throw new InvalidOperationException(
+                $"A different or legacy synthetic dataset manifest is already registered for the {profile} profile. " +
+                "Use a fresh test database rather than mixing benchmark datasets.");
+        }
     }
 
     private static async Task AcquireDatasetLockAsync(
@@ -388,17 +540,19 @@ internal static class SyntheticDatasetSeeder
         ApplicationDbContext context,
         SyntheticDatasetManifest manifest,
         string manifestHash,
+        Guid runId,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO synthetic_dataset_runs (profile, manifest_hash, seed, created_at_utc)
-            VALUES (@profile, @manifest_hash, @seed, @created_at_utc)
+            INSERT INTO synthetic_dataset_runs (profile, manifest_hash, run_id, seed, created_at_utc)
+            VALUES (@profile, @manifest_hash, @run_id, @seed, @created_at_utc)
             """,
             (NpgsqlConnection)context.Database.GetDbConnection(),
             (NpgsqlTransaction?)context.Database.CurrentTransaction?.GetDbTransaction());
         command.Parameters.AddWithValue("profile", manifest.Profile.ToString());
         command.Parameters.AddWithValue("manifest_hash", manifestHash);
+        command.Parameters.AddWithValue("run_id", runId);
         command.Parameters.AddWithValue("seed", manifest.Seed);
         command.Parameters.AddWithValue("created_at_utc", SeedTimestampUtc);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -407,22 +561,32 @@ internal static class SyntheticDatasetSeeder
     private static async Task<SyntheticDatasetSeedResult> GetResultAsync(
         ApplicationDbContext context,
         SyntheticDatasetManifest manifest,
+        Guid runId,
         bool wasAlreadySeeded,
         CancellationToken cancellationToken)
     {
-        Guid[] movementIds = Enumerable.Range(0, manifest.Definition.OperationalMovementCount)
-            .Select(manifest.GetOperationalMovementId)
-            .ToArray();
-        Guid[] auditLogIds = Enumerable.Range(0, manifest.Definition.AuditRecordCount)
-            .Select(manifest.GetAuditRecordId)
-            .ToArray();
+        string prefix = GetDatasetPrefix(manifest);
 
         return new SyntheticDatasetSeedResult(
             manifest.Profile,
             manifest.Seed,
-            await context.StockMovements.CountAsync(movement => movementIds.Contains(movement.Id), cancellationToken),
-            await context.AuditLogs.CountAsync(log => auditLogIds.Contains(log.Id), cancellationToken),
+            await (from movement in context.StockMovements
+                   join document in context.WarehouseDocuments on movement.DocumentId equals document.Id
+                   where document.SystemReferenceNumber.StartsWith($"{prefix}-doc-")
+                   select movement.Id).CountAsync(cancellationToken),
+            await context.AuditLogs.CountAsync(log => log.CommandName == GetAuditCommandName(runId), cancellationToken),
             wasAlreadySeeded);
+    }
+
+    private static string GetDatasetPrefix(SyntheticDatasetManifest manifest) =>
+        $"syn-{manifest.Profile.ToString().ToUpperInvariant()}-{manifest.Seed:x}-{manifest.GetOrganizationId(0).ToString("N")[..8]}";
+
+    private static string GetAuditCommandName(Guid runId) => $"SyntheticDatasetSeed:{runId:N}";
+
+    private static Guid CreateRunId(string manifestHash)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes($"synthetic-dataset-run:{manifestHash}"));
+        return new Guid(hash.AsSpan(0, 16));
     }
 
     private static Guid DeterministicGuid(SyntheticDatasetManifest manifest, string kind, int index)
@@ -524,7 +688,8 @@ internal sealed record SyntheticDatasetSeedOptions(
     string ConnectionString,
     string DatabaseName,
     string EnvironmentName,
-    long Seed);
+    long Seed,
+    int BatchSize = SyntheticDatasetSeeder.DefaultBatchSize);
 
 internal sealed record SyntheticDatasetSeedResult(
     DatasetProfile Profile,
@@ -532,3 +697,10 @@ internal sealed record SyntheticDatasetSeedResult(
     int OperationalMovementCount,
     int AuditRecordCount,
     bool WasAlreadySeeded);
+
+internal sealed record SyntheticDatasetBatch(int StartIndex, int Count)
+{
+    internal int EndExclusive => checked(StartIndex + Count);
+}
+
+internal sealed record SyntheticDatasetRunMarker(string ManifestHash, Guid? RunId);

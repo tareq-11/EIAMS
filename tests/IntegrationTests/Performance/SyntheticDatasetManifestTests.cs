@@ -67,6 +67,91 @@ public sealed class SyntheticDatasetManifestTests
     }
 
     [Fact]
+    public void ComputeManifestHash_Large_ShouldBeDeterministicWithoutMaterializingRows()
+    {
+        // Arrange
+        SyntheticDatasetManifest first = SyntheticDatasetManifestFactory.Create(DatasetProfile.Large, 1729);
+        SyntheticDatasetManifest second = SyntheticDatasetManifestFactory.Create(DatasetProfile.Large, 1729);
+        SyntheticDatasetManifest differentSeed = SyntheticDatasetManifestFactory.Create(DatasetProfile.Large, 1730);
+
+        // Act
+        string firstHash = SyntheticDatasetSeeder.ComputeManifestHash(first);
+        string secondHash = SyntheticDatasetSeeder.ComputeManifestHash(second);
+        string differentSeedHash = SyntheticDatasetSeeder.ComputeManifestHash(differentSeed);
+
+        // Assert
+        firstHash.ShouldBe(secondHash);
+        firstHash.ShouldNotBe(differentSeedHash);
+        first.Sites.Count.ShouldBeLessThan(100);
+        first.UserScopeAssignments.Count.ShouldBe(first.Definition.UserCount);
+    }
+
+    [Theory]
+    [InlineData(DatasetProfile.Medium, 333)]
+    [InlineData(DatasetProfile.Large, 777)]
+    public void CreateBatchPlan_ShouldCoverEveryProfileCountWithinConfiguredBoundWithoutMaterializingRows(
+        DatasetProfile profile,
+        int batchSize)
+    {
+        // Arrange
+        SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(profile, 1729);
+
+        AssertCoveredInBoundedBatches(manifest.Definition.OperationalMovementCount, batchSize);
+        AssertCoveredInBoundedBatches(manifest.Definition.AuditRecordCount, batchSize);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1_001)]
+    public void CreateBatchPlan_ShouldRejectBatchSizeOutsideBound(int batchSize)
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() =>
+            SyntheticDatasetSeeder.CreateBatchPlan(1_000, batchSize).ToList());
+    }
+
+    [Theory]
+    [InlineData("Host=ep-synthetic-123.neon.tech;Database=synthetic_test")]
+    [InlineData("Host=ep-synthetic-123-pooler.neon.tech;Database=synthetic_test")]
+    [InlineData("Host=localhost, ep-synthetic-123.neon.tech ;Database=synthetic_test")]
+    public void ValidateOptions_ShouldRejectNeonForEveryConnectionHost(string connectionString)
+    {
+        Should.Throw<InvalidOperationException>(() =>
+            SyntheticDatasetSeeder.ValidateOptions(
+                DatasetProfile.Small,
+                new SyntheticDatasetSeedOptions(connectionString, "synthetic_test", "Test", 1729)));
+    }
+
+    [Fact]
+    public void ValidateOptions_ShouldAllowLocalhostWithoutOpeningConnection()
+    {
+        Should.NotThrow(() =>
+            SyntheticDatasetSeeder.ValidateOptions(
+                DatasetProfile.Small,
+                new SyntheticDatasetSeedOptions(
+                    "Host=localhost;Database=synthetic_test;Username=postgres;Password=postgres",
+                    "synthetic_test",
+                    "Test",
+                    1729)));
+    }
+
+    private static void AssertCoveredInBoundedBatches(int itemCount, int batchSize)
+    {
+        int expectedStartIndex = 0;
+        int coveredCount = 0;
+        foreach (SyntheticDatasetBatch batch in SyntheticDatasetSeeder.CreateBatchPlan(itemCount, batchSize))
+        {
+            batch.StartIndex.ShouldBe(expectedStartIndex);
+            batch.Count.ShouldBeInRange(1, batchSize);
+            expectedStartIndex += batch.Count;
+            coveredCount += batch.Count;
+        }
+
+        coveredCount.ShouldBe(itemCount);
+        expectedStartIndex.ShouldBe(itemCount);
+    }
+
+    [Fact]
     public void Create_ShouldUseUnevenWarehouseDistribution()
     {
         // Act
