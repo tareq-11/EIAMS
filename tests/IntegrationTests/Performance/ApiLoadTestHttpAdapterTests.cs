@@ -1,18 +1,31 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 
 namespace IntegrationTests.Performance;
 
 public sealed class ApiLoadTestHttpAdapterTests
 {
     [Fact]
-    public void Catalog_ShouldUseLogicalLowCardinalityLabelsAndRejectPost()
+    public void Catalog_ShouldUseLogicalLowCardinalityLabelsIncludingPost()
     {
+        var fixtureId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var fixture = new ApiLoadTestFixtureContext(fixtureId, "test-run", 100);
         ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.Login).Label.ShouldBe("login");
         ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.ReadList).Label.ShouldBe("read-list");
-        ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.ReadDetail, new ApiLoadTestFixtureContext(Guid.Empty)).Label.ShouldBe("read-detail");
+        ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.ReadDetail, fixture).Label.ShouldBe("read-detail");
         ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.Report).Label.ShouldBe("report");
-        Should.Throw<NotSupportedException>(() => ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.Post));
+        ApiLoadTestCatalogEntry post = ApiLoadTestRequestCatalog.Get(ApiLoadTestScenario.Post, fixture);
+        post.Label.ShouldBe("post");
+        post.Method.ShouldBe(HttpMethod.Post);
+        post.RelativePath.ShouldBe("organizations");
+        post.ExpectedStatus.ShouldBe(HttpStatusCode.OK);
+
+        string labels = string.Join(',', Enum.GetValues<ApiLoadTestScenario>()
+            .Select(scenario => ApiLoadTestRequestCatalog.Get(scenario, fixture).Label));
+        labels.ShouldNotContain(fixtureId.ToString("D"));
+        labels.ShouldNotContain(fixture.PostRunNamespace);
     }
 
     [Theory]
@@ -103,6 +116,52 @@ public sealed class ApiLoadTestHttpAdapterTests
         adapter.GetScenarioMetrics()[ApiLoadTestScenario.ReadList].Count.ShouldBe(1);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_Post_ShouldUseUniqueBoundedBusinessWriteBodiesUnderConcurrency()
+    {
+        ApiLoadTestFixtureContext fixture = new(Guid.Empty, "parallel-run", 100);
+        using var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath.EndsWith("auth/login", StringComparison.Ordinal)
+            ? JsonResponse()
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"success\":true}") });
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password", fixture);
+
+        await adapter.AuthenticateAsync(CancellationToken.None);
+        await Task.WhenAll(Enumerable.Range(0, 100)
+            .Select(_ => adapter.ExecuteAsync(ApiLoadTestScenario.Post, CancellationToken.None)));
+
+        RecordedRequest[] posts = handler.Requests
+            .Where(request => request.Path == "/api/v1/organizations")
+            .ToArray();
+        posts.Length.ShouldBe(100);
+        string[] codes = posts.Select(request =>
+        {
+            using var json = JsonDocument.Parse(request.Body);
+            return json.RootElement.GetProperty("code").GetString()!;
+        }).ToArray();
+        codes.Distinct(StringComparer.Ordinal).Count().ShouldBe(100);
+        codes.ShouldAllBe(code => code.StartsWith("LT-parallel-run-", StringComparison.Ordinal));
+        posts.ShouldAllBe(request => !request.Body.Contains(fixture.OrganizationId.ToString("D"), StringComparison.Ordinal));
+        adapter.GetScenarioMetrics()[ApiLoadTestScenario.Post].SuccessCount.ShouldBe(100);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Post_ShouldNotSendARequestAfterItsBoundedBudgetIsExhausted()
+    {
+        var fixture = new ApiLoadTestFixtureContext(Guid.Empty, "limited", 1);
+        using var handler = new CountingHandler(request => request.RequestUri!.AbsolutePath.EndsWith("auth/login", StringComparison.Ordinal)
+            ? JsonResponse()
+            : new HttpResponseMessage(HttpStatusCode.OK));
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password", fixture);
+
+        await adapter.AuthenticateAsync(CancellationToken.None);
+        await adapter.ExecuteAsync(ApiLoadTestScenario.Post, CancellationToken.None);
+        await Should.ThrowAsync<InvalidOperationException>(() => adapter.ExecuteAsync(ApiLoadTestScenario.Post, CancellationToken.None));
+
+        handler.Count.ShouldBe(2); // one excluded setup login and one measured Post
+    }
+
     private static HttpResponseMessage JsonResponse() => new(HttpStatusCode.OK)
     {
         Content = new StringContent("{\"data\":{\"access_token\":\"test-token\"}}")
@@ -120,6 +179,20 @@ public sealed class ApiLoadTestHttpAdapterTests
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Count++;
+            return Task.FromResult(responseFactory(request));
+        }
+    }
+
+    private sealed record RecordedRequest(string Path, string Body);
+
+    private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
+    {
+        internal ConcurrentQueue<RecordedRequest> Requests { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string body = request.Content?.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult() ?? string.Empty;
+            Requests.Enqueue(new RecordedRequest(request.RequestUri!.AbsolutePath, body));
             return Task.FromResult(responseFactory(request));
         }
     }

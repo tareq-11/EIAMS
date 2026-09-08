@@ -13,7 +13,7 @@ public sealed class ApiLoadTestSmokeTests(
 {
     [ExplicitApiLoadTestFact]
     [Trait("Category", "Performance")]
-    public async Task RunLocalKestrelSmokeWithoutPostAsync()
+    public async Task RunLocalKestrelSmokeWithFullMixedWorkloadAsync()
     {
         const long seed = 20260908;
         string databaseName = new NpgsqlConnectionStringBuilder(factory.DatabaseConnectionString).Database
@@ -22,7 +22,12 @@ public sealed class ApiLoadTestSmokeTests(
             DatasetProfile.Small,
             new SyntheticDatasetSeedOptions(factory.DatabaseConnectionString, databaseName, "Test", seed));
         SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(DatasetProfile.Small, seed);
-        var fixture = new ApiLoadTestFixtureContext(manifest.GetOrganizationId(0));
+        var fixture = new ApiLoadTestFixtureContext(
+            manifest.GetOrganizationId(0),
+            // Isolates repeated explicit smoke invocations against the same Testcontainer database.
+            // It is deliberately never included in output labels or result JSON.
+            $"smoke-{Guid.NewGuid():N}"[..22],
+            MaximumPostRequests: 100);
         using WebApplicationFactory<Program> smokeFactory = factory.CreateSiblingFactory();
         smokeFactory.UseKestrel(0);
         using HttpClient client = smokeFactory.CreateClient();
@@ -34,10 +39,10 @@ public sealed class ApiLoadTestSmokeTests(
             fixture);
         await adapter.AuthenticateAsync(CancellationToken.None);
         var run = new ApiLoadTestRunDefinition(
-            1, 1, ApiLoadTestMode.ClosedLoop, null, 42,
+            1, 1, ApiLoadTestMode.ClosedLoop, null, 1,
             new ApiLoadTestPhase(ApiLoadTestPhaseKind.Warmup, TimeSpan.FromSeconds(1)),
             new ApiLoadTestPhase(ApiLoadTestPhaseKind.Measurement, TimeSpan.FromSeconds(2)),
-            ApiLoadTestScenarioMix.SmokeWeights);
+            ApiLoadTestScenarioMix.Weights);
         var executor = new ApiLoadTestExecutor(new StopwatchApiLoadTestClock(), adapter.ExecuteAsync);
         ApiLoadTestExecutionResult execution = await executor.ExecuteAsync(run);
 
@@ -47,8 +52,7 @@ public sealed class ApiLoadTestSmokeTests(
         {
             Transport = "Kestrel loopback HTTP",
             Database = "integration-testcontainer-local",
-            Scenarios = new[] { "login", "read-list", "read-detail", "report" },
-            Post = "unsupported; full mixed workload is incomplete",
+            Scenarios = new[] { "login", "read-list", "read-detail", "report", "post" },
             Metrics = metrics,
             ScenarioMetrics = scenarioMetrics,
             Execution = execution
@@ -71,7 +75,7 @@ public sealed class ApiLoadTestSmokeTests(
         execution.Measurement.UnfinishedAfterGraceCount.ShouldBe(0);
         execution.Measurement.CompletedCount.ShouldBeGreaterThan(0);
         execution.Measurement.SuccessfulCount.ShouldBeGreaterThan(0);
-        foreach (ApiLoadTestScenario scenario in ApiLoadTestScenarioMix.SmokeWeights.Select(weight => weight.Scenario))
+        foreach (ApiLoadTestScenario scenario in ApiLoadTestScenarioMix.Weights.Select(weight => weight.Scenario))
         {
             scenarioMetrics[scenario].Count.ShouldBeGreaterThan(0);
             scenarioMetrics[scenario].FailureCount.ShouldBe(0);
