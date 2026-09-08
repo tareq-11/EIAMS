@@ -97,6 +97,44 @@ internal sealed class ApiLoadTestExecutor(
             warmup.ShutdownGracePeriodElapsed || measurement.ShutdownGracePeriodElapsed);
     }
 
+    /// <summary>Async phase hooks for monitors which must be started and stopped without blocking threads.</summary>
+    internal async Task<ApiLoadTestExecutionResult> ExecuteAsync(
+        ApiLoadTestRunDefinition run,
+        Func<ApiLoadTestPhaseKind, CancellationToken, Task>? beforePhaseAsync,
+        Func<ApiLoadTestPhaseKind, CancellationToken, Task>? afterPhaseAsync,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ValidateOptions(options);
+        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        PhaseAccumulator warmup = await ExecuteWithHooksAsync(run.Warmup, ApiLoadTestPhaseKind.Warmup).ConfigureAwait(false);
+        PhaseAccumulator measurement = executionCancellation.IsCancellationRequested
+            ? new PhaseAccumulator()
+            : await ExecuteWithHooksAsync(run.Measurement, ApiLoadTestPhaseKind.Measurement).ConfigureAwait(false);
+        return new ApiLoadTestExecutionResult(warmup.ToSummary(), measurement.ToSummary(), cancellationToken.IsCancellationRequested,
+            warmup.ShutdownGracePeriodElapsed || measurement.ShutdownGracePeriodElapsed);
+
+        async Task<PhaseAccumulator> ExecuteWithHooksAsync(ApiLoadTestPhase phase, ApiLoadTestPhaseKind kind)
+        {
+            if (beforePhaseAsync is not null)
+            {
+                await beforePhaseAsync(kind, cancellationToken).ConfigureAwait(false);
+            }
+            try
+            {
+                return await ExecutePhaseAsync(run, phase, executionCancellation, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (afterPhaseAsync is not null)
+                {
+                    await afterPhaseAsync(kind, CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
     private async Task<PhaseAccumulator> ExecutePhaseAsync(
         ApiLoadTestRunDefinition run,
         ApiLoadTestPhase phase,

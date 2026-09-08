@@ -3,6 +3,45 @@ namespace IntegrationTests.Performance;
 public sealed class ApiLoadTestExecutorTests
 {
     [Fact]
+    public async Task ExecuteAsync_AsyncPhaseHooks_ShouldRunInOrderAndStopEachPhaseMonitor()
+    {
+        var clock = new DeterministicClock();
+        var events = new List<string>();
+        var executor = new ApiLoadTestExecutor(clock, (_, _) =>
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            return Task.FromResult(new ApiLoadTestExecutionSample(Succeeded: true));
+        });
+
+        await executor.ExecuteAsync(
+            CreateClosedLoopRun(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)),
+            (phase, _) => { events.Add($"start:{phase}"); return Task.CompletedTask; },
+            (phase, _) => { events.Add($"stop:{phase}"); return Task.CompletedTask; });
+
+        events.ShouldBe([
+            "start:Warmup", "stop:Warmup", "start:Measurement", "stop:Measurement"]);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AsyncPhaseHooks_ShouldStopWarmupAndSkipMeasurement_WhenCancelled()
+    {
+        var clock = new DeterministicClock();
+        var events = new List<string>();
+        var executor = new ApiLoadTestExecutor(clock, (_, _) =>
+            Task.FromResult(new ApiLoadTestExecutionSample(Succeeded: true)));
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await executor.ExecuteAsync(
+            CreateClosedLoopRun(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)),
+            (phase, _) => { events.Add($"start:{phase}"); return Task.CompletedTask; },
+            (phase, _) => { events.Add($"stop:{phase}"); return Task.CompletedTask; },
+            cancellation.Token);
+
+        events.ShouldBe(["start:Warmup", "stop:Warmup"]);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ShouldKeepWarmupSamplesOutOfTheMeasurementSummary()
     {
         var clock = new DeterministicClock();

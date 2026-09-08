@@ -31,6 +31,7 @@ public sealed class ApiLoadTestSmokeTests(
             MaximumPostRequests: 100);
         SqlCommandCounterInterceptor commandCollector = factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
         using var poolCollector = new NpgsqlPoolStateCollector();
+        await using var lockWaitSampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString);
         using WebApplicationFactory<Program> smokeFactory = factory.CreateSiblingFactory(commandCollector);
         smokeFactory.UseKestrel(0);
         using HttpClient client = smokeFactory.CreateClient();
@@ -51,20 +52,30 @@ public sealed class ApiLoadTestSmokeTests(
         SqlCommandDurationSnapshot? measurementSql = null;
         NpgsqlPoolStateSnapshot? warmupPoolState = null;
         NpgsqlPoolStateSnapshot? measurementPoolState = null;
+        PostgreSqlLockWaitSnapshot? warmupLockWait = null;
+        PostgreSqlLockWaitSnapshot? measurementLockWait = null;
         ApiLoadTestExecutionResult execution = await executor.ExecuteAsync(
             run,
-            beforePhase: _ => { commandCollector.Reset(); poolCollector.Reset(); },
-            afterPhase: phase =>
+            beforePhaseAsync: (_, cancellationToken) =>
             {
+                commandCollector.Reset();
+                poolCollector.Reset();
+                return lockWaitSampler.StartAsync(cancellationToken);
+            },
+            afterPhaseAsync: async (phase, _) =>
+            {
+                PostgreSqlLockWaitSnapshot snapshot = await lockWaitSampler.StopAsync();
                 if (phase == ApiLoadTestPhaseKind.Warmup)
                 {
                     warmupSql = commandCollector.Snapshot();
                     warmupPoolState = poolCollector.Snapshot();
+                    warmupLockWait = snapshot;
                 }
                 else
                 {
                     measurementSql = commandCollector.Snapshot();
                     measurementPoolState = poolCollector.Snapshot();
+                    measurementLockWait = snapshot;
                 }
             });
 
@@ -80,12 +91,13 @@ public sealed class ApiLoadTestSmokeTests(
             Execution = execution,
             SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
             NpgsqlPoolStateByPhase = new { Warmup = warmupPoolState, Measurement = measurementPoolState },
+            PostgreSqlSampledLockWaitOccupancyByPhase = new { Warmup = warmupLockWait, Measurement = measurementLockWait },
             MeasurementMetadata = new
             {
                 SqlCommandDuration = "EF/Npgsql DbCommandInterceptor execution duration; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound. Authentication, migrations, and seeding are excluded by reset at phase boundaries.",
                 NpgsqlPoolWait = "not_available: Npgsql 10.0.3 Meter exposes pool state/timeouts but no connection-acquisition wait duration.",
                 NpgsqlPoolState = "Npgsql Meter process-wide aggregate across all pools per snapshot: db.client.connection.count state=idle|used, db.client.connection.max, and phase timeouts. Provider tags are discarded; this is neither endpoint/pool attribution nor pool-wait duration.",
-                PostgreSqlLockWait = "not_measured",
+                PostgreSqlSampledLockWaitOccupancy = "A separate Pooling=false monitor runs one pg_stat_activity query per configured interval, scoped to the current database and excluding its PID; this adds monitoring overhead. sampleCount is polling observations; samplesWithLockWaits counts observations with one or more sessions where wait_event_type=Lock; totalWaitingSessionObservations sums waiting sessions across samples; maxConcurrentWaitingSessions is the observed maximum. approximateObservedWaitingSessionMilliseconds uses monotonic elapsed time between observations with a left-endpoint occupancy assumption and saturates at a bounded maximum. It is a sampled estimate, not exact lock-wait duration, per-request attribution, or a complete census between samples. No connection details, PIDs, query text, SQL, or workload identifiers are emitted.",
                 RawSql = "not_measured"
             }
         };
