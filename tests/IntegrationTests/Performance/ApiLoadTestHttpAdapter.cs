@@ -1,0 +1,310 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+
+namespace IntegrationTests.Performance;
+
+internal sealed record ApiLoadTestCatalogEntry(
+    ApiLoadTestScenario Scenario,
+    string Label,
+    HttpMethod Method,
+    string RelativePath,
+    bool RequiresAuthorization,
+    HttpStatusCode ExpectedStatus);
+internal sealed record ApiLoadTestFixtureContext(Guid OrganizationId);
+
+internal static class ApiLoadTestRequestCatalog
+{
+    private static readonly Dictionary<ApiLoadTestScenario, ApiLoadTestCatalogEntry> entries =
+        new Dictionary<ApiLoadTestScenario, ApiLoadTestCatalogEntry>
+        {
+            [ApiLoadTestScenario.Login] = new(ApiLoadTestScenario.Login, "login", HttpMethod.Post, "auth/login", false, HttpStatusCode.OK),
+            [ApiLoadTestScenario.ReadList] = new(ApiLoadTestScenario.ReadList, "read-list", HttpMethod.Get, "organizations?page=1&pageSize=20", true, HttpStatusCode.OK),
+            [ApiLoadTestScenario.ReadDetail] = new(ApiLoadTestScenario.ReadDetail, "read-detail", HttpMethod.Get, "organizations/{fixture}", true, HttpStatusCode.OK),
+            [ApiLoadTestScenario.Report] = new(ApiLoadTestScenario.Report, "report", HttpMethod.Get, "reports/dashboard", true, HttpStatusCode.OK)
+        };
+
+    internal static ApiLoadTestCatalogEntry Get(ApiLoadTestScenario scenario, ApiLoadTestFixtureContext? fixture = null)
+    {
+        if (!entries.TryGetValue(scenario, out ApiLoadTestCatalogEntry? entry))
+        {
+            throw new NotSupportedException($"Load scenario '{scenario}' is unsupported because a safe fixture is unavailable.");
+        }
+
+        if (scenario != ApiLoadTestScenario.ReadDetail)
+        {
+            return entry;
+        }
+
+        return fixture is null
+            ? throw new InvalidOperationException("Read-detail requires a seeded fixture context.")
+            : entry with { RelativePath = $"organizations/{fixture.OrganizationId:D}" };
+    }
+}
+
+internal sealed record ApiLoadTestHttpSample(
+    ApiBenchmarkResponseClassification Classification,
+    int? StatusCode,
+    double ElapsedMs,
+    int PayloadBytes,
+    double? RetryAfterSeconds)
+{
+    internal bool IsSuccessful => Classification == ApiBenchmarkResponseClassification.ExpectedResponse;
+}
+
+internal sealed record ApiLoadTestHttpMetrics(
+    int Completed,
+    int Successful,
+    int UnexpectedHttp,
+    int RateLimited,
+    int TimeoutOrCancellation,
+    int TransportFailures,
+    long CompletedResponsePayloadBytes);
+internal sealed record ApiLoadTestScenarioMetrics(
+    int Count, int SuccessCount, int FailureCount, long PayloadBytes,
+    double? ApproximateP50Ms, double? ApproximateP95Ms, double? ApproximateP99Ms);
+
+/// <summary>
+/// HTTP adapter for the explicit load test. Labels are logical names only and never contain tokens, credentials, IDs, or email addresses.
+/// </summary>
+internal sealed class ApiLoadTestHttpAdapter(
+    HttpClient client,
+    string administratorEmail,
+    string administratorPassword,
+    ApiLoadTestFixtureContext? fixtureContext = null) : IDisposable
+{
+    private readonly HttpClient client = client ?? throw new ArgumentNullException(nameof(client));
+    private readonly string administratorEmail = administratorEmail ?? throw new ArgumentNullException(nameof(administratorEmail));
+    private readonly string administratorPassword = administratorPassword ?? throw new ArgumentNullException(nameof(administratorPassword));
+    private readonly ApiLoadTestFixtureContext? fixtureContext = fixtureContext;
+    private readonly SemaphoreSlim authenticationLock = new(1, 1);
+    private string? accessToken;
+    private int completed;
+    private int successful;
+    private int unexpectedHttp;
+    private int rateLimited;
+    private int timeoutOrCancellation;
+    private int transportFailures;
+    private long completedResponsePayloadBytes;
+    private readonly Dictionary<ApiLoadTestScenario, ScenarioAccumulator> scenarioMetrics =
+        Enum.GetValues<ApiLoadTestScenario>().ToDictionary(scenario => scenario, _ => new ScenarioAccumulator());
+
+    internal async Task<ApiLoadTestExecutionSample> ExecuteAsync(
+        ApiLoadTestScenario scenario,
+        CancellationToken cancellationToken)
+    {
+        ApiLoadTestHttpSample sample = await ExecuteHttpAsync(scenario, cancellationToken).ConfigureAwait(false);
+        Record(scenario, sample);
+        return new ApiLoadTestExecutionSample(sample.IsSuccessful);
+    }
+
+    /// <summary>Obtains the bearer token before warm-up; setup traffic is intentionally excluded from load metrics.</summary>
+    internal async Task AuthenticateAsync(CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref accessToken) is not null)
+        {
+            return;
+        }
+
+        await authenticationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (accessToken is null)
+            {
+                ApiLoadTestHttpSample login = await ExecuteHttpAsync(ApiLoadTestScenario.Login, cancellationToken).ConfigureAwait(false);
+                if (!login.IsSuccessful || accessToken is null)
+                {
+                    throw new InvalidOperationException("Load-test authentication setup did not receive the expected response.");
+                }
+            }
+        }
+        finally
+        {
+            authenticationLock.Release();
+        }
+    }
+
+    internal ApiLoadTestHttpMetrics GetMetrics() => new(
+        Volatile.Read(ref completed),
+        Volatile.Read(ref successful),
+        Volatile.Read(ref unexpectedHttp),
+        Volatile.Read(ref rateLimited),
+        Volatile.Read(ref timeoutOrCancellation),
+        Volatile.Read(ref transportFailures),
+        Interlocked.Read(ref completedResponsePayloadBytes));
+
+    internal IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> GetScenarioMetrics() =>
+        scenarioMetrics.ToDictionary(pair => pair.Key, pair => pair.Value.Snapshot());
+
+    internal static ApiBenchmarkResponseClassification ClassifyResponse(
+        int? statusCode,
+        HttpStatusCode expectedStatus,
+        bool timedOutOrCancelled) =>
+        ApiLatencyBenchmarkMetrics.Classify(statusCode, (int)expectedStatus, timedOutOrCancelled);
+
+    private async Task<ApiLoadTestHttpSample> ExecuteHttpAsync(
+        ApiLoadTestScenario scenario,
+        CancellationToken cancellationToken)
+    {
+        ApiLoadTestCatalogEntry entry = ApiLoadTestRequestCatalog.Get(scenario, fixtureContext);
+        if (entry.RequiresAuthorization && Volatile.Read(ref accessToken) is null)
+        {
+            throw new InvalidOperationException("Load-test authentication setup must complete before protected scenarios.");
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var request = new HttpRequestMessage(entry.Method, entry.RelativePath);
+            if (entry.Scenario == ApiLoadTestScenario.Login)
+            {
+                request.Content = JsonContent.Create(new { email = administratorEmail, password = administratorPassword });
+            }
+            else if (entry.RequiresAuthorization)
+            {
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            byte[] body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+            stopwatch.Stop();
+            if (entry.Scenario == ApiLoadTestScenario.Login && response.StatusCode == HttpStatusCode.OK)
+            {
+                SetAccessToken(body);
+            }
+
+            return new ApiLoadTestHttpSample(
+                ClassifyResponse((int)response.StatusCode, entry.ExpectedStatus, timedOutOrCancelled: false),
+                (int)response.StatusCode,
+                stopwatch.Elapsed.TotalMilliseconds,
+                body.Length,
+                response.StatusCode == HttpStatusCode.TooManyRequests
+                    ? ApiLatencyBenchmarkMetrics.ParseRetryAfterSeconds(response.Headers.RetryAfter, DateTimeOffset.UtcNow)
+                    : null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            return new ApiLoadTestHttpSample(ApiBenchmarkResponseClassification.TimeoutOrCancellation, null, stopwatch.Elapsed.TotalMilliseconds, 0, null);
+        }
+        catch (HttpRequestException)
+        {
+            stopwatch.Stop();
+            return new ApiLoadTestHttpSample(ApiBenchmarkResponseClassification.TransportFailure, null, stopwatch.Elapsed.TotalMilliseconds, 0, null);
+        }
+    }
+
+    private void SetAccessToken(byte[] body)
+    {
+        using var json = JsonDocument.Parse(body);
+        JsonElement data = json.RootElement.GetProperty("data");
+        string? token = data.TryGetProperty("access_token", out JsonElement snakeCase)
+            ? snakeCase.GetString()
+            : data.GetProperty("accessToken").GetString();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new JsonException("Login response did not contain an access token.");
+        }
+
+        Volatile.Write(ref accessToken, token);
+    }
+
+    public void Dispose() => authenticationLock.Dispose();
+
+    private void Record(ApiLoadTestScenario scenario, ApiLoadTestHttpSample sample)
+    {
+        scenarioMetrics[scenario].Record(sample);
+        if (sample.StatusCode is not null)
+        {
+            Interlocked.Increment(ref completed);
+            Interlocked.Add(ref completedResponsePayloadBytes, sample.PayloadBytes);
+        }
+
+        switch (sample.Classification)
+        {
+            case ApiBenchmarkResponseClassification.ExpectedResponse:
+                Interlocked.Increment(ref successful);
+                break;
+            case ApiBenchmarkResponseClassification.UnexpectedHttpError:
+                Interlocked.Increment(ref unexpectedHttp);
+                break;
+            case ApiBenchmarkResponseClassification.RateLimited:
+                Interlocked.Increment(ref rateLimited);
+                break;
+            case ApiBenchmarkResponseClassification.TimeoutOrCancellation:
+                Interlocked.Increment(ref timeoutOrCancellation);
+                break;
+            case ApiBenchmarkResponseClassification.TransportFailure:
+                Interlocked.Increment(ref transportFailures);
+                break;
+        }
+    }
+
+    private sealed class ScenarioAccumulator
+    {
+        private static readonly double[] BucketUpperBoundsMs = [1, 5, 10, 25, 50, 100, 250, 500, 1_000, double.MaxValue];
+        private readonly object gate = new();
+        private readonly int[] bucketCounts = new int[BucketUpperBoundsMs.Length];
+        private int count;
+        private int success;
+        private long payloadBytes;
+
+        internal void Record(ApiLoadTestHttpSample sample)
+        {
+            lock (gate)
+            {
+                count++;
+                if (sample.IsSuccessful)
+                {
+                    success++;
+                }
+                payloadBytes += sample.PayloadBytes;
+                int bucket = Array.FindIndex(BucketUpperBoundsMs, bound => sample.ElapsedMs <= bound);
+                bucketCounts[bucket < 0 ? bucketCounts.Length - 1 : bucket]++;
+            }
+        }
+
+        internal ApiLoadTestScenarioMetrics Snapshot()
+        {
+            lock (gate)
+            {
+                return new ApiLoadTestScenarioMetrics(
+                    count, success, count - success, payloadBytes,
+                    Percentile(.50), Percentile(.95), Percentile(.99));
+            }
+        }
+
+        private double? Percentile(double percentile)
+        {
+            if (count == 0)
+            {
+                return null;
+            }
+            int target = (int)Math.Ceiling(count * percentile);
+            int cumulative = 0;
+            for (int index = 0; index < bucketCounts.Length; index++)
+            {
+                cumulative += bucketCounts[index];
+                if (cumulative >= target)
+                {
+                    return BucketUpperBoundsMs[index];
+                }
+            }
+            return BucketUpperBoundsMs[^1];
+        }
+    }
+}
+
+internal static class ApiLoadTestFeatureGate
+{
+    internal static bool IsEnabled => string.Equals(
+        Environment.GetEnvironmentVariable("RUN_API_LOAD_TESTS"),
+        "1",
+        StringComparison.Ordinal);
+}

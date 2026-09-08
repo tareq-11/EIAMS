@@ -68,7 +68,8 @@ internal sealed class ApiLoadTestRunDefinition(
     double? arrivalRatePerSecond,
     ulong seed,
     ApiLoadTestPhase warmup,
-    ApiLoadTestPhase measurement)
+    ApiLoadTestPhase measurement,
+    IReadOnlyList<ApiLoadTestScenarioWeight>? scenarioMix = null)
 {
     internal int RunNumber { get; } = runNumber;
     internal int ClientConcurrency { get; } = clientConcurrency;
@@ -77,9 +78,11 @@ internal sealed class ApiLoadTestRunDefinition(
     internal ulong Seed { get; } = seed;
     internal ApiLoadTestPhase Warmup { get; } = warmup;
     internal ApiLoadTestPhase Measurement { get; } = measurement;
+    internal IReadOnlyList<ApiLoadTestScenarioWeight> ScenarioMix { get; } =
+        ApiLoadTestScenarioMix.CreateValidatedSnapshot(scenarioMix ?? ApiLoadTestScenarioMix.Weights);
 
     internal ApiLoadTestScenario SelectScenario(ulong requestIndex) =>
-        ApiLoadTestScenarioMix.Select(Seed, requestIndex);
+        ApiLoadTestScenarioMix.Select(Seed, requestIndex, ScenarioMix);
 
     /// <summary>
     /// Lazily yields the deterministic scenario sequence. Executors stop enumeration at their phase boundary.
@@ -251,16 +254,29 @@ internal static class ApiLoadTestScenarioMix
     ];
 
     internal static IReadOnlyList<ApiLoadTestScenarioWeight> Weights => weights;
+    internal static readonly IReadOnlyList<ApiLoadTestScenarioWeight> SmokeWeights =
+    [
+        new(ApiLoadTestScenario.Login, 15),
+        new(ApiLoadTestScenario.ReadList, 45),
+        new(ApiLoadTestScenario.ReadDetail, 25),
+        new(ApiLoadTestScenario.Report, 15)
+    ];
     internal static int TotalWeight => 100;
 
     internal static ApiLoadTestScenario Select(ulong seed, ulong requestIndex)
+        => Select(seed, requestIndex, weights);
+
+    internal static ApiLoadTestScenario Select(
+        ulong seed,
+        ulong requestIndex,
+        IReadOnlyList<ApiLoadTestScenarioWeight> scenarioMix)
     {
         ulong mixedSeed = MixSeed(seed);
         int offset = (int)(mixedSeed % (ulong)TotalWeight);
         int step = steps[(int)((mixedSeed >> 32) % (ulong)steps.Length)];
         int slot = (int)(((ulong)offset + requestIndex * (ulong)step) % (ulong)TotalWeight);
         int cumulativeWeight = 0;
-        foreach (ApiLoadTestScenarioWeight weight in weights)
+        foreach (ApiLoadTestScenarioWeight weight in scenarioMix)
         {
             cumulativeWeight += weight.Weight;
             if (slot < cumulativeWeight)
@@ -270,6 +286,18 @@ internal static class ApiLoadTestScenarioMix
         }
 
         throw new InvalidOperationException("Scenario mix weights must cover every selection slot.");
+    }
+
+    internal static IReadOnlyList<ApiLoadTestScenarioWeight> CreateValidatedSnapshot(
+        IReadOnlyList<ApiLoadTestScenarioWeight> scenarioMix)
+    {
+        ArgumentNullException.ThrowIfNull(scenarioMix);
+        ApiLoadTestScenarioWeight[] snapshot = scenarioMix.ToArray();
+        if (snapshot.Length == 0 || snapshot.Any(weight => weight.Weight <= 0) || snapshot.Sum(weight => weight.Weight) != TotalWeight)
+        {
+            throw new ArgumentException("Scenario mix must use positive weights totaling 100.", nameof(scenarioMix));
+        }
+        return Array.AsReadOnly(snapshot);
     }
 
     private static ulong MixSeed(ulong seed)
