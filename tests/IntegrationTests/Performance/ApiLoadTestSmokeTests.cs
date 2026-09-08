@@ -14,6 +14,7 @@ public sealed class ApiLoadTestSmokeTests(
 {
     [ExplicitApiLoadTestFact]
     [Trait("Category", "Performance")]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.NormalExpectedTraffic)]
     public async Task RunLocalKestrelSmokeWithFullMixedWorkloadAsync()
     {
         const long seed = 20260908;
@@ -83,6 +84,7 @@ public sealed class ApiLoadTestSmokeTests(
         IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> scenarioMetrics = adapter.GetScenarioMetrics();
         var result = new
         {
+            WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
             Transport = "Kestrel loopback HTTP",
             Database = "integration-testcontainer-local",
             Scenarios = new[] { "login", "read-list", "read-detail", "report", "post" },
@@ -107,8 +109,7 @@ public sealed class ApiLoadTestSmokeTests(
         await File.WriteAllTextAsync(resultPath, JsonSerializer.Serialize(result));
         output.WriteLine($"JSON result: {resultPath}");
 
-        (metrics.UnexpectedHttp + metrics.RateLimited + metrics.TimeoutOrCancellation + metrics.TransportFailures)
-            .ShouldBe(0);
+        PerformanceWorkloadContracts.EnsureNormalExpectedTrafficHasNoFailures(metrics);
         metrics.Successful.ShouldBeGreaterThan(0);
         execution.Warmup.FaultedCount.ShouldBe(0);
         execution.Measurement.FaultedCount.ShouldBe(0);

@@ -75,6 +75,27 @@ public sealed class ApiLoadTestHttpAdapterTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ShouldExcludeRateLimitedOnlyScenarioFromNormalLatencyPercentiles()
+    {
+        const string rateLimitedBody = "{}";
+        using var handler = new StaticResponseHandler(HttpStatusCode.TooManyRequests, rateLimitedBody);
+        using var client = new HttpClient(handler, false) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "not-logged");
+
+        await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
+
+        ApiLoadTestScenarioMetrics metrics = adapter.GetScenarioMetrics()[ApiLoadTestScenario.Login];
+        metrics.Count.ShouldBe(1);
+        metrics.SuccessCount.ShouldBe(0);
+        metrics.FailureCount.ShouldBe(1);
+        metrics.PayloadBytes.ShouldBe(rateLimitedBody.Length);
+        metrics.ApproximateP50Ms.ShouldBeNull();
+        metrics.ApproximateP95Ms.ShouldBeNull();
+        metrics.ApproximateP99Ms.ShouldBeNull();
+        adapter.GetMetrics().RateLimited.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ShouldRejectProtectedReadBeforeSetupWithoutSendingARequest()
     {
         using var handler = new CountingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));

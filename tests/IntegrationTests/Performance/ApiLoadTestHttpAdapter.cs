@@ -325,10 +325,10 @@ internal sealed class ApiLoadTestHttpAdapter(
                 if (sample.IsSuccessful)
                 {
                     success++;
+                    int bucket = Array.FindIndex(BucketUpperBoundsMs, bound => sample.ElapsedMs <= bound);
+                    bucketCounts[bucket < 0 ? bucketCounts.Length - 1 : bucket]++;
                 }
                 payloadBytes += sample.PayloadBytes;
-                int bucket = Array.FindIndex(BucketUpperBoundsMs, bound => sample.ElapsedMs <= bound);
-                bucketCounts[bucket < 0 ? bucketCounts.Length - 1 : bucket]++;
             }
         }
 
@@ -344,11 +344,11 @@ internal sealed class ApiLoadTestHttpAdapter(
 
         private double? Percentile(double percentile)
         {
-            if (count == 0)
+            if (success == 0)
             {
                 return null;
             }
-            int target = (int)Math.Ceiling(count * percentile);
+            int target = (int)Math.Ceiling(success * percentile);
             int cumulative = 0;
             for (int index = 0; index < bucketCounts.Length; index++)
             {

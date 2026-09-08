@@ -34,6 +34,7 @@ public sealed class ApiLatencyBenchmarkTests
 
     [ExplicitApiBenchmarkFact]
     [Trait("Category", "Performance")]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.NormalExpectedTraffic)]
     public async Task MeasureRepresentativeApiLatency()
     {
         DateTime startedAtUtc = DateTime.UtcNow;
@@ -196,6 +197,7 @@ public sealed class ApiLatencyBenchmarkTests
         string resultPath = Path.Combine(resultDirectory, $"eiams-api-latency-{runId}.json");
         var benchmarkRun = new
         {
+            WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
             RunId = runId,
             Commit = GetBuildVersion(),
             StartedAtUtc = startedAtUtc,
@@ -506,7 +508,7 @@ public sealed class ApiLatencyBenchmarkTests
         }
     }
 
-    private static void AddWindowFailures(
+    internal static void AddWindowFailures(
         string scenario,
         ApiLatencyWindowMetrics metrics,
         List<string> failures)

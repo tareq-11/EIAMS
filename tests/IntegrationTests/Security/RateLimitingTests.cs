@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Application.Abstractions.Authentication;
+using IntegrationTests.Performance;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace IntegrationTests.Security;
 
 [Collection(nameof(IntegrationTestCollection))]
+[Trait("Category", PerformanceWorkloadContracts.SecurityCategory)]
 public sealed class RateLimitingTests : BaseIntegrationTest
 {
     private readonly IntegrationTestWebAppFactory factory;
@@ -21,6 +23,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     }
 
     [Fact]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.NormalExpectedTraffic)]
     public async Task Login_Should_RespondSuccessfully_UnderNormalRate()
     {
         // Act: Single login request
@@ -35,6 +38,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     }
 
     [Fact]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.Abuse)]
     public async Task AuthenticationRateLimit_Should_Return429EnvelopeAndRetryAfter_WhenExceeded()
     {
         await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
@@ -62,6 +66,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     }
 
     [Fact]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.Abuse)]
     public async Task GlobalRateLimit_Should_RunBeforeAuthorizationWork()
     {
         await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
@@ -83,6 +88,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     }
 
     [Fact]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.Abuse)]
     public async Task AuthenticationConcurrencyLimit_Should_RejectOverlappingPasswordVerification()
     {
         using var blockingHasher = new BlockingPasswordHasher();
@@ -126,6 +132,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     }
 
     [Fact]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.Abuse)]
     public async Task GlobalAuthenticationConcurrencyLimit_Should_ApplyAcrossDifferentClientPartitions()
     {
         AccessTokens administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorEmail);

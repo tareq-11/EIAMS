@@ -105,6 +105,44 @@ public sealed class ApiLatencyBenchmarkMetricsTests
         result.RetryAfter.ShouldBe(new ApiBenchmarkRetryAfterSummary(1, 5, 5, 5));
     }
 
+    [Fact]
+    public void NormalExpectedTraffic_ShouldFailOn429_AndExcludeItFromLatencyPercentiles()
+    {
+        ApiBenchmarkProcessSnapshot snapshot = new(0, 0, 0, 0, 0, 0, null, null, null);
+        ApiLatencyWindowMetrics result = ApiLatencyBenchmarkMetrics.Calculate(
+            [
+                new ApiBenchmarkSample(10, 1, ApiBenchmarkResponseClassification.ExpectedResponse, 200, null),
+                new ApiBenchmarkSample(900, 1, ApiBenchmarkResponseClassification.RateLimited, 429, 5)
+            ],
+            TimeSpan.FromSeconds(1),
+            snapshot,
+            snapshot);
+
+        result.SuccessfulSampleCount.ShouldBe(1);
+        result.RateLimitedCount.ShouldBe(1);
+        result.P95Ms.ShouldBe(10);
+        Should.Throw<InvalidOperationException>(() =>
+            PerformanceWorkloadContracts.EnsureNormalExpectedTrafficHasNoFailures(
+                new ApiLoadTestHttpMetrics(2, 1, 0, 1, 0, 0, 2)));
+    }
+
+    [Fact]
+    public void NormalBenchmark_AddWindowFailures_ShouldReport429AsAFailure()
+    {
+        ApiBenchmarkProcessSnapshot snapshot = new(0, 0, 0, 0, 0, 0, null, null, null);
+        ApiLatencyWindowMetrics metrics = ApiLatencyBenchmarkMetrics.Calculate(
+            [new ApiBenchmarkSample(20, 2, ApiBenchmarkResponseClassification.RateLimited, 429, 5)],
+            TimeSpan.FromSeconds(1),
+            snapshot,
+            snapshot);
+        var failures = new List<string>();
+
+        ApiLatencyBenchmarkTests.AddWindowFailures("normal-traffic", metrics, failures);
+
+        failures.Count.ShouldBe(1);
+        failures[0].ShouldContain("normal-traffic: HTTP 429 responses=1");
+    }
+
     [Theory]
     [InlineData(ApiBenchmarkResponseClassification.ExpectedResponse, null, 200)]
     [InlineData(ApiBenchmarkResponseClassification.ExpectedResponse, 10d, null)]
