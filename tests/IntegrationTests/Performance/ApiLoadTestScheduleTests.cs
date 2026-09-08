@@ -3,6 +3,67 @@ namespace IntegrationTests.Performance;
 public sealed class ApiLoadTestScheduleTests
 {
     [Fact]
+    public void RunDefinition_ShouldRejectScenarioMixWhoseWeightTotalIsNot100()
+    {
+        Should.Throw<ArgumentException>(() => CreateRun([new(ApiLoadTestScenario.Login, 99)]));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void RunDefinition_ShouldRejectZeroOrNegativeScenarioWeights(int invalidWeight)
+    {
+        Should.Throw<ArgumentException>(() => CreateRun(
+        [
+            new(ApiLoadTestScenario.Login, invalidWeight),
+            new(ApiLoadTestScenario.ReadList, 100 - invalidWeight)
+        ]));
+    }
+
+    [Fact]
+    public void RunDefinition_ShouldSnapshotScenarioMixBeforeTheSourceIsMutated()
+    {
+        var source = new List<ApiLoadTestScenarioWeight>
+        {
+            new(ApiLoadTestScenario.Login, 100)
+        };
+        ApiLoadTestRunDefinition run = CreateRun(source);
+        source[0] = new ApiLoadTestScenarioWeight(ApiLoadTestScenario.Post, 100);
+
+        run.ScenarioMix.Single().Scenario.ShouldBe(ApiLoadTestScenario.Login);
+        run.SelectScenario(0).ShouldBe(ApiLoadTestScenario.Login);
+    }
+
+    [Fact]
+    public void SmokeWeights_ShouldDistributeExactlyWithoutPost()
+    {
+        ApiLoadTestRunDefinition run = CreateRun(ApiLoadTestScenarioMix.SmokeWeights);
+        var counts = Enumerable.Range(0, 100)
+            .Select(index => run.SelectScenario((ulong)index))
+            .GroupBy(scenario => scenario)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        counts[ApiLoadTestScenario.Login].ShouldBe(15);
+        counts[ApiLoadTestScenario.ReadList].ShouldBe(45);
+        counts[ApiLoadTestScenario.ReadDetail].ShouldBe(25);
+        counts[ApiLoadTestScenario.Report].ShouldBe(15);
+        counts.ContainsKey(ApiLoadTestScenario.Post).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void DefaultWeights_ShouldRemainTheFullMixedWorkload()
+    {
+        ApiLoadTestScenarioMix.Weights.ShouldBe(new[]
+        {
+            new ApiLoadTestScenarioWeight(ApiLoadTestScenario.Login, 10),
+            new ApiLoadTestScenarioWeight(ApiLoadTestScenario.ReadList, 45),
+            new ApiLoadTestScenarioWeight(ApiLoadTestScenario.ReadDetail, 25),
+            new ApiLoadTestScenarioWeight(ApiLoadTestScenario.Report, 15),
+            new ApiLoadTestScenarioWeight(ApiLoadTestScenario.Post, 5)
+        });
+    }
+
+    [Fact]
     public void CreateDefault_ShouldProduceSeparateMixedWorkloadRunsForEveryModeAndConcurrency()
     {
         var configuration = ApiLoadTestConfiguration.CreateDefault();
@@ -209,4 +270,9 @@ public sealed class ApiLoadTestScheduleTests
 
         return maximum;
     }
+
+    private static ApiLoadTestRunDefinition CreateRun(IReadOnlyList<ApiLoadTestScenarioWeight> mix) => new(
+        1, 1, ApiLoadTestMode.ClosedLoop, null, 42,
+        new ApiLoadTestPhase(ApiLoadTestPhaseKind.Warmup, TimeSpan.FromSeconds(10)),
+        new ApiLoadTestPhase(ApiLoadTestPhaseKind.Measurement, TimeSpan.FromMinutes(1)), mix);
 }
