@@ -29,7 +29,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         $"eiams-integration-attachments-{Guid.NewGuid():N}");
 
     private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder("postgres:17-alpine")
-        .WithDatabase("clean-architecture-template")
+        .WithDatabase("clean_architecture_integration_test")
         .WithUsername("postgres")
         .WithPassword("postgres")
         .Build();
