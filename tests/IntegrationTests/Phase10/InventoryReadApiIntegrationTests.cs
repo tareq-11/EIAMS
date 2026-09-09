@@ -48,7 +48,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Act + Assert: global balance list contains only the assigned warehouse.
-        HttpResponseMessage balancesResponse = await HttpClient.GetAsync("inventory/balances?page=1&pageSize=10");
+        HttpResponseMessage balancesResponse = await HttpClient.GetAsync(
+            "inventory/balances?search=%D9%85%D8%A7%D8%AF%D8%A9&page=1&pageSize=10");
         string balancesJson = await balancesResponse.Content.ReadAsStringAsync();
         balancesResponse.StatusCode.ShouldBe(HttpStatusCode.OK, balancesJson);
         using var balancesBody = JsonDocument.Parse(balancesJson);

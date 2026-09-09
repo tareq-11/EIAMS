@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Searching;
 using Domain.Common;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,9 +20,7 @@ internal static class StockMovementQuerySupport
         string? search = null,
         Guid? movementId = null)
     {
-        string? normalizedSearch = string.IsNullOrWhiteSpace(search)
-            ? null
-            : search.Trim().ToUpperInvariant();
+        string? normalizedSearch = SqlLikePattern.CreateContains(search, normalizeToUpper: true);
         DateTime? fromDate = fromUtc?.UtcDateTime;
         DateTime? toDate = toUtc?.UtcDateTime;
 
@@ -40,11 +39,11 @@ internal static class StockMovementQuerySupport
             where toDate == null || movement.PostedAtUtc < toDate
             where normalizedSearch == null ||
 #pragma warning disable CA1304, CA1311 // Translated by EF Core to the database UPPER function.
-                  EF.Functions.Like(warehouse.Code.ToUpper(), $"%{normalizedSearch}%") ||
-                  EF.Functions.Like(warehouse.Name.ToUpper(), $"%{normalizedSearch}%") ||
-                  EF.Functions.Like(material.Code.ToUpper(), $"%{normalizedSearch}%") ||
-                  EF.Functions.Like(material.NameAr.ToUpper(), $"%{normalizedSearch}%") ||
-                  EF.Functions.Like(document.SystemReferenceNumber.ToUpper(), $"%{normalizedSearch}%")
+                  EF.Functions.Like(warehouse.Code.ToUpper(), normalizedSearch, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(warehouse.Name.ToUpper(), normalizedSearch, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.Code.ToUpper(), normalizedSearch, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.NameAr.ToUpper(), normalizedSearch, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(document.SystemReferenceNumber.ToUpper(), normalizedSearch, SqlLikePattern.EscapeCharacter)
 #pragma warning restore CA1304, CA1311
             orderby movement.PostedAtUtc descending, movement.Id descending
             select new StockMovementResponse(

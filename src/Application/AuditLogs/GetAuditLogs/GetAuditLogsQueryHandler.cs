@@ -4,6 +4,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Abstractions.Searching;
 using Domain.AuditLogs;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -79,12 +80,12 @@ internal sealed class GetAuditLogsQueryHandler(
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            string term = query.Search.Trim();
+            string term = SqlLikePattern.CreateContains(query.Search)!;
             source = source.Where(log =>
-                EF.Functions.Like(log.Action, $"%{term}%") ||
-                EF.Functions.Like(log.EntityType, $"%{term}%") ||
-                log.CommandName != null && EF.Functions.Like(log.CommandName, $"%{term}%") ||
-                log.RequestId != null && EF.Functions.Like(log.RequestId, $"%{term}%"));
+                EF.Functions.Like(log.Action, term, SqlLikePattern.EscapeCharacter) ||
+                EF.Functions.Like(log.EntityType, term, SqlLikePattern.EscapeCharacter) ||
+                log.CommandName != null && EF.Functions.Like(log.CommandName, term, SqlLikePattern.EscapeCharacter) ||
+                log.RequestId != null && EF.Functions.Like(log.RequestId, term, SqlLikePattern.EscapeCharacter));
         }
 
         return await AuditLogQuerySupport.ToPagedResultAsync(

@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Abstractions.Searching;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -26,7 +27,7 @@ internal sealed class GetInventoryReportQueryHandler(
         }
 
         Guid[] warehouseIds = access.WarehouseIds.ToArray();
-        string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim().ToUpperInvariant();
+        string? search = SqlLikePattern.CreateContains(query.Search, normalizeToUpper: true);
         IQueryable<InventoryReportRow> source =
             from balance in context.InventoryBalances.AsNoTracking()
             join material in context.Materials.AsNoTracking() on balance.MaterialId equals material.Id
@@ -34,8 +35,8 @@ internal sealed class GetInventoryReportQueryHandler(
             where query.WarehouseId == null || balance.WarehouseId == query.WarehouseId
             where query.MaterialId == null || balance.MaterialId == query.MaterialId
 #pragma warning disable CA1304, CA1311 // Translated by EF Core into SQL UPPER.
-            where search == null || EF.Functions.Like(material.Code.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(material.NameAr.ToUpper(), $"%{search}%")
+            where search == null || EF.Functions.Like(material.Code.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.NameAr.ToUpper(), search, SqlLikePattern.EscapeCharacter)
 #pragma warning restore CA1304, CA1311
             group balance by new { material.Id, material.Code, material.NameAr } into grouped
             orderby grouped.Key.Code, grouped.Key.Id

@@ -104,4 +104,63 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
             "receiving-infos/suppliers?search=integration");
         supplierSuggestions.EnsureSuccessStatusCode();
     }
+
+    [Fact]
+    public async Task CounterpartSearch_ShouldTreatWildcardCharactersAsLiteralUnicodeInput()
+    {
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            context.UserRoleScopes.Add(UserRoleScope.Create(
+                Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+            await context.SaveChangesAsync();
+        }
+
+        Authenticate(tokens.AccessToken);
+        Guid percentId = await CreateExternalPartyAsync("شركة اختبار %", "SPECIAL-PERCENT");
+        Guid underscoreId = await CreateExternalPartyAsync("شركة اختبار _", "SPECIAL-UNDERSCORE");
+        Guid slashId = await CreateExternalPartyAsync(@"شركة اختبار \", "SPECIAL-SLASH");
+        Guid ordinaryId = await CreateExternalPartyAsync("شركة اختبار عادي", "SPECIAL-ORDINARY");
+
+        string percentResults = await SearchCounterpartsAsync("%25");
+        percentResults.ShouldContain(percentId.ToString());
+        percentResults.ShouldNotContain(underscoreId.ToString());
+        percentResults.ShouldNotContain(slashId.ToString());
+        percentResults.ShouldNotContain(ordinaryId.ToString());
+
+        string underscoreResults = await SearchCounterpartsAsync("_");
+        underscoreResults.ShouldContain(underscoreId.ToString());
+        underscoreResults.ShouldNotContain(percentId.ToString());
+        underscoreResults.ShouldNotContain(slashId.ToString());
+        underscoreResults.ShouldNotContain(ordinaryId.ToString());
+
+        string slashResults = await SearchCounterpartsAsync("%5C");
+        slashResults.ShouldContain(slashId.ToString());
+        slashResults.ShouldNotContain(percentId.ToString());
+        slashResults.ShouldNotContain(underscoreId.ToString());
+        slashResults.ShouldNotContain(ordinaryId.ToString());
+
+        string caseInsensitiveResults = await SearchCounterpartsAsync("special-percent");
+        caseInsensitiveResults.ShouldContain(percentId.ToString());
+    }
+
+    private async Task<Guid> CreateExternalPartyAsync(string nameAr, string code)
+    {
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            "external-parties",
+            new { nameAr, code, contactInfo = (string?)null, notes = (string?)null });
+        response.EnsureSuccessStatusCode();
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.GetProperty("data").GetProperty("id").GetGuid();
+    }
+
+    private async Task<string> SearchCounterpartsAsync(string encodedSearch)
+    {
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"counterparts?type=External&search={encodedSearch}&page=1&pageSize=20");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 }

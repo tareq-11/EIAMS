@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Abstractions.Searching;
 using Domain.Common;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -28,7 +29,7 @@ internal sealed class GetAssetsQueryHandler(
         }
 
         Guid[] warehouseIds = access.WarehouseIds.ToArray();
-        string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim().ToUpperInvariant();
+        string? search = SqlLikePattern.CreateContains(query.Search, normalizeToUpper: true);
         IQueryable<AssetResponse> source =
             from asset in context.Assets.AsNoTracking()
             join current in context.AssetCurrentStatuses.AsNoTracking() on asset.Id equals current.AssetId
@@ -40,10 +41,10 @@ internal sealed class GetAssetsQueryHandler(
             where query.MaterialId == null || asset.MaterialId == query.MaterialId
             where query.Status == null || current.CurrentStatus == query.Status
 #pragma warning disable CA1304, CA1311 // Translated by EF Core into SQL UPPER.
-            where search == null || EF.Functions.Like(asset.AssetNumber.ToUpper(), $"%{search}%") ||
-                  asset.SerialNumber != null && EF.Functions.Like(asset.SerialNumber.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(material.Code.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(material.NameAr.ToUpper(), $"%{search}%")
+            where search == null || EF.Functions.Like(asset.AssetNumber.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  asset.SerialNumber != null && EF.Functions.Like(asset.SerialNumber.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.Code.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.NameAr.ToUpper(), search, SqlLikePattern.EscapeCharacter)
 #pragma warning restore CA1304, CA1311
             orderby asset.AssetNumber, asset.Id
             select new AssetResponse(

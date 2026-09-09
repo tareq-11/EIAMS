@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Abstractions.Searching;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -33,12 +34,12 @@ internal sealed class GetUsersQueryHandler(
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
-            string term = query.Search.Trim().ToUpperInvariant();
+            string term = SqlLikePattern.CreateContains(query.Search, normalizeToUpper: true)!;
 #pragma warning disable CA1304, CA1311 // Translated by EF Core to the database UPPER function.
             users = users.Where(user =>
-                EF.Functions.Like(user.Email.ToUpper(), $"%{term}%") ||
-                EF.Functions.Like(user.FirstName.ToUpper(), $"%{term}%") ||
-                EF.Functions.Like(user.LastName.ToUpper(), $"%{term}%"));
+                EF.Functions.Like(user.Email.ToUpper(), term, SqlLikePattern.EscapeCharacter) ||
+                EF.Functions.Like(user.FirstName.ToUpper(), term, SqlLikePattern.EscapeCharacter) ||
+                EF.Functions.Like(user.LastName.ToUpper(), term, SqlLikePattern.EscapeCharacter));
 #pragma warning restore CA1304, CA1311
         }
 
