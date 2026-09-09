@@ -22,6 +22,7 @@ using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Domain.Warehouses;
 using Infrastructure.Database;
+using IntegrationTests.Performance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedKernel;
@@ -175,6 +176,97 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             HttpResponseMessage response = await HttpClient.GetAsync(route);
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         }
+    }
+
+    [Fact]
+    public async Task Dashboard_Should_PreserveScopedTotals_AndUseABoundedQueryBudget()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        SqlCommandCounterInterceptor commandCounter =
+            factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        commandCounter.Reset();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("reports/dashboard");
+        string content = await response.Content.ReadAsStringAsync();
+
+        // Assert: the response remains restricted to the assigned warehouse; the second seeded
+        // warehouse has nine units and must never be included in the five-unit total below.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        using var body = JsonDocument.Parse(content);
+        JsonElement data = body.RootElement.GetProperty("data");
+        data.GetProperty("warehouseCount").GetInt32().ShouldBe(1);
+        data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(1);
+        data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(5m);
+        data.GetProperty("assetCount").GetInt32().ShouldBe(1);
+        data.GetProperty("activeCustodyCount").GetInt32().ShouldBe(0);
+        data.GetProperty("openDocumentCount").GetInt32().ShouldBe(1);
+        data.GetProperty("activeInventoryCountCount").GetInt32().ShouldBe(0);
+
+        // One command reads the scoped dashboard metrics. The remaining allowance covers the
+        // authorization-version/grant cache on a cold request; it prevents a regression to
+        // independently querying each aggregate.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(4);
+    }
+
+    [Fact]
+    public async Task Dashboard_Should_ReturnZeroPermittedMetrics_WhenRequestedWarehouseIsOutsideScope()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"reports/dashboard?warehouseId={seed.OutsideWarehouseId}");
+        string content = await response.Content.ReadAsStringAsync();
+
+        // Assert: filtering can narrow the assigned scope to no warehouses, but it must not
+        // turn permitted optional metrics into null or expose the outside warehouse.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        using var body = JsonDocument.Parse(content);
+        JsonElement data = body.RootElement.GetProperty("data");
+        data.GetProperty("warehouseCount").GetInt32().ShouldBe(0);
+        data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(0);
+        data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(0m);
+        data.GetProperty("assetCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeCustodyCount").GetInt32().ShouldBe(0);
+        data.GetProperty("openDocumentCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeInventoryCountCount").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Dashboard_Should_ReturnNullOnlyForMetricsWithoutPermission_WhenScopeHasNoWarehouses()
+    {
+        // Arrange: the assignment is valid from an authorization perspective, but its
+        // warehouse was intentionally not created. This reaches the empty aggregate fallback.
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantInventoryOnlyPermissionAsync(userId, Guid.NewGuid());
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("reports/dashboard");
+        string content = await response.Content.ReadAsStringAsync();
+
+        // Assert: inventory metrics are zero for an empty permitted scope; the other metrics
+        // remain null because the caller lacks their respective view permissions.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        using var body = JsonDocument.Parse(content);
+        JsonElement data = body.RootElement.GetProperty("data");
+        data.GetProperty("warehouseCount").GetInt32().ShouldBe(0);
+        data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(0);
+        data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(0m);
+        data.GetProperty("assetCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("activeCustodyCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("openDocumentCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("activeInventoryCountCount").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]
@@ -412,6 +504,28 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
             RolePermission.Create(roleId, WellKnownPermissions.InventoryCountsViewId));
+
+        UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
+        if (assignment is null)
+        {
+            context.UserRoleScopes.Add(UserRoleScope.Create(
+                Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+        }
+        else
+        {
+            assignment.ReplaceAssignment(roleId, ScopeType.Warehouse, warehouseId);
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    private async Task GrantInventoryOnlyPermissionAsync(Guid userId, Guid warehouseId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleId = Guid.NewGuid();
+        context.Roles.Add(Role.Create(roleId, $"InventoryOnly-{roleId:N}", null));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)
