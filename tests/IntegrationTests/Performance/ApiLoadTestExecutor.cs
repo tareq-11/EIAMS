@@ -15,7 +15,9 @@ internal interface IApiLoadTestClock
     Task DelayUntilAsync(TimeSpan deadline, CancellationToken cancellationToken);
 }
 
-internal sealed record ApiLoadTestExecutorOptions(TimeSpan ShutdownGracePeriod)
+internal sealed record ApiLoadTestExecutorOptions(
+    TimeSpan ShutdownGracePeriod,
+    int MaximumStartedRequests = int.MaxValue)
 {
     internal static readonly ApiLoadTestExecutorOptions Default = new(TimeSpan.FromSeconds(10));
 }
@@ -31,7 +33,8 @@ internal sealed record ApiLoadTestPhaseExecutionSummary(
     int InFlightAtSummaryCount,
     int UnfinishedAfterGraceCount,
     bool CancellationRequested,
-    int RetainedSampleCount);
+    int RetainedSampleCount,
+    bool SafetyCapExceeded = false);
 
 internal sealed record ApiLoadTestExecutionResult(
     ApiLoadTestPhaseExecutionSummary Warmup,
@@ -174,6 +177,7 @@ internal sealed class ApiLoadTestExecutor(
                 worker,
                 phaseDeadline,
                 accumulator,
+                executionCancellation,
                 executionCancellation.Token,
                 externalCancellationToken))
             .ToArray();
@@ -190,13 +194,18 @@ internal sealed class ApiLoadTestExecutor(
         int workerNumber,
         TimeSpan phaseDeadline,
         PhaseAccumulator accumulator,
+        CancellationTokenSource executionCancellation,
         CancellationToken executionToken,
         CancellationToken externalCancellationToken)
     {
         ulong requestIndex = (ulong)workerNumber;
         while (!externalCancellationToken.IsCancellationRequested && clock.Elapsed < phaseDeadline)
         {
-            accumulator.Start();
+            if (!accumulator.TryStart(options.MaximumStartedRequests))
+            {
+                await executionCancellation.CancelAsync().ConfigureAwait(false);
+                return;
+            }
             try
             {
                 ApiLoadTestExecutionSample sample = await executeScenario(
@@ -264,7 +273,11 @@ internal sealed class ApiLoadTestExecutor(
             }
             else
             {
-                accumulator.Start();
+                if (!accumulator.TryStart(options.MaximumStartedRequests))
+                {
+                    await executionCancellation.CancelAsync().ConfigureAwait(false);
+                    break;
+                }
                 inFlight.Add(ExecuteInFlightAsync(
                     run.SelectScenario(requestIndex),
                     accumulator,
@@ -365,6 +378,10 @@ internal sealed class ApiLoadTestExecutor(
         {
             throw new ArgumentOutOfRangeException(nameof(options), "Shutdown grace period must be between zero and one minute.");
         }
+        if (options.MaximumStartedRequests < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Maximum started requests must be at least one.");
+        }
     }
 
     private static bool IsFatal(Exception exception) => exception is
@@ -385,13 +402,20 @@ internal sealed class ApiLoadTestExecutor(
         private int droppedSaturationCount;
         private int inFlightCount;
         private int maximumInFlightCount;
+        private int safetyCapExceeded;
 
         internal bool ShutdownGracePeriodElapsed { get; private set; }
         internal bool CancellationRequested { get; private set; }
 
-        internal void Start()
+        internal bool TryStart(int maximumStartedRequests)
         {
-            Interlocked.Increment(ref startedCount);
+            int started = Interlocked.Increment(ref startedCount);
+            if (started > maximumStartedRequests)
+            {
+                Interlocked.Decrement(ref startedCount);
+                Interlocked.Exchange(ref safetyCapExceeded, 1);
+                return false;
+            }
             int currentInFlight = Interlocked.Increment(ref inFlightCount);
             while (true)
             {
@@ -399,7 +423,7 @@ internal sealed class ApiLoadTestExecutor(
                 if (currentInFlight <= observedMaximum ||
                     Interlocked.CompareExchange(ref maximumInFlightCount, currentInFlight, observedMaximum) == observedMaximum)
                 {
-                    return;
+                    return true;
                 }
             }
         }
@@ -436,7 +460,8 @@ internal sealed class ApiLoadTestExecutor(
             Volatile.Read(ref inFlightCount),
             ShutdownGracePeriodElapsed ? Volatile.Read(ref inFlightCount) : 0,
             CancellationRequested,
-            RetainedSampleCount: 0);
+            RetainedSampleCount: 0,
+            SafetyCapExceeded: Volatile.Read(ref safetyCapExceeded) != 0);
     }
 }
 

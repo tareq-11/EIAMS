@@ -138,6 +138,25 @@ public sealed class ApiLoadTestHttpAdapterTests
     }
 
     [Fact]
+    public async Task ResetMetrics_ShouldKeepWarmupAggregatesOutOfMeasurementSnapshot()
+    {
+        using var handler = new CountingHandler(_ => JsonResponse());
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+
+        await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
+        adapter.GetMetrics().Completed.ShouldBe(1);
+        adapter.GetScenarioMetrics()[ApiLoadTestScenario.Login].Count.ShouldBe(1);
+        adapter.ResetMetrics();
+
+        adapter.GetMetrics().Completed.ShouldBe(0);
+        adapter.GetScenarioMetrics()[ApiLoadTestScenario.Login].Count.ShouldBe(0);
+        await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
+        adapter.GetMetrics().Completed.ShouldBe(1);
+        adapter.GetScenarioMetrics()[ApiLoadTestScenario.Login].Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_SuccessfulNonLoginResponse_DoesNotParseAnInvalidJsonBody()
     {
         using var handler = new CountingHandler(request => request.RequestUri!.AbsolutePath.EndsWith("auth/login", StringComparison.Ordinal)

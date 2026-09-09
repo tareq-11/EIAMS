@@ -152,9 +152,9 @@ internal sealed class ApiLoadTestPlan(
 
 internal static class ApiLoadTestConfigurationValidator
 {
-    internal static readonly TimeSpan MinimumMeasurementDuration = TimeSpan.FromMinutes(1);
+    internal static readonly TimeSpan MinimumMeasurementDuration = TimeSpan.FromSeconds(1);
     internal static readonly TimeSpan MaximumMeasurementDuration = TimeSpan.FromMinutes(15);
-    internal static readonly TimeSpan MinimumWarmupDuration = TimeSpan.FromSeconds(10);
+    internal static readonly TimeSpan MinimumWarmupDuration = TimeSpan.FromSeconds(1);
     internal static readonly TimeSpan MaximumWarmupDuration = TimeSpan.FromMinutes(15);
     internal const int MaximumRunCount = 20;
     internal const int MaximumClientConcurrency = 256;

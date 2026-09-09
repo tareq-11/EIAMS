@@ -21,7 +21,9 @@ internal sealed record ApiLoadTestCatalogEntry(
 internal sealed record ApiLoadTestFixtureContext(
     Guid OrganizationId,
     string PostRunNamespace = "load",
-    int MaximumPostRequests = 250)
+    // A write budget must be supplied by the suite. Zero is deliberately invalid for POST,
+    // rather than silently applying a small, undocumented cap to a long baseline.
+    int MaximumPostRequests = 0)
 {
     internal void ValidateForPost()
     {
@@ -31,9 +33,9 @@ internal sealed record ApiLoadTestFixtureContext(
             throw new ArgumentException("Post run namespace must contain only letters, digits, or hyphens and be at most 24 characters.", nameof(PostRunNamespace));
         }
 
-        if (MaximumPostRequests is < 1 or > 10_000)
+        if (MaximumPostRequests is < 1 or > 1_000_000)
         {
-            throw new ArgumentOutOfRangeException(nameof(MaximumPostRequests), "Post request budget must be between 1 and 10,000.");
+            throw new ArgumentOutOfRangeException(nameof(MaximumPostRequests), "Post request budget must be explicitly supplied and be between 1 and 1,000,000.");
         }
     }
 }
@@ -175,6 +177,22 @@ internal sealed class ApiLoadTestHttpAdapter(
 
     internal IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> GetScenarioMetrics() =>
         scenarioMetrics.ToDictionary(pair => pair.Key, pair => pair.Value.Snapshot());
+
+    /// <summary>Starts a phase-local aggregate. Authentication is intentionally never recorded.</summary>
+    internal void ResetMetrics()
+    {
+        Interlocked.Exchange(ref completed, 0);
+        Interlocked.Exchange(ref successful, 0);
+        Interlocked.Exchange(ref unexpectedHttp, 0);
+        Interlocked.Exchange(ref rateLimited, 0);
+        Interlocked.Exchange(ref timeoutOrCancellation, 0);
+        Interlocked.Exchange(ref transportFailures, 0);
+        Interlocked.Exchange(ref completedResponsePayloadBytes, 0);
+        foreach (ScenarioAccumulator accumulator in scenarioMetrics.Values)
+        {
+            accumulator.Reset();
+        }
+    }
 
     internal static ApiBenchmarkResponseClassification ClassifyResponse(
         int? statusCode,
@@ -364,6 +382,17 @@ internal sealed class ApiLoadTestHttpAdapter(
                 return new ApiLoadTestScenarioMetrics(
                     count, success, count - success, payloadBytes,
                     Percentile(.50), Percentile(.95), Percentile(.99));
+            }
+        }
+
+        internal void Reset()
+        {
+            lock (gate)
+            {
+                count = 0;
+                success = 0;
+                payloadBytes = 0;
+                Array.Clear(bucketCounts);
             }
         }
 

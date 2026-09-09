@@ -1,5 +1,4 @@
 using System.Net.Http;
-using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -8,126 +7,150 @@ using Xunit.Abstractions;
 namespace IntegrationTests.Performance;
 
 [Collection(nameof(IntegrationTestCollection))]
-public sealed class ApiLoadTestSmokeTests(
-    IntegrationTestWebAppFactory factory,
-    ITestOutputHelper output)
+public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, ITestOutputHelper output)
 {
     [ExplicitApiLoadTestFact]
     [Trait("Category", "Performance")]
     [Trait("WorkloadClass", PerformanceWorkloadContracts.NormalExpectedTraffic)]
-    public async Task RunLocalKestrelSmokeWithFullMixedWorkloadAsync()
+    public async Task RunExplicitConfigurableApiLoadSuiteAsync()
     {
-        const long seed = 20260908;
+        var suite = ApiLoadSuiteConfiguration.FromEnvironment();
         string databaseName = new NpgsqlConnectionStringBuilder(factory.DatabaseConnectionString).Database
             ?? throw new InvalidOperationException("Integration test database name is required for synthetic seeding.");
-        await SyntheticDatasetSeeder.SeedAsync(
-            DatasetProfile.Small,
-            new SyntheticDatasetSeedOptions(factory.DatabaseConnectionString, databaseName, "Test", seed));
-        SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(DatasetProfile.Small, seed);
-        var fixture = new ApiLoadTestFixtureContext(
-            manifest.GetOrganizationId(0),
-            // Isolates repeated explicit smoke invocations against the same Testcontainer database.
-            // It is deliberately never included in output labels or result JSON.
-            $"smoke-{Guid.NewGuid():N}"[..22],
-            MaximumPostRequests: 100);
+        await SyntheticDatasetSeeder.SeedAsync(suite.DatasetProfile,
+            new SyntheticDatasetSeedOptions(factory.DatabaseConnectionString, databaseName, "Test", suite.Seed));
+        SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(suite.DatasetProfile, suite.Seed);
+
+        foreach (ApiLoadTestRunDefinition run in suite.Plan.Runs)
+        {
+            await ExecuteRunAsync(suite, manifest, run);
+        }
+    }
+
+    private async Task ExecuteRunAsync(ApiLoadSuiteConfiguration suite, SyntheticDatasetManifest manifest, ApiLoadTestRunDefinition run)
+    {
+        // Each run owns its adapter, token, namespace, host, collectors, and monitor lifecycle.
         SqlCommandCounterInterceptor commandCollector = factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
-        using var poolCollector = new NpgsqlPoolStateCollector();
-        await using var lockWaitSampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString);
-        ApiBenchmarkWorkerProfile workerProfile = ApiBenchmarkWorkerProfiles.GetRequestedProfile();
-        using IntegrationTestWebAppFactory.BenchmarkProfiledWebAppFactory smokeFactory =
-            factory.CreateSiblingFactory(commandCollector, workerProfile);
-        smokeFactory.UseKestrel(0);
-        using HttpClient client = smokeFactory.CreateClient();
-        client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
-        using var adapter = new ApiLoadTestHttpAdapter(
-            client,
-            IntegrationTestWebAppFactory.AdministratorEmail,
-            IntegrationTestWebAppFactory.AdministratorPassword,
-            fixture);
-        await adapter.AuthenticateAsync(CancellationToken.None);
-        var run = new ApiLoadTestRunDefinition(
-            1, 1, ApiLoadTestMode.ClosedLoop, null, 1,
-            new ApiLoadTestPhase(ApiLoadTestPhaseKind.Warmup, TimeSpan.FromSeconds(1)),
-            new ApiLoadTestPhase(ApiLoadTestPhaseKind.Measurement, TimeSpan.FromSeconds(2)),
-            ApiLoadTestScenarioMix.Weights);
-        var executor = new ApiLoadTestExecutor(new StopwatchApiLoadTestClock(), adapter.ExecuteAsync);
+        commandCollector.Reset();
+        string runNamespace = ApiLoadSuiteConfiguration.CreateRunNamespace(run);
+        var fixture = new ApiLoadTestFixtureContext(manifest.GetOrganizationId(0), runNamespace, suite.MaximumPostRequestsPerRun);
+        ApiLoadTestHttpMetrics? warmupMetrics = null;
+        ApiLoadTestHttpMetrics? measurementMetrics = null;
+        IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics>? warmupScenarios = null;
+        IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics>? measurementScenarios = null;
+        ApiLoadTestExecutionResult? execution = null;
         SqlCommandDurationSnapshot? warmupSql = null;
         SqlCommandDurationSnapshot? measurementSql = null;
-        NpgsqlPoolStateSnapshot? warmupPoolState = null;
-        NpgsqlPoolStateSnapshot? measurementPoolState = null;
-        PostgreSqlLockWaitSnapshot? warmupLockWait = null;
-        PostgreSqlLockWaitSnapshot? measurementLockWait = null;
-        ApiLoadTestExecutionResult execution = await executor.ExecuteAsync(
-            run,
-            beforePhaseAsync: (_, cancellationToken) =>
-            {
-                commandCollector.Reset();
-                poolCollector.Reset();
-                return lockWaitSampler.StartAsync(cancellationToken);
-            },
-            afterPhaseAsync: async (phase, _) =>
-            {
-                PostgreSqlLockWaitSnapshot snapshot = await lockWaitSampler.StopAsync();
-                if (phase == ApiLoadTestPhaseKind.Warmup)
-                {
-                    warmupSql = commandCollector.Snapshot();
-                    warmupPoolState = poolCollector.Snapshot();
-                    warmupLockWait = snapshot;
-                }
-                else
-                {
-                    measurementSql = commandCollector.Snapshot();
-                    measurementPoolState = poolCollector.Snapshot();
-                    measurementLockWait = snapshot;
-                }
-            });
+        NpgsqlPoolStateSnapshot? warmupPool = null;
+        NpgsqlPoolStateSnapshot? measurementPool = null;
+        PostgreSqlLockWaitSnapshot? warmupLocks = null;
+        PostgreSqlLockWaitSnapshot? measurementLocks = null;
+        Exception? failure = null;
 
-        ApiLoadTestHttpMetrics metrics = adapter.GetMetrics();
-        IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> scenarioMetrics = adapter.GetScenarioMetrics();
-        var result = new
+        try
         {
-            WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
-            Transport = "Kestrel loopback HTTP",
-            Database = "integration-testcontainer-local",
-            WorkerProfile = smokeFactory.WorkerProfileMetadata,
-            Dataset = ApiBenchmarkWorkerProfiles.CreateLoadSmokeDatasetMetadata(seed),
-            Scenarios = new[] { "login", "read-list", "read-detail", "report", "post" },
-            Metrics = metrics,
-            ScenarioMetrics = scenarioMetrics,
-            Execution = execution,
-            SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
-            NpgsqlPoolStateByPhase = new { Warmup = warmupPoolState, Measurement = measurementPoolState },
-            PostgreSqlSampledLockWaitOccupancyByPhase = new { Warmup = warmupLockWait, Measurement = measurementLockWait },
-            MeasurementMetadata = new
+            using var poolCollector = new NpgsqlPoolStateCollector();
+            await using var lockWaitSampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString);
+            using IntegrationTestWebAppFactory.BenchmarkProfiledWebAppFactory runFactory =
+                factory.CreateSiblingFactory(commandCollector, suite.WorkerProfile);
+            runFactory.UseKestrel(0);
+            using HttpClient client = runFactory.CreateClient();
+            client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
+            using var adapter = new ApiLoadTestHttpAdapter(client, IntegrationTestWebAppFactory.AdministratorEmail,
+                IntegrationTestWebAppFactory.AdministratorPassword, fixture);
+            await adapter.AuthenticateAsync(CancellationToken.None); // setup excluded from phase metrics
+            var executor = new ApiLoadTestExecutor(new StopwatchApiLoadTestClock(), adapter.ExecuteAsync,
+                new ApiLoadTestExecutorOptions(TimeSpan.FromSeconds(10), suite.MaximumStartedRequestsPerPhase));
+            execution = await executor.ExecuteAsync(run,
+                async (phase, token) =>
+                {
+                    commandCollector.Reset(); poolCollector.Reset(); adapter.ResetMetrics();
+                    await lockWaitSampler.StartAsync(token);
+                },
+                async (phase, _) =>
+                {
+                    PostgreSqlLockWaitSnapshot locks = await lockWaitSampler.StopAsync();
+                    if (phase == ApiLoadTestPhaseKind.Warmup)
+                    {
+                        warmupSql = commandCollector.Snapshot(); warmupPool = poolCollector.Snapshot(); warmupLocks = locks;
+                        warmupMetrics = adapter.GetMetrics(); warmupScenarios = adapter.GetScenarioMetrics();
+                    }
+                    else
+                    {
+                        measurementSql = commandCollector.Snapshot(); measurementPool = poolCollector.Snapshot(); measurementLocks = locks;
+                        measurementMetrics = adapter.GetMetrics(); measurementScenarios = adapter.GetScenarioMetrics();
+                    }
+                });
+            EnsureSuccessfulRun(warmupMetrics!, warmupScenarios!, measurementMetrics!, measurementScenarios!, execution);
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+            throw;
+        }
+        finally
+        {
+            var artifact = new
             {
-                SqlCommandDuration = "EF/Npgsql DbCommandInterceptor execution duration; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound. Authentication, migrations, and seeding are excluded by reset at phase boundaries.",
-                NpgsqlPoolWait = "not_available: Npgsql 10.0.3 Meter exposes pool state/timeouts but no connection-acquisition wait duration.",
-                NpgsqlPoolState = "Npgsql Meter process-wide aggregate across all pools per snapshot: db.client.connection.count state=idle|used, db.client.connection.max, and phase timeouts. Provider tags are discarded; this is neither endpoint/pool attribution nor pool-wait duration.",
-                PostgreSqlSampledLockWaitOccupancy = "A separate Pooling=false monitor runs one pg_stat_activity query per configured interval, scoped to the current database and excluding its PID; this adds monitoring overhead. sampleCount is polling observations; samplesWithLockWaits counts observations with one or more sessions where wait_event_type=Lock; totalWaitingSessionObservations sums waiting sessions across samples; maxConcurrentWaitingSessions is the observed maximum. approximateObservedWaitingSessionMilliseconds uses monotonic elapsed time between observations with a left-endpoint occupancy assumption and saturates at a bounded maximum. It is a sampled estimate, not exact lock-wait duration, per-request attribution, or a complete census between samples. No connection details, PIDs, query text, SQL, or workload identifiers are emitted.",
-                RawSql = "not_measured"
-            }
-        };
-        string resultPath = Path.Combine(
-            Path.GetTempPath(),
-            $"eiams-api-load-smoke-{smokeFactory.WorkerProfileMetadata.Profile}-{Guid.NewGuid():N}.json");
-        await File.WriteAllTextAsync(resultPath, JsonSerializer.Serialize(result));
-        output.WriteLine($"JSON result: {resultPath}");
+                Status = failure is null ? "passed" : "failed", FailureKind = failure?.GetType().Name,
+                WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
+                ExecutionProfile = new
+                {
+                    SuiteProfile = suite.Profile.ToString(), Run = run.RunNumber, Mode = run.Mode.ToString(), run.ClientConcurrency,
+                    run.ArrivalRatePerSecond, WarmupSeconds = run.Warmup.Duration.TotalSeconds, MeasurementSeconds = run.Measurement.Duration.TotalSeconds,
+                    suite.MaximumStartedRequestsPerPhase, suite.MaximumPostRequestsPerRun
+                },
+                Dataset = new { Profile = suite.DatasetProfile.ToString(), suite.Seed },
+                WorkerProfile = ApiBenchmarkWorkerProfiles.GetMetadata(suite.WorkerProfile),
+                Environment = new
+                {
+                    Sdk = Environment.Version.ToString(), Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                    OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription, Transport = "Kestrel loopback HTTP", Tls = "not_used"
+                },
+                HttpMetricsByPhase = new { Warmup = warmupMetrics, Measurement = measurementMetrics },
+                ScenarioMetricsByPhase = new { Warmup = warmupScenarios, Measurement = measurementScenarios }, Execution = execution,
+                SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
+                NpgsqlPoolStateByPhase = new { Warmup = warmupPool, Measurement = measurementPool },
+                PostgreSqlSampledLockWaitOccupancyByPhase = new { Warmup = warmupLocks, Measurement = measurementLocks }, RetainedRequestSamples = 0
+            };
+            string name = $"api-load-{suite.Profile}-{run.RunNumber}-{run.Mode}-{run.ClientConcurrency}-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}.json";
+            string path = await ApiLoadSuiteArtifactWriter.WriteAsync(suite.ResultDirectory, name, artifact);
+            output.WriteLine($"API load result: {path}");
+        }
+    }
 
+    private static void EnsureSuccessfulRun(ApiLoadTestHttpMetrics warmupMetrics,
+        IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> warmupScenarios,
+        ApiLoadTestHttpMetrics measurementMetrics,
+        IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> measurementScenarios,
+        ApiLoadTestExecutionResult execution)
+    {
+        ApiLoadSuiteAcceptance.EnsureExecutionComplete(execution);
+        EnsureSuccessfulPhase(warmupMetrics, warmupScenarios);
+        EnsureSuccessfulPhase(measurementMetrics, measurementScenarios);
+        measurementMetrics.Successful.ShouldBeGreaterThan(0);
+    }
+
+    private static void EnsureSuccessfulPhase(ApiLoadTestHttpMetrics metrics, IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> scenarios)
+    {
         PerformanceWorkloadContracts.EnsureNormalExpectedTrafficHasNoFailures(metrics);
-        metrics.Successful.ShouldBeGreaterThan(0);
-        execution.Warmup.FaultedCount.ShouldBe(0);
-        execution.Measurement.FaultedCount.ShouldBe(0);
-        execution.Warmup.CancelledCount.ShouldBe(0);
-        execution.Measurement.CancelledCount.ShouldBe(0);
-        execution.Measurement.DroppedSaturationCount.ShouldBe(0);
-        execution.Measurement.InFlightAtSummaryCount.ShouldBe(0);
-        execution.Measurement.UnfinishedAfterGraceCount.ShouldBe(0);
-        execution.Measurement.CompletedCount.ShouldBeGreaterThan(0);
-        execution.Measurement.SuccessfulCount.ShouldBeGreaterThan(0);
-        foreach (ApiLoadTestScenario scenario in ApiLoadTestScenarioMix.Weights.Select(weight => weight.Scenario))
+        // Short validation windows do not promise that every low-weight scenario appears;
+        // FullBaseline supplies the statistically meaningful coverage. Any observed failure still fails.
+        scenarios.Values.ShouldAllBe(scenario => scenario.FailureCount == 0);
+    }
+}
+
+internal static class ApiLoadSuiteAcceptance
+{
+    internal static void EnsureExecutionComplete(ApiLoadTestExecutionResult execution)
+    {
+        execution.WasCancelled.ShouldBeFalse();
+        execution.ShutdownGracePeriodElapsed.ShouldBeFalse();
+        foreach (ApiLoadTestPhaseExecutionSummary phase in new[] { execution.Warmup, execution.Measurement })
         {
-            scenarioMetrics[scenario].Count.ShouldBeGreaterThan(0);
-            scenarioMetrics[scenario].FailureCount.ShouldBe(0);
+            phase.CancellationRequested.ShouldBeFalse();
+            phase.FaultedCount.ShouldBe(0); phase.CancelledCount.ShouldBe(0); phase.DroppedSaturationCount.ShouldBe(0);
+            phase.InFlightAtSummaryCount.ShouldBe(0); phase.UnfinishedAfterGraceCount.ShouldBe(0); phase.SafetyCapExceeded.ShouldBeFalse();
         }
     }
 }
@@ -137,9 +160,9 @@ internal sealed class ExplicitApiLoadTestFactAttribute : FactAttribute
 {
     public ExplicitApiLoadTestFactAttribute()
     {
-        if (!ApiLoadTestFeatureGate.IsEnabled)
+        if (!string.Equals(Environment.GetEnvironmentVariable(ApiLoadSuiteConfiguration.GateEnvironmentVariable), "1", StringComparison.Ordinal))
         {
-            Skip = "Explicit local Kestrel/Testcontainers API load smoke. Set RUN_API_LOAD_TESTS=1 to run it.";
+            Skip = "Explicit API load suite. Set RUN_API_LOAD_SUITE=1; FullBaseline additionally requires EIAMS_ALLOW_LONG_LOAD_TEST=1.";
         }
     }
 }
