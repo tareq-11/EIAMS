@@ -45,6 +45,7 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
         NpgsqlPoolStateSnapshot? measurementPool = null;
         PostgreSqlLockWaitSnapshot? warmupLocks = null;
         PostgreSqlLockWaitSnapshot? measurementLocks = null;
+        IReadOnlyList<ReadPlanEvidence>? readPlanEvidence = null;
         Exception? failure = null;
 
         try
@@ -82,6 +83,25 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
                     }
                 });
             EnsureSuccessfulRun(warmupMetrics!, warmupScenarios!, measurementMetrics!, measurementScenarios!, execution);
+
+            if (string.Equals(
+                    Environment.GetEnvironmentVariable(PostgreSqlReadPlanAnalysis.GateEnvironmentVariable),
+                    "1",
+                    StringComparison.Ordinal))
+            {
+                var planConfiguration = PostgreSqlReadPlanAnalysisConfiguration.FromEnvironment();
+                if (planConfiguration.DatasetProfile != suite.DatasetProfile || planConfiguration.Seed != suite.Seed)
+                {
+                    throw new InvalidOperationException(
+                        "Read-plan evidence must use the same synthetic dataset profile and seed as the measured API load run.");
+                }
+
+                readPlanEvidence = await PostgreSqlReadPlanAnalysis.AnalyzeAsync(
+                    factory.DatabaseConnectionString,
+                    "Test",
+                    manifest,
+                    measurementScenarios!);
+            }
         }
         catch (Exception exception)
         {
@@ -111,7 +131,9 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
                 ScenarioMetricsByPhase = new { Warmup = warmupScenarios, Measurement = measurementScenarios }, Execution = execution,
                 SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
                 NpgsqlPoolStateByPhase = new { Warmup = warmupPool, Measurement = measurementPool },
-                PostgreSqlSampledLockWaitOccupancyByPhase = new { Warmup = warmupLocks, Measurement = measurementLocks }, RetainedRequestSamples = 0
+                PostgreSqlSampledLockWaitOccupancyByPhase = new { Warmup = warmupLocks, Measurement = measurementLocks },
+                PostgreSqlReadPlanEvidence = readPlanEvidence,
+                RetainedRequestSamples = 0
             };
             string name = $"api-load-{suite.Profile}-{run.RunNumber}-{run.Mode}-{run.ClientConcurrency}-{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}.json";
             string path = await ApiLoadSuiteArtifactWriter.WriteAsync(suite.ResultDirectory, name, artifact);
