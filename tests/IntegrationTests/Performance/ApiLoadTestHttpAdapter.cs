@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -83,7 +84,8 @@ internal sealed record ApiLoadTestHttpSample(
     int? StatusCode,
     double ElapsedMs,
     int PayloadBytes,
-    double? RetryAfterSeconds)
+    double? RetryAfterSeconds,
+    string? ErrorCode = null)
 {
     internal bool IsSuccessful => Classification == ApiBenchmarkResponseClassification.ExpectedResponse;
 }
@@ -151,7 +153,8 @@ internal sealed class ApiLoadTestHttpAdapter(
                 ApiLoadTestHttpSample login = await ExecuteHttpAsync(ApiLoadTestScenario.Login, cancellationToken).ConfigureAwait(false);
                 if (!login.IsSuccessful || accessToken is null)
                 {
-                    throw new InvalidOperationException("Load-test authentication setup did not receive the expected response.");
+                    throw new InvalidOperationException(
+                        $"Load-test authentication setup did not receive the expected response: status={login.StatusCode?.ToString(CultureInfo.InvariantCulture) ?? "none"}, errorCode={login.ErrorCode ?? "none"}.");
                 }
             }
         }
@@ -212,19 +215,24 @@ internal sealed class ApiLoadTestHttpAdapter(
             using HttpResponseMessage response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
             byte[] body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
             stopwatch.Stop();
-            if (entry.Scenario == ApiLoadTestScenario.Login && response.StatusCode == HttpStatusCode.OK)
+            ApiBenchmarkResponseClassification classification = ClassifyResponse(
+                (int)response.StatusCode, entry.ExpectedStatus, timedOutOrCancelled: false);
+            if (entry.Scenario == ApiLoadTestScenario.Login && classification == ApiBenchmarkResponseClassification.ExpectedResponse)
             {
                 SetAccessToken(body);
             }
 
             return new ApiLoadTestHttpSample(
-                ClassifyResponse((int)response.StatusCode, entry.ExpectedStatus, timedOutOrCancelled: false),
+                classification,
                 (int)response.StatusCode,
                 stopwatch.Elapsed.TotalMilliseconds,
                 body.Length,
                 response.StatusCode == HttpStatusCode.TooManyRequests
                     ? ApiLatencyBenchmarkMetrics.ParseRetryAfterSeconds(response.Headers.RetryAfter, DateTimeOffset.UtcNow)
-                    : null);
+                    : null,
+                classification == ApiBenchmarkResponseClassification.ExpectedResponse
+                    ? null
+                    : GetSanitizedErrorCode(body));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -255,6 +263,23 @@ internal sealed class ApiLoadTestHttpAdapter(
         }
 
         Volatile.Write(ref accessToken, token);
+    }
+
+    private static string? GetSanitizedErrorCode(byte[] body)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(body);
+            return json.RootElement.TryGetProperty("error", out JsonElement error) &&
+                   error.TryGetProperty("code", out JsonElement code) &&
+                   code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private JsonContent CreatePostContent()

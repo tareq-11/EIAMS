@@ -33,7 +33,9 @@ public sealed class ApiLoadTestSmokeTests(
         SqlCommandCounterInterceptor commandCollector = factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
         using var poolCollector = new NpgsqlPoolStateCollector();
         await using var lockWaitSampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString);
-        using WebApplicationFactory<Program> smokeFactory = factory.CreateSiblingFactory(commandCollector);
+        ApiBenchmarkWorkerProfile workerProfile = ApiBenchmarkWorkerProfiles.GetRequestedProfile();
+        using IntegrationTestWebAppFactory.BenchmarkProfiledWebAppFactory smokeFactory =
+            factory.CreateSiblingFactory(commandCollector, workerProfile);
         smokeFactory.UseKestrel(0);
         using HttpClient client = smokeFactory.CreateClient();
         client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
@@ -87,6 +89,8 @@ public sealed class ApiLoadTestSmokeTests(
             WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
             Transport = "Kestrel loopback HTTP",
             Database = "integration-testcontainer-local",
+            WorkerProfile = smokeFactory.WorkerProfileMetadata,
+            Dataset = ApiBenchmarkWorkerProfiles.CreateLoadSmokeDatasetMetadata(seed),
             Scenarios = new[] { "login", "read-list", "read-detail", "report", "post" },
             Metrics = metrics,
             ScenarioMetrics = scenarioMetrics,
@@ -105,7 +109,7 @@ public sealed class ApiLoadTestSmokeTests(
         };
         string resultPath = Path.Combine(
             Path.GetTempPath(),
-            $"eiams-api-load-smoke-{Guid.NewGuid():N}.json");
+            $"eiams-api-load-smoke-{smokeFactory.WorkerProfileMetadata.Profile}-{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(resultPath, JsonSerializer.Serialize(result));
         output.WriteLine($"JSON result: {resultPath}");
 

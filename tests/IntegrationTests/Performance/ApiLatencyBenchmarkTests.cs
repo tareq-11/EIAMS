@@ -42,7 +42,9 @@ public sealed class ApiLatencyBenchmarkTests
             .GetRequiredService<SqlCommandCounterInterceptor>();
         using var poolCollector = new NpgsqlPoolStateCollector();
         await using var lockWaitSampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString);
-        using WebApplicationFactory<Program> benchmarkFactory = factory.CreateSiblingFactory(commandCounter);
+        ApiBenchmarkWorkerProfile workerProfile = ApiBenchmarkWorkerProfiles.GetRequestedProfile();
+        using IntegrationTestWebAppFactory.BenchmarkProfiledWebAppFactory benchmarkFactory =
+            factory.CreateSiblingFactory(commandCounter, workerProfile);
         var hostStartupAndJitStopwatch = Stopwatch.StartNew();
         benchmarkFactory.UseKestrel(0);
         using HttpClient client = benchmarkFactory.CreateClient();
@@ -194,7 +196,9 @@ public sealed class ApiLatencyBenchmarkTests
         string resultDirectory = Environment.GetEnvironmentVariable("EIAMS_BENCHMARK_RESULTS_DIR")
             ?? Path.GetTempPath();
         Directory.CreateDirectory(resultDirectory);
-        string resultPath = Path.Combine(resultDirectory, $"eiams-api-latency-{runId}.json");
+        string resultPath = Path.Combine(
+            resultDirectory,
+            $"eiams-api-latency-{benchmarkFactory.WorkerProfileMetadata.Profile}-{runId}.json");
         var benchmarkRun = new
         {
             WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
@@ -206,6 +210,8 @@ public sealed class ApiLatencyBenchmarkTests
             OperatingSystem = RuntimeInformation.OSDescription,
             Environment.ProcessorCount,
             Transport = "Kestrel over loopback HTTP; includes the network stack and excludes TLS",
+            WorkerProfile = benchmarkFactory.WorkerProfileMetadata,
+            Dataset = ApiBenchmarkWorkerProfiles.CreateLatencyDatasetMetadata(),
             Phases = phases,
             WarmupIterations,
             SampleIterations = sampleIterations,

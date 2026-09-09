@@ -45,6 +45,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("Jwt:Issuer", JwtIssuer);
         builder.UseSetting("Jwt:Audience", JwtAudience);
         builder.UseSetting("Jwt:ExpirationInMinutes", "60");
+        builder.UseSetting("AllowedHosts", "localhost;127.0.0.1");
         builder.UseSetting("AttachmentStorage:Local:RootPath", attachmentStoragePath);
 
         // Relax rate limiting so the test suite is not throttled.
@@ -91,9 +92,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         await dbContext.SaveChangesAsync();
     }
 
-    internal WebApplicationFactory<Program> CreateSiblingFactory(
-        SqlCommandCounterInterceptor? commandCounter = null) =>
-        new SiblingWebAppFactory(_dbContainer.GetConnectionString(), commandCounter);
+    internal BenchmarkProfiledWebAppFactory CreateSiblingFactory(
+        SqlCommandCounterInterceptor? commandCounter = null,
+        ApiBenchmarkWorkerProfile profile = ApiBenchmarkWorkerProfile.IsolatedRequestCost) =>
+        new(_dbContainer.GetConnectionString(), commandCounter, profile);
 
     internal async Task<PostgresAdvisoryLockLease> HoldApplicationLockAsync(
         string resourceKey,
@@ -203,10 +205,16 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         public ValueTask DisposeAsync() => new(ReleaseAsync());
     }
 
-    private sealed class SiblingWebAppFactory(
+    internal sealed class BenchmarkProfiledWebAppFactory(
         string connectionString,
-        SqlCommandCounterInterceptor? commandCounter) : WebApplicationFactory<Program>
+        SqlCommandCounterInterceptor? commandCounter,
+        ApiBenchmarkWorkerProfile profile) : WebApplicationFactory<Program>
     {
+        internal ApiBenchmarkWorkerProfile Profile { get; } = profile;
+
+        internal ApiBenchmarkWorkerProfileMetadata WorkerProfileMetadata { get; } =
+            ApiBenchmarkWorkerProfiles.GetMetadata(profile);
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("ConnectionStrings:Database", connectionString);
@@ -214,6 +222,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
             builder.UseSetting("Jwt:Issuer", JwtIssuer);
             builder.UseSetting("Jwt:Audience", JwtAudience);
             builder.UseSetting("Jwt:ExpirationInMinutes", "60");
+            builder.UseSetting("AllowedHosts", "localhost;127.0.0.1");
             builder.UseSetting(
                 "AttachmentStorage:Local:RootPath",
                 Path.Combine(Path.GetTempPath(), $"eiams-sibling-attachments-{Guid.NewGuid():N}"));
@@ -225,14 +234,32 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
             builder.UseSetting("RateLimiting:Concurrency:Upload", "100000");
             builder.UseSetting("RateLimiting:Concurrency:Posting", "100000");
 
-            if (commandCounter is not null)
+            if (Profile == ApiBenchmarkWorkerProfile.FullBackgroundWorkload)
             {
-                builder.ConfigureServices(services =>
+                // These bounded test-only cadences guarantee a real first cycle during a short run.
+                // Production configuration and worker implementations remain unchanged.
+                builder.UseSetting("PolymorphicReferenceAudit:Enabled", "true");
+                builder.UseSetting("PolymorphicReferenceAudit:InitialDelay", "00:00:00.050");
+                builder.UseSetting("PolymorphicReferenceAudit:Interval", "00:00:00.250");
+                builder.UseSetting("Idempotency:Cleanup:Enabled", "true");
+                builder.UseSetting("Idempotency:Cleanup:InitialDelay", "00:00:00.050");
+                builder.UseSetting("Idempotency:Cleanup:Interval", "00:00:00.250");
+                builder.UseSetting("AttachmentStorage:Cleanup:PollInterval", "00:00:00.250");
+            }
+
+            builder.ConfigureServices(services =>
+            {
+                if (Profile == ApiBenchmarkWorkerProfile.IsolatedRequestCost)
+                {
+                    ApiBenchmarkWorkerProfiles.RemoveMeasuredWorkers(services);
+                }
+
+                if (commandCounter is not null)
                 {
                     services.AddSingleton(commandCounter);
                     services.AddSingleton<DbCommandInterceptor>(commandCounter);
-                });
-            }
+                }
+            });
         }
     }
 }

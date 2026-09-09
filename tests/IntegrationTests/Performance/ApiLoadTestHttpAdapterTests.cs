@@ -138,6 +138,40 @@ public sealed class ApiLoadTestHttpAdapterTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_SuccessfulNonLoginResponse_DoesNotParseAnInvalidJsonBody()
+    {
+        using var handler = new CountingHandler(request => request.RequestUri!.AbsolutePath.EndsWith("auth/login", StringComparison.Ordinal)
+            ? JsonResponse()
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("not-json") });
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+
+        await adapter.AuthenticateAsync(CancellationToken.None);
+        ApiLoadTestExecutionSample sample = await adapter.ExecuteAsync(ApiLoadTestScenario.ReadList, CancellationToken.None);
+
+        sample.Succeeded.ShouldBeTrue();
+        adapter.GetMetrics().Successful.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task AuthenticateAsync_FailureEnvelope_ReportsOnlyStatusAndSanitizedErrorCode()
+    {
+        using var handler = new StaticResponseHandler(
+            HttpStatusCode.Unauthorized,
+            "{\"error\":{\"code\":\"AUTH_DENIED\",\"message\":\"do-not-emit\"}}");
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+
+        InvalidOperationException exception = await Should.ThrowAsync<InvalidOperationException>(
+            () => adapter.AuthenticateAsync(CancellationToken.None));
+
+        exception.Message.ShouldContain("status=401");
+        exception.Message.ShouldContain("errorCode=AUTH_DENIED");
+        exception.Message.ShouldNotContain("do-not-emit");
+        exception.Message.ShouldNotContain("password");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_Post_ShouldUseUniqueBoundedBusinessWriteBodiesUnderConcurrency()
     {
         ApiLoadTestFixtureContext fixture = new(Guid.Empty, "parallel-run", 100);
