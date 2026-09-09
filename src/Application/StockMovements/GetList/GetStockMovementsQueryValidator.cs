@@ -1,3 +1,4 @@
+using Application.Abstractions.Filtering;
 using Application.Abstractions.Pagination;
 using FluentValidation;
 
@@ -13,8 +14,8 @@ public sealed class GetStockMovementsQueryValidator : AbstractValidator<GetStock
         RuleFor(query => query.MovementType).IsInEnum().When(query => query.MovementType.HasValue);
         RuleFor(query => query.Search).MaximumLength(200);
         RuleFor(query => query)
-            .Must(query => !query.FromUtc.HasValue || !query.ToUtc.HasValue || query.FromUtc < query.ToUtc)
-            .WithMessage("FromUtc must be earlier than ToUtc.");
+            .Must(query => DateRangeLimits.IsValid(query.FromUtc, query.ToUtc))
+            .WithMessage("FromUtc and ToUtc must form a half-open range no longer than 366 days.");
         RuleFor(query => query.Page)
             .InclusiveBetween(PaginationDefaults.DefaultPage, PaginationDefaults.MaximumPage);
         RuleFor(query => query.PageSize).InclusiveBetween(1, PaginationDefaults.MaximumPageSize);

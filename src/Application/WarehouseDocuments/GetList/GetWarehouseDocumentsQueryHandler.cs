@@ -64,7 +64,7 @@ internal sealed class GetWarehouseDocumentsQueryHandler(
                       document.PaperDocumentNumber != null &&
                       document.PaperDocumentNumber.Contains(query.PaperDocumentNumber)
                 where query.FromDateUtc == null || document.CreatedAtUtc >= query.FromDateUtc
-                where query.ToDateUtc == null || document.CreatedAtUtc <= query.ToDateUtc
+                where query.ToDateUtc == null || document.CreatedAtUtc < query.ToDateUtc
                 select new WarehouseDocumentResponse
                 {
                     Id = document.Id,

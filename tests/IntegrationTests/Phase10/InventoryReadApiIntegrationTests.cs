@@ -176,6 +176,119 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             HttpResponseMessage response = await HttpClient.GetAsync(route);
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         }
+
+        string[] pagedReportRoutes =
+        [
+            "reports/inventory?page=1&pageSize=10",
+            "reports/assets?page=1&pageSize=10",
+            "reports/documents?page=1&pageSize=10",
+            "reports/count-adjustments?page=1&pageSize=10"
+        ];
+        foreach (string route in pagedReportRoutes)
+        {
+            HttpResponseMessage outsideScope = await HttpClient.GetAsync(
+                $"{route}&warehouseId={seed.OutsideWarehouseId}");
+            string outsideScopeContent = await outsideScope.Content.ReadAsStringAsync();
+            outsideScope.StatusCode.ShouldBe(HttpStatusCode.OK, outsideScopeContent);
+
+            using var outsideScopeBody = JsonDocument.Parse(outsideScopeContent);
+            outsideScopeBody.RootElement.GetProperty("data").GetArrayLength().ShouldBe(0);
+            outsideScopeBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32()
+                .ShouldBe(0);
+        }
+    }
+
+    [Fact]
+    public async Task ReadListsAndReports_ShouldRejectOversizedPagesAndUnboundedDateRanges()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        // Act + Assert
+        string[] oversizedPageRoutes =
+        [
+            "reports/inventory?page=1&pageSize=101",
+            "warehouse-documents?page=1&pageSize=101"
+        ];
+        foreach (string route in oversizedPageRoutes)
+        {
+            HttpResponseMessage response = await HttpClient.GetAsync(route);
+            string content = await response.Content.ReadAsStringAsync();
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, content);
+
+            using var body = JsonDocument.Parse(content);
+            body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
+        }
+
+        HttpResponseMessage oneSidedRange = await HttpClient.GetAsync(
+            "reports/documents?fromUtc=2026-01-01T00:00:00Z&page=1&pageSize=10");
+        oneSidedRange.StatusCode.ShouldBe(HttpStatusCode.BadRequest,
+            await oneSidedRange.Content.ReadAsStringAsync());
+
+        HttpResponseMessage oversizedRange = await HttpClient.GetAsync(
+            "reports/count-adjustments?fromUtc=2025-01-01T00:00:00Z&toUtc=2026-01-03T00:00:00Z&page=1&pageSize=10");
+        oversizedRange.StatusCode.ShouldBe(HttpStatusCode.BadRequest,
+            await oversizedRange.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task WarehouseDocumentDateFilter_ShouldUseAnExclusiveUpperBound_AndPreserveScope()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        DateTime fromUtc = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        DateTime toUtc = fromUtc.AddDays(1);
+        var atUpperBoundDocumentId = Guid.NewGuid();
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            WarehouseDocument lowerBoundDocument = await context.WarehouseDocuments
+                .SingleAsync(document => document.Id == seed.AllowedDocumentId);
+            lowerBoundDocument.CreatedAtUtc = fromUtc;
+
+            var upperBoundDocument = WarehouseDocument.CreateDraft(
+                atUpperBoundDocumentId,
+                seed.AllowedWarehouseId,
+                DocumentType.Receiving,
+                $"EXCLUSIVE-{atUpperBoundDocumentId:N}");
+            context.WarehouseDocuments.Add(upperBoundDocument);
+            await context.SaveChangesAsync();
+
+            upperBoundDocument.CreatedAtUtc = toUtc;
+            await context.SaveChangesAsync();
+        }
+
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        string period = "fromDateUtc=2026-01-01T00:00:00Z&toDateUtc=2026-01-02T00:00:00Z";
+
+        // Act
+        HttpResponseMessage allowedResponse = await HttpClient.GetAsync(
+            $"warehouse-documents?warehouseId={seed.AllowedWarehouseId}&{period}&page=1&pageSize=10");
+        HttpResponseMessage outsideScopeResponse = await HttpClient.GetAsync(
+            $"warehouse-documents?warehouseId={seed.OutsideWarehouseId}&{period}&page=1&pageSize=10");
+
+        // Assert
+        string allowedContent = await allowedResponse.Content.ReadAsStringAsync();
+        allowedResponse.StatusCode.ShouldBe(HttpStatusCode.OK, allowedContent);
+        using (var body = JsonDocument.Parse(allowedContent))
+        {
+            Guid[] documentIds = body.RootElement.GetProperty("data")
+                .EnumerateArray()
+                .Select(document => document.GetProperty("id").GetGuid())
+                .ToArray();
+            documentIds.ShouldBe([seed.AllowedDocumentId]);
+            documentIds.ShouldNotContain(atUpperBoundDocumentId);
+        }
+
+        string outsideScopeContent = await outsideScopeResponse.Content.ReadAsStringAsync();
+        outsideScopeResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden, outsideScopeContent);
     }
 
     [Fact]
