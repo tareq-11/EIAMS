@@ -4,6 +4,17 @@ namespace Application.UnitTests.DocumentAttachments;
 
 public sealed class FileSignatureValidatorTests
 {
+    [Fact]
+    public async Task PdfMagicPrefix_WithArbitraryTrailingBytes_IsOnlyAFormatCheck_NotAMalwareVerdict()
+    {
+        // This intentionally demonstrates the limitation: signature checking is not a polyglot or
+        // malware detector. The required scanner is the separate security boundary.
+        await using var content = new MemoryStream("%PDF-1.7\nnot-a-validated-document-or-malware-verdict"u8.ToArray());
+
+        bool result = await FileSignatureValidator.MatchesMimeTypeAsync(content, "application/pdf", CancellationToken.None);
+
+        result.ShouldBeTrue();
+    }
     public static TheoryData<string, byte[]> SupportedSignatures => new()
     {
         { "application/pdf", "%PDF-1.7"u8.ToArray() },

@@ -16,11 +16,13 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
+    IAttachmentMalwareScanner malwareScanner,
     IFileStorage fileStorage,
     IAttachmentFileCleanup fileCleanup,
     IDatabaseExceptionClassifier databaseExceptionClassifier,
     IDateTimeProvider dateTimeProvider,
-    IOptions<AttachmentStorageOptions> storageOptions)
+    IOptions<AttachmentStorageOptions> storageOptions,
+    IOptions<AttachmentMalwareScanOptions> malwareScanOptions)
     : ICommandHandler<UploadDocumentAttachmentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(UploadDocumentAttachmentCommand command, CancellationToken cancellationToken)
@@ -83,6 +85,20 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             return Result.Failure<Guid>(DocumentAttachmentErrors.FileSignatureMismatch);
         }
 
+        if (malwareScanOptions.Value.Policy == AttachmentMalwareScanPolicy.Required)
+        {
+            AttachmentMalwareScanVerdict verdict = await malwareScanner.ScanAsync(command.Content, cancellationToken);
+            if (verdict == AttachmentMalwareScanVerdict.Infected)
+            {
+                return Result.Failure<Guid>(DocumentAttachmentErrors.MalwareScanRejected);
+            }
+
+            if (verdict != AttachmentMalwareScanVerdict.Clean)
+            {
+                return Result.Failure<Guid>(DocumentAttachmentErrors.MalwareScannerUnavailable);
+            }
+        }
+
         DocumentAttachment? activeSignedOriginal = command.AttachmentType == AttachmentType.SignedOriginal
             ? await context.DocumentAttachments.SingleOrDefaultAsync(
                 a => a.DocumentId == command.DocumentId &&
@@ -112,7 +128,8 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             storedFile.Checksum,
             userContext.UserId,
             nowUtc,
-            activeSignedOriginal?.Id);
+            activeSignedOriginal?.Id,
+            malwareScanOptions.Value.Policy == AttachmentMalwareScanPolicy.Required);
 
         context.DocumentAttachments.Add(attachment);
 

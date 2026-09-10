@@ -38,4 +38,7 @@ public record Error
 
     public static Error Forbidden(string code, string description, object? details = null) =>
         new(code, description, ErrorType.Forbidden, details);
+
+    public static Error Unavailable(string code, string description, object? details = null) =>
+        new(code, description, ErrorType.Unavailable, details);
 }

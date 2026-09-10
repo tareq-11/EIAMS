@@ -23,6 +23,7 @@ public sealed class GetDocumentAttachmentContentController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IResult> Handle(Guid documentId, Guid attachmentId, CancellationToken cancellationToken)
     {
         var query = new GetDocumentAttachmentContentQuery(documentId, attachmentId);

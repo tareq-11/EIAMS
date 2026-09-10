@@ -11,6 +11,21 @@ namespace IntegrationTests.Infrastructure;
 public sealed class MigrationSafetyTests(IntegrationTestWebAppFactory factory)
 {
     [Fact]
+    public async Task FreshMigration_ShouldCreateNonNullableAttachmentMalwareScanStateDefaultingFalse()
+    {
+        await using var connection = new NpgsqlConnection(factory.DatabaseConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT is_nullable, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'document_attachments' AND column_name = 'malware_scan_clean'",
+            connection);
+        await using NpgsqlDataReader reader = await command.ExecuteReaderAsync();
+
+        (await reader.ReadAsync()).ShouldBeTrue();
+        reader.GetString(0).ShouldBe("NO");
+        reader.GetString(1).ShouldContain("false", Case.Insensitive);
+    }
+
+    [Fact]
     public async Task VersionBoundedNonIdempotentMigrationScript_ShouldRunConcurrentIndexCommandsOutsideTransaction_AndRecordHistoryAfterward()
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();

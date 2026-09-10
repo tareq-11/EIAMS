@@ -52,6 +52,18 @@ public static class DocumentAttachmentErrors
         "DocumentAttachments.FileSignatureMismatch",
         "The file content does not match its declared MIME type.");
 
+    public static readonly Error MalwareScanRejected = Error.Problem(
+        "DocumentAttachments.MalwareScanRejected",
+        "The attachment could not pass the required security scan.");
+
+    public static readonly Error MalwareScannerUnavailable = Error.Unavailable(
+        "DocumentAttachments.MalwareScannerUnavailable",
+        "The attachment security scan is temporarily unavailable.");
+
+    public static readonly Error MalwareScanRequired = Error.Unavailable(
+        "DocumentAttachments.MalwareScanRequired",
+        "The attachment is unavailable until it has passed the required security scan.");
+
     public static readonly Error NotEditable = Error.Problem(
         "DocumentAttachments.NotEditable",
         "Attachments can only be uploaded to or removed from a Draft document.");

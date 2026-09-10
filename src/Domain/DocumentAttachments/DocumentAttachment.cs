@@ -21,6 +21,7 @@ public sealed class DocumentAttachment : Entity, IAuditableEntity
     public string MimeType { get; private set; }
     public long FileSize { get; private set; }
     public string Checksum { get; private set; }
+    public bool MalwareScanClean { get; private set; }
     public Guid UploadedBy { get; private set; }
     public DateTime UploadedAtUtc { get; private set; }
     public bool IsActive { get; private set; }
@@ -44,7 +45,8 @@ public sealed class DocumentAttachment : Entity, IAuditableEntity
         string checksum,
         Guid uploadedBy,
         DateTime uploadedAtUtc,
-        Guid? replacesAttachmentId = null)
+        Guid? replacesAttachmentId = null,
+        bool malwareScanClean = false)
     {
         var attachment = new DocumentAttachment
         {
@@ -56,6 +58,7 @@ public sealed class DocumentAttachment : Entity, IAuditableEntity
             MimeType = mimeType,
             FileSize = fileSize,
             Checksum = checksum,
+            MalwareScanClean = malwareScanClean,
             UploadedBy = uploadedBy,
             UploadedAtUtc = uploadedAtUtc,
             IsActive = true,

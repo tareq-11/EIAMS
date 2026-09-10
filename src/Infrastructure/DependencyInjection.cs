@@ -151,6 +151,7 @@ public static class DependencyInjection
         services.AddScoped<AssetPostingSelectionService>();
 
         services.AddScoped<IFileStorage, LocalFileStorage>();
+        services.AddScoped<IAttachmentMalwareScanner, ClamAvAttachmentMalwareScanner>();
 
         services.AddSingleton<IValidateOptions<LocalFileStorageOptions>, LocalFileStorageOptionsValidator>();
 
@@ -163,6 +164,15 @@ public static class DependencyInjection
             .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath),
                 "AttachmentStorage:Local:RootPath is required.")
             .ValidateOnStart();
+
+        services.AddSingleton<IValidateOptions<AttachmentMalwareScanOptions>, AttachmentMalwareScanOptionsValidator>();
+        services.AddOptions<AttachmentMalwareScanOptions>()
+            .Bind(configuration.GetSection(AttachmentMalwareScanOptions.SectionName))
+            .ValidateOnStart();
+        services.AddOptions<ClamAvAttachmentMalwareScanOptions>()
+            .Bind(configuration.GetSection("AttachmentStorage:MalwareScan:ClamAv"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ClamAvAttachmentMalwareScanOptions>, ClamAvAttachmentMalwareScanOptionsValidator>();
 
         services.AddOptions<AssetCreationOptions>()
             .Bind(configuration.GetSection(AssetCreationOptions.SectionName))
