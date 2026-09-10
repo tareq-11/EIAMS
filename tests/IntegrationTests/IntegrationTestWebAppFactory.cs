@@ -72,6 +72,8 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         builder.UseSetting("Jwt:ExpirationInMinutes", "60");
         builder.UseSetting("AllowedHosts", "localhost;127.0.0.1");
         builder.UseSetting("AttachmentStorage:Local:RootPath", attachmentStoragePath);
+        // Tests intentionally do not require a live ClamAV instance; malware-specific tests inject their scanner.
+        builder.UseSetting("AttachmentStorage:MalwareScan:Policy", "Disabled");
 
         // Relax rate limiting so the test suite is not throttled.
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
@@ -251,6 +253,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
             builder.UseSetting(
                 "AttachmentStorage:Local:RootPath",
                 Path.Combine(Path.GetTempPath(), $"eiams-sibling-attachments-{Guid.NewGuid():N}"));
+            builder.UseSetting("AttachmentStorage:MalwareScan:Policy", "Disabled");
             builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
             builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
             builder.UseSetting("RateLimiting:Authentication:ConcurrencyLimit", "100000");

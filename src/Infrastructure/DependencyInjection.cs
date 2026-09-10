@@ -152,6 +152,7 @@ public static class DependencyInjection
 
         services.AddScoped<IFileStorage, LocalFileStorage>();
         services.AddScoped<IAttachmentMalwareScanner, ClamAvAttachmentMalwareScanner>();
+        services.AddHostedService<AttachmentMalwareScanStartupDiagnostics>();
 
         services.AddSingleton<IValidateOptions<LocalFileStorageOptions>, LocalFileStorageOptionsValidator>();
 
