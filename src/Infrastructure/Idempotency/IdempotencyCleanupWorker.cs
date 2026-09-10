@@ -1,4 +1,5 @@
 using Infrastructure.Database;
+using Infrastructure.BackgroundWork;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,29 +22,54 @@ internal sealed class IdempotencyCleanupWorker(
             return;
         }
 
-        await Task.Delay(settings.InitialDelay, stoppingToken);
+        try
+        {
+            await Task.Delay(settings.InitialDelay, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
 
         using var timer = new PeriodicTimer(settings.Interval);
-        do
+        while (!stoppingToken.IsCancellationRequested)
         {
+            long startedTimestamp = BackgroundWorkerMetrics.Start();
             try
             {
-                await DeleteExpiredBatchAsync(settings.BatchSize, stoppingToken);
+                int deleted = await RunOnceAsync(settings.BatchSize, stoppingToken);
+                BackgroundWorkerMetrics.Record("idempotency_cleanup", "succeeded", startedTimestamp, deleted);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                BackgroundWorkerMetrics.Record("idempotency_cleanup", "cancelled", startedTimestamp);
+                return;
+            }
+            catch (Exception exception)
+            {
+                BackgroundWorkerMetrics.Record("idempotency_cleanup", "failed", startedTimestamp);
+                logger.LogError(exception, "Failed to clean expired idempotency records; the bounded cycle will be retried later");
+            }
+            try
+            {
+                if (!await timer.WaitForNextTickAsync(stoppingToken))
+                {
+                    return;
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 return;
             }
-            catch (Exception exception)
-            {
-                logger.LogError(exception, "Failed to clean expired idempotency records");
-            }
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task DeleteExpiredBatchAsync(int batchSize, CancellationToken cancellationToken)
+    /// <summary>Runs one bounded, SKIP LOCKED cleanup batch.</summary>
+    internal async Task<int> RunOnceAsync(int batchSize, CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(batchSize, 10_000);
+
         await using AsyncServiceScope scope = scopeFactory.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         IDateTimeProvider dateTimeProvider = scope.ServiceProvider.GetRequiredService<IDateTimeProvider>();
@@ -69,5 +95,7 @@ internal sealed class IdempotencyCleanupWorker(
         {
             logger.LogInformation("Deleted {RecordCount} expired idempotency records", deleted);
         }
+
+        return deleted;
     }
 }

@@ -1,4 +1,5 @@
 using Application.Abstractions.PolymorphicReferences;
+using Infrastructure.BackgroundWork;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -21,18 +22,38 @@ internal sealed class PolymorphicReferenceAuditWorker(
             return;
         }
 
-        await Task.Delay(settings.InitialDelay, stoppingToken);
+        try
+        {
+            await Task.Delay(settings.InitialDelay, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
 
         using var timer = new PeriodicTimer(settings.Interval);
 
-        do
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await RunAuditCycleAsync(settings.MaximumLoggedFindingsPerCycle, stoppingToken);
+            long startedTimestamp = BackgroundWorkerMetrics.Start();
+            string outcome = await RunAuditCycleAsync(settings.MaximumLoggedFindingsPerCycle, stoppingToken);
+            BackgroundWorkerMetrics.Record("polymorphic_reference_audit", outcome, startedTimestamp);
+            try
+            {
+                if (!await timer.WaitForNextTickAsync(stoppingToken))
+                {
+                    return;
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
         }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task RunAuditCycleAsync(int maximumFindings, CancellationToken cancellationToken)
+    /// <summary>Runs one bounded audit cycle and returns a low-cardinality outcome for telemetry.</summary>
+    internal async Task<string> RunAuditCycleAsync(int maximumFindings, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -44,7 +65,7 @@ internal sealed class PolymorphicReferenceAuditWorker(
             if (result.SkippedBecauseLockUnavailable)
             {
                 logger.LogDebug("Skipped polymorphic reference audit because another instance owns the lock");
-                return;
+                return "skipped_lock_unavailable";
             }
 
             foreach (PolymorphicReferenceFinding finding in result.Findings)
@@ -63,14 +84,17 @@ internal sealed class PolymorphicReferenceAuditWorker(
                 "Polymorphic reference audit completed with {TotalFindings} findings; logged {LoggedFindings}",
                 result.TotalFindings,
                 result.Findings.Count);
+            return "succeeded";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Normal host shutdown.
+            return "cancelled";
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "Polymorphic reference audit cycle failed");
+            return "failed";
         }
     }
 }

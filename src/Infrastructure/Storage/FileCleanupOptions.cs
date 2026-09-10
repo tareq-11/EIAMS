@@ -14,4 +14,10 @@ public sealed class FileCleanupOptions
 
     /// <summary>Gets the upper bound for exponential retry backoff.</summary>
     public TimeSpan MaxRetryDelay { get; init; } = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// PostgreSQL transaction-scoped lock used to ensure that at most one application instance
+    /// deletes queued files during a cycle.
+    /// </summary>
+    public int AdvisoryLockKey { get; init; } = 90_421_002;
 }

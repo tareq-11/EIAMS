@@ -133,7 +133,7 @@ internal sealed class LocalFileStorage(
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            logger.LogWarning(exception, "Failed to delete attachment file with storage key {StorageKey}", storageKey);
+            logger.LogWarning(exception, "Failed to delete an attachment file");
 
             return Task.FromResult(Result.Failure(DocumentAttachmentErrors.StorageFailure));
         }

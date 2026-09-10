@@ -41,9 +41,7 @@ internal sealed class AttachmentFileCleanup(
                  """,
                 cancellationToken);
 
-            logger.LogWarning(
-                "Queued attachment file {StorageKey} for background deletion",
-                storageKey);
+            logger.LogWarning("Queued an attachment file for background deletion");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -51,8 +49,7 @@ internal sealed class AttachmentFileCleanup(
             // compensated), so cleanup cannot safely turn that operation into an API failure.
             logger.LogCritical(
                 exception,
-                "Failed to queue attachment file {StorageKey} for deletion; manual cleanup may be required",
-                storageKey);
+                "Failed to queue an attachment file for deletion; manual cleanup may be required");
         }
     }
 }
