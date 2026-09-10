@@ -28,13 +28,38 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         Path.GetTempPath(),
         $"eiams-integration-attachments-{Guid.NewGuid():N}");
 
-    private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder("postgres:17-alpine")
-        .WithDatabase("clean_architecture_integration_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
+    private readonly PostgreSqlContainer _dbContainer = CreatePostgreSqlContainer();
 
     internal string DatabaseConnectionString => _dbContainer.GetConnectionString();
+
+    /// <summary>
+    /// Keeps the normal integration-suite database baseline unchanged. The preload library is a
+    /// server-start setting, so it is attached only for the explicitly gated measurement run.
+    /// </summary>
+    internal static string[] GetPostgreSqlServerCommand(Func<string, string?>? getEnvironmentVariable = null)
+    {
+        getEnvironmentVariable ??= Environment.GetEnvironmentVariable;
+        return string.Equals(
+            getEnvironmentVariable(PgStatStatementsHarness.GateEnvironmentVariable),
+            "1",
+            StringComparison.Ordinal)
+            ? ["-c", "shared_preload_libraries=pg_stat_statements"]
+            : [];
+    }
+
+    private static PostgreSqlContainer CreatePostgreSqlContainer()
+    {
+        PostgreSqlBuilder builder = new PostgreSqlBuilder("postgres:17-alpine")
+            .WithDatabase("clean_architecture_integration_test")
+            .WithUsername("postgres")
+            .WithPassword("postgres");
+        string[] command = GetPostgreSqlServerCommand();
+        if (command.Length > 0)
+        {
+            builder = builder.WithCommand(command);
+        }
+        return builder.Build();
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
