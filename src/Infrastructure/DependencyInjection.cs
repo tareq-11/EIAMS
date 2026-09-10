@@ -297,6 +297,8 @@ public static class DependencyInjection
 
         DatabaseEndpointClassifier.ValidateExpectedMode(connectionString, databaseOptions.EndpointMode);
 
+        DatabaseTopologyConfiguration.Validate(configuration);
+
         var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
         {
             Pooling = databaseOptions.Pooling,
