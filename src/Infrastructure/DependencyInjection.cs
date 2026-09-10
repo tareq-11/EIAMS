@@ -43,6 +43,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using SharedKernel;
 
 namespace Infrastructure;
@@ -281,13 +282,32 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Database connection string is not configured. " +
                 "Set 'ConnectionStrings:Database' in appsettings.json or user secrets.");
-        int commandTimeoutSeconds = configuration.GetValue<int?>("DatabasePerformance:CommandTimeoutSeconds") ?? 30;
-
-        if (commandTimeoutSeconds is < 1 or > 600)
+        DatabaseConnectionOptions databaseOptions = configuration
+            .GetSection(DatabaseConnectionOptions.SectionName)
+            .Get<DatabaseConnectionOptions>() ?? new DatabaseConnectionOptions();
+        var databaseOptionsValidator = new DatabaseConnectionOptionsValidator();
+        ValidateOptionsResult validationResult = databaseOptionsValidator.Validate(null, databaseOptions);
+        if (validationResult.Failed)
         {
-            throw new InvalidOperationException(
-                "DatabasePerformance:CommandTimeoutSeconds must be between 1 and 600 seconds.");
+            throw new OptionsValidationException(
+                DatabaseConnectionOptions.SectionName,
+                typeof(DatabaseConnectionOptions),
+                validationResult.Failures);
         }
+
+        DatabaseEndpointClassifier.ValidateExpectedMode(connectionString, databaseOptions.EndpointMode);
+
+        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Pooling = databaseOptions.Pooling,
+            MaxPoolSize = databaseOptions.MaxPoolSize,
+            MinPoolSize = databaseOptions.MinPoolSize,
+            Timeout = databaseOptions.ConnectionTimeoutSeconds,
+            CommandTimeout = databaseOptions.CommandTimeoutSeconds,
+            KeepAlive = databaseOptions.KeepAliveSeconds,
+            CancellationTimeout = databaseOptions.CancellationTimeoutSeconds
+        };
+        PostgresStartupOptions.ApplyTimeouts(connectionStringBuilder, databaseOptions);
 
         services.AddScoped<AuditableEntityInterceptor>();
 
@@ -295,12 +315,19 @@ public static class DependencyInjection
 
         services.AddScoped<DocumentLifecycleSaveChangesInterceptor>();
 
+        services.AddSingleton(databaseOptions);
+
+        services.AddHostedService(sp => new DatabaseConnectionStartupDiagnostics(
+            databaseOptions,
+            connectionString,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DatabaseConnectionStartupDiagnostics>>()));
+
         services.AddDbContext<ApplicationDbContext>(
             (sp, options) => options
-                .UseNpgsql(connectionString, npgsqlOptions =>
+                .UseNpgsql(connectionStringBuilder.ConnectionString, npgsqlOptions =>
                     npgsqlOptions
                         .MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default)
-                        .CommandTimeout(commandTimeoutSeconds))
+                        .CommandTimeout(databaseOptions.CommandTimeoutSeconds))
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<AuditableEntityInterceptor>(),
@@ -315,6 +342,19 @@ public static class DependencyInjection
 
     private static IServiceCollection AddHealthChecks(this IServiceCollection services, IConfiguration configuration)
     {
+        string connectionString = configuration.GetConnectionString("Database")!;
+        DatabaseConnectionOptions databaseOptions = configuration
+            .GetSection(DatabaseConnectionOptions.SectionName)
+            .Get<DatabaseConnectionOptions>() ?? new DatabaseConnectionOptions();
+        string readinessConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            // A health probe is short-lived and must not create another long-lived pool per process.
+            Pooling = false,
+            Timeout = databaseOptions.ConnectionTimeoutSeconds,
+            CommandTimeout = databaseOptions.CommandTimeoutSeconds,
+            CancellationTimeout = databaseOptions.CancellationTimeoutSeconds
+        }.ConnectionString;
+
         services
             .AddHealthChecks()
             .AddCheck(
@@ -322,7 +362,7 @@ public static class DependencyInjection
                 () => HealthCheckResult.Healthy(),
                 tags: ["live"])
             .AddNpgSql(
-                configuration.GetConnectionString("Database")!,
+                readinessConnectionString,
                 name: "postgresql",
                 tags: ["ready"]);
 

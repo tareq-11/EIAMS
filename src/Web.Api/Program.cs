@@ -2,6 +2,7 @@ using System.IO.Compression;
 using Application;
 using Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Timeouts;
 using Microsoft.AspNetCore.ResponseCompression;
 using Serilog;
 using Web.Api;
@@ -31,6 +32,21 @@ builder.Services.AddRateLimitingInternal(builder.Configuration);
 builder.Services.AddCorsPolicy(builder.Configuration, builder.Environment);
 
 builder.Services.AddForwardedHeaders(builder.Configuration);
+
+int requestTimeoutSeconds = builder.Configuration.GetValue<int?>("DatabasePerformance:RequestTimeoutSeconds") ?? 30;
+builder.Services.AddRequestTimeouts(options =>
+{
+    options.DefaultPolicy = new RequestTimeoutPolicy
+    {
+        Timeout = TimeSpan.FromSeconds(requestTimeoutSeconds),
+        TimeoutStatusCode = StatusCodes.Status504GatewayTimeout,
+        WriteTimeoutResponse = async context =>
+        {
+            IResult result = ApiResults.ErrorFromStatusCode(context, StatusCodes.Status504GatewayTimeout);
+            await result.ExecuteAsync(context);
+        }
+    };
+});
 
 builder.Services.AddResponseCompression(options =>
 {
@@ -87,6 +103,8 @@ app.UseRequestContextLogging();
 app.UseSerilogRequestLogging();
 
 app.UseExceptionHandler();
+
+app.UseRequestTimeouts();
 
 app.UseSecurityHeaders();
 
