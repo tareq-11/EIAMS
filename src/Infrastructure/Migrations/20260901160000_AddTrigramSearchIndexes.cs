@@ -40,7 +40,12 @@ public sealed class AddTrigramSearchIndexes : Migration
         foreach ((string name, string definition) in Indexes)
         {
             migrationBuilder.Sql(
-                $"CREATE INDEX CONCURRENTLY IF NOT EXISTS {name} ON {definition};",
+                // Do not use IF NOT EXISTS here. If a cancelled concurrent build left an
+                // invalid index with this name behind, PostgreSQL would otherwise skip it
+                // and EF could record this migration as applied while the index is unusable.
+                // Failing is intentional: the operator must inspect and recover the index
+                // before retrying the migration.
+                $"CREATE INDEX CONCURRENTLY {name} ON {definition};",
                 suppressTransaction: true);
         }
     }

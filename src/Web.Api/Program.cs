@@ -71,7 +71,13 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwaggerWithUi();
 
-    app.ApplyMigrations();
+    // Applying migrations from every web-process startup is unsafe for long-running DDL.
+    // Local developers may opt in explicitly; deployed environments use one dedicated
+    // migration-owner job after the preflight script succeeds.
+    if (builder.Configuration.GetValue<bool>("DatabaseMigrations:ApplyOnStartup"))
+    {
+        app.ApplyMigrations();
+    }
 }
 
 app.UseForwardedHeaders();
