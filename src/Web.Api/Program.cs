@@ -108,6 +108,8 @@ app.UseRequestContextLogging();
 
 app.UseSerilogRequestLogging();
 
+app.UseSecurityOutcomeMetrics();
+
 app.UseExceptionHandler();
 
 app.UseRequestTimeouts();

@@ -30,7 +30,12 @@ internal static class OpenTelemetryExtensions
                 .AddMeter("CleanArchitecture.Infrastructure.Authorization")
                 .AddMeter("CleanArchitecture.Infrastructure.Cache")
                 .AddMeter("CleanArchitecture.Infrastructure.BackgroundWork")
+                .AddMeter("EIAMS.SecurityOperations")
                 .AddMeter("Npgsql")
+                // Npgsql's provider tags can contain server, database, and pool identifiers.
+                // Retain only the fixed connection state where it is meaningful; all other
+                // Npgsql pool streams are deliberately process-wide aggregates.
+                .ApplyNpgsqlMetricTagPolicy()
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
                 .AddRuntimeInstrumentation());
