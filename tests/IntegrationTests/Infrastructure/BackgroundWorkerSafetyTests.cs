@@ -249,7 +249,10 @@ public sealed class BackgroundWorkerSafetyTests(IntegrationTestWebAppFactory fac
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Guid actorUserId = await context.Users.Select(user => user.Id).SingleAsync();
+        Guid actorUserId = await context.Users
+            .Where(user => user.Email == IntegrationTestWebAppFactory.AdministratorEmail)
+            .Select(user => user.Id)
+            .SingleAsync();
         context.IdempotencyRecords.Add(IdempotencyRecord.Create(
             key,
             "background-worker-test",

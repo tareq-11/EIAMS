@@ -246,6 +246,7 @@ public sealed class BootstrapAndAdministratorSafetyTests
             builder.UseSetting("Jwt:Audience", IntegrationTestWebAppFactory.JwtAudience);
             builder.UseSetting("Jwt:ExpirationInMinutes", "60");
             builder.UseSetting("AttachmentStorage:Local:RootPath", attachmentStoragePath);
+            builder.UseSetting("AttachmentStorage:MalwareScan:Policy", "Disabled");
             builder.UseSetting("RateLimiting:Global:PermitLimit", "1000");
             builder.UseSetting("RateLimiting:Authentication:PermitLimit", "1000");
             builder.UseSetting("BootstrapAdministrator:Enabled", bootstrapEnabled.ToString());
@@ -257,7 +258,13 @@ public sealed class BootstrapAndAdministratorSafetyTests
                 DateTime.UtcNow.AddMinutes(10).ToString("O"));
         }
 
-        internal Task StartAsync() => database.StartAsync();
+        internal async Task StartAsync()
+        {
+            await database.StartAsync();
+            using IServiceScope scope = Services.CreateScope();
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await context.Database.MigrateAsync();
+        }
 
         internal HttpClient CreateApiClient()
         {
