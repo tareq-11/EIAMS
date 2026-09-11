@@ -170,6 +170,12 @@ public sealed class PostgreSqlReadPlanAnalysisIntegrationTests(IntegrationTestWe
         serialized.ShouldContain("representative-read-component-plan");
         serialized.ShouldContain("not captured production SQL", Case.Insensitive);
         serialized.ShouldContain("ScenarioP95SelectionSignalMs");
+
+        string directory = Environment.GetEnvironmentVariable("EIAMS_POSTGRES_PLAN_RESULT_DIR")
+            ?? Path.Combine(Path.GetTempPath(), "eiams-postgres-read-plan-results");
+        await ApiLoadSuiteArtifactWriter.WriteAsync(directory,
+            "postgres-read-plan-quick.json",
+            new { Status = "passed", Profile = configuration.Profile.ToString(), Evidence = evidence });
     }
 }
 

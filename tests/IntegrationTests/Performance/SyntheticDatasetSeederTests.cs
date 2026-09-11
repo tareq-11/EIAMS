@@ -169,6 +169,14 @@ public sealed class SyntheticDatasetSeederTests
         {
             await context.Database.CloseConnectionAsync();
         }
+
+        if (string.Equals(Environment.GetEnvironmentVariable("RUN_SYNTHETIC_DATASET_TESTS"), "1", StringComparison.Ordinal))
+        {
+            string directory = Environment.GetEnvironmentVariable("EIAMS_SYNTHETIC_DATASET_RESULT_DIR")
+                ?? Path.Combine(Path.GetTempPath(), "eiams-synthetic-dataset-results");
+            await ApiLoadSuiteArtifactWriter.WriteAsync(directory, "synthetic-dataset-small.json",
+                new { Status = "passed", Profile = DatasetProfile.Small.ToString(), Seed, first.OperationalMovementCount, first.AuditRecordCount });
+        }
     }
 }
 
