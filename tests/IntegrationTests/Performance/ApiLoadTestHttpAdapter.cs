@@ -103,6 +103,8 @@ internal sealed record ApiLoadTestHttpMetrics(
 internal sealed record ApiLoadTestScenarioMetrics(
     int Count, int SuccessCount, int FailureCount, long PayloadBytes,
     double? ApproximateP50Ms, double? ApproximateP95Ms, double? ApproximateP99Ms);
+internal sealed record ApiLoadTestLatencySummary(
+    double? ApproximateP50Ms, double? ApproximateP95Ms, double? ApproximateP99Ms);
 
 /// <summary>
 /// HTTP adapter for the explicit load test. Labels are logical names only and never contain tokens, credentials, IDs, or email addresses.
@@ -129,6 +131,7 @@ internal sealed class ApiLoadTestHttpAdapter(
     private long completedResponsePayloadBytes;
     private readonly Dictionary<ApiLoadTestScenario, ScenarioAccumulator> scenarioMetrics =
         Enum.GetValues<ApiLoadTestScenario>().ToDictionary(scenario => scenario, _ => new ScenarioAccumulator());
+    private readonly ScenarioAccumulator aggregateLatency = new();
 
     internal async Task<ApiLoadTestExecutionSample> ExecuteAsync(
         ApiLoadTestScenario scenario,
@@ -178,6 +181,8 @@ internal sealed class ApiLoadTestHttpAdapter(
     internal IReadOnlyDictionary<ApiLoadTestScenario, ApiLoadTestScenarioMetrics> GetScenarioMetrics() =>
         scenarioMetrics.ToDictionary(pair => pair.Key, pair => pair.Value.Snapshot());
 
+    internal ApiLoadTestLatencySummary GetAggregateLatency() => aggregateLatency.LatencySnapshot();
+
     /// <summary>Starts a phase-local aggregate. Authentication is intentionally never recorded.</summary>
     internal void ResetMetrics()
     {
@@ -192,6 +197,7 @@ internal sealed class ApiLoadTestHttpAdapter(
         {
             accumulator.Reset();
         }
+        aggregateLatency.Reset();
     }
 
     internal static ApiBenchmarkResponseClassification ClassifyResponse(
@@ -325,6 +331,7 @@ internal sealed class ApiLoadTestHttpAdapter(
     private void Record(ApiLoadTestScenario scenario, ApiLoadTestHttpSample sample)
     {
         scenarioMetrics[scenario].Record(sample);
+        aggregateLatency.Record(sample);
         if (sample.StatusCode is not null)
         {
             Interlocked.Increment(ref completed);
@@ -382,6 +389,14 @@ internal sealed class ApiLoadTestHttpAdapter(
                 return new ApiLoadTestScenarioMetrics(
                     count, success, count - success, payloadBytes,
                     Percentile(.50), Percentile(.95), Percentile(.99));
+            }
+        }
+
+        internal ApiLoadTestLatencySummary LatencySnapshot()
+        {
+            lock (gate)
+            {
+                return new ApiLoadTestLatencySummary(Percentile(.50), Percentile(.95), Percentile(.99));
             }
         }
 

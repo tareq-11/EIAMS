@@ -35,6 +35,13 @@ internal sealed class NpgsqlPoolStateCollector : IDisposable
             }
 
             meterListener.EnableMeasurementEvents(instrument, this);
+            // A counter only reports when it changes. Its publication is therefore the evidence
+            // that the official timeout instrument exists; a zero-valued phase is still valid
+            // evidence and must not be represented as an unavailable instrument.
+            if (instrument.Name == ConnectionTimeoutsInstrument)
+            {
+                Volatile.Write(ref timeoutsAvailable, 1);
+            }
         };
         listener.SetMeasurementEventCallback<long>(static (instrument, value, tags, state) =>
             ((NpgsqlPoolStateCollector)state!).Record(instrument.Name, value, tags));
@@ -51,7 +58,6 @@ internal sealed class NpgsqlPoolStateCollector : IDisposable
         ThrowIfDisposed();
         ResetGaugeCycle();
         Interlocked.Exchange(ref poolTimeouts, 0);
-        Volatile.Write(ref timeoutsAvailable, 0);
     }
 
     public NpgsqlPoolStateSnapshot Snapshot()

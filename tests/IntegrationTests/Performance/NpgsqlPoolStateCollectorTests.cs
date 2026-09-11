@@ -52,6 +52,23 @@ public sealed class NpgsqlPoolStateCollectorTests
     }
 
     [Fact]
+    public void PublishedTimeoutCounterWithoutMeasurements_IsAvailableAtZeroAndSurvivesReset()
+    {
+        using var collector = new NpgsqlPoolStateCollector();
+        using var meter = new Meter(NpgsqlPoolStateCollector.MeterName, "test");
+        _ = meter.CreateCounter<long>(NpgsqlPoolStateCollector.ConnectionTimeoutsInstrument);
+
+        NpgsqlPoolStateSnapshot beforeReset = collector.Snapshot();
+        beforeReset.ConnectionTimeoutsAvailable.ShouldBeTrue();
+        beforeReset.PoolTimeouts.ShouldBe(0);
+
+        collector.Reset();
+        NpgsqlPoolStateSnapshot afterReset = collector.Snapshot();
+        afterReset.ConnectionTimeoutsAvailable.ShouldBeTrue();
+        afterReset.PoolTimeouts.ShouldBe(0);
+    }
+
+    [Fact]
     public void Dispose_UnsubscribesAndPreventsFurtherSnapshots()
     {
         var collector = new NpgsqlPoolStateCollector();
