@@ -82,15 +82,28 @@ public sealed class ApiSoakTestSmokeTests(IntegrationTestWebAppFactory factory, 
         {
             var artifact = new
             {
+                SchemaVersion = ApiSoakArtifactComparisonSchema.ArtifactVersion,
                 Status = failure is null && recovery.Status == "passed" ? "passed" : "failed",
                 FailureKind = failure?.GetType().Name,
                 Limitations = "Aggregate-only loopback evidence; managed-memory observations are not proof of a leak, and sampled lock waits are not per-request duration.",
-                ExecutionProfile = new { SuiteProfile = suite.Profile.ToString(), MeasurementSeconds = suite.Run.Measurement.Duration.TotalSeconds, suite.Run.ClientConcurrency, suite.MaximumStartedRequests, suite.MaximumPostRequests },
+                ExecutionProfile = new
+                {
+                    SuiteProfile = suite.Profile.ToString(),
+                    WarmupSeconds = suite.Run.Warmup.Duration.TotalSeconds,
+                    MeasurementSeconds = suite.Run.Measurement.Duration.TotalSeconds,
+                    suite.Run.ClientConcurrency,
+                    LoadMode = suite.Run.Mode.ToString(),
+                    suite.Run.ArrivalRatePerSecond,
+                    RunSeed = suite.Run.Seed,
+                    suite.MaximumStartedRequests,
+                    suite.MaximumPostRequests,
+                    ScenarioMix = suite.Run.ScenarioMix.Select(weight => new { Scenario = weight.Scenario.ToString(), weight.Weight }).ToArray()
+                },
                 Dataset = new { Profile = suite.DatasetProfile.ToString(), suite.Seed },
                 WorkerProfile = ApiBenchmarkWorkerProfiles.GetMetadata(suite.WorkerProfile),
                 Environment = new { Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription, OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription, Transport = "Kestrel loopback HTTP", Tls = "not_used" },
                 Http = new { metrics?.Completed, metrics?.Successful, latency?.ApproximateP50Ms, latency?.ApproximateP95Ms, latency?.ApproximateP99Ms, ThroughputRequestsPerSecond = metrics is null ? (double?)null : metrics.Successful / suite.Run.Measurement.Duration.TotalSeconds, metrics?.UnexpectedHttp, metrics?.RateLimited, metrics?.TimeoutOrCancellation, metrics?.TransportFailures },
-                ScenarioMetrics = scenarioMetrics,
+                ScenarioMetrics = scenarioMetrics?.Where(pair => suite.Run.ScenarioMix.Any(weight => weight.Scenario == pair.Key)).ToDictionary(),
                 ManagedMemory = memory,
                 NpgsqlPool = pool,
                 RecoveryNpgsqlPool = recoveryPool,
