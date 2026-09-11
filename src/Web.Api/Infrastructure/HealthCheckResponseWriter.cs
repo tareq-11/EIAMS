@@ -8,6 +8,7 @@ internal static class HealthCheckResponseWriter
     internal static Task WriteAsync(HttpContext context, HealthReport report)
     {
         context.Response.ContentType = "application/json; charset=utf-8";
+        context.Response.Headers.CacheControl = "no-store";
 
         return JsonSerializer.SerializeAsync(
             context.Response.Body,

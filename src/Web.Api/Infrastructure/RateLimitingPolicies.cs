@@ -6,4 +6,5 @@ public static class RateLimitingPolicies
     public const string Reporting = "reporting-concurrency";
     public const string Upload = "upload-concurrency";
     public const string Posting = "posting-concurrency";
+    public const string Health = "health-probes";
 }

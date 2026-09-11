@@ -88,6 +88,50 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task HealthPolicy_ShouldNotConsumeOrUseTheGlobalRequestBudget()
+    {
+        await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("RateLimiting:Global:PermitLimit", "1");
+            builder.UseSetting("RateLimiting:Global:WindowInSeconds", "60");
+            builder.UseSetting("RateLimiting:Health:PermitLimit", "10");
+            builder.UseSetting("RateLimiting:Health:WindowInSeconds", "60");
+            builder.UseSetting("RateLimiting:Health:ConcurrencyLimit", "1");
+        });
+        using HttpClient client = limitedFactory.CreateClient();
+        client.BaseAddress = new Uri("http://localhost/api/v1/");
+
+        (await client.GetAsync("health/live")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await client.GetAsync("health/live")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        (await client.GetAsync("admin/users")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        using HttpResponseMessage globalRejected = await client.GetAsync("admin/users");
+        globalRejected.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        (await globalRejected.Content.ReadAsStringAsync()).ShouldContain("RATE_LIMIT_EXCEEDED");
+    }
+
+    [Fact]
+    public async Task HealthPolicy_ShouldReturnSafe429AndRetryAfter_WhenItsOwnBudgetIsExceeded()
+    {
+        await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("RateLimiting:Global:PermitLimit", "100");
+            builder.UseSetting("RateLimiting:Health:PermitLimit", "1");
+            builder.UseSetting("RateLimiting:Health:WindowInSeconds", "60");
+            builder.UseSetting("RateLimiting:Health:ConcurrencyLimit", "1");
+        });
+        using HttpClient client = limitedFactory.CreateClient();
+        client.BaseAddress = new Uri("http://localhost/api/v1/");
+
+        (await client.GetAsync("health/live")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        using HttpResponseMessage rejected = await client.GetAsync("health/live");
+
+        rejected.StatusCode.ShouldBe(HttpStatusCode.TooManyRequests);
+        rejected.Headers.RetryAfter.ShouldNotBeNull();
+        (await rejected.Content.ReadAsStringAsync()).ShouldContain("RATE_LIMIT_EXCEEDED");
+    }
+
+    [Fact]
     [Trait("WorkloadClass", PerformanceWorkloadContracts.Abuse)]
     public async Task AuthenticationConcurrencyLimit_Should_RejectOverlappingPasswordVerification()
     {

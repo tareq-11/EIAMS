@@ -3,6 +3,7 @@ using Application;
 using Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Timeouts;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.ResponseCompression;
 using Serilog;
 using Web.Api;
@@ -91,18 +92,25 @@ if (!app.Environment.IsDevelopment())
 app.MapHealthChecks("api/v1/health", new HealthCheckOptions
 {
     ResponseWriter = HealthCheckResponseWriter.WriteAsync
-});
+})
+    .RequireRateLimiting(RateLimitingPolicies.Health)
+    .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 
 app.MapHealthChecks("api/v1/health/live", new HealthCheckOptions
 {
-    Predicate = registration => registration.Tags.Contains("live")
-});
+    Predicate = registration => registration.Tags.Contains("live"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+})
+    .RequireRateLimiting(RateLimitingPolicies.Health)
+    .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 
 app.MapHealthChecks("api/v1/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
     ResponseWriter = HealthCheckResponseWriter.WriteAsync
-});
+})
+    .RequireRateLimiting(RateLimitingPolicies.Health)
+    .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 
 app.UseRequestContextLogging();
 
