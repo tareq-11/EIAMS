@@ -6,6 +6,7 @@ using Domain.Roles;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using Domain.WarehouseDocuments;
+using Domain.Warehouses;
 using Infrastructure.Database;
 using IntegrationTests.Regression;
 using Microsoft.EntityFrameworkCore;
@@ -116,6 +117,16 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
             $"warehouse-documents/{documentId}/stock-movements");
         HttpResponseMessage inaccessibleWarehouseResponse = await HttpClient.GetAsync(
             $"warehouses/{seed.DestinationWarehouseId}");
+        HttpResponseMessage forbiddenUpdateResponse = await HttpClient.PutAsJsonAsync(
+            $"warehouses/{seed.WarehouseId}",
+            new
+            {
+                organizationalUnitId = seed.OrgUnitId,
+                name = "Read-only write attempt",
+                warehouseType = "Main",
+                canHoldStock = true,
+                expectedRowVersion = 1
+            });
 
         // Assert
         listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -132,6 +143,13 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
         movementsResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         documentMovementsResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         inaccessibleWarehouseResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        forbiddenUpdateResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        await using AsyncServiceScope verificationScope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext verificationContext = verificationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Warehouse warehouse = await verificationContext.Warehouses.SingleAsync(item => item.Id == seed.WarehouseId);
+        warehouse.Name.ShouldNotBe("Read-only write attempt");
+        warehouse.RowVersion.ShouldBe(1);
     }
 
     [Fact]
