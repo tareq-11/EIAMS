@@ -14,15 +14,17 @@ public sealed class AuthRequestLimitMetadataTests
         typeof(LogoutController),
         typeof(RegisterController),
         typeof(RecoverAdministratorController),
-        typeof(CreateUserController)
+        typeof(Web.Api.Controllers.Users.CreateUserController)
     };
 
     [Theory]
     [MemberData(nameof(LimitedControllers))]
     public void AuthenticationAndProvisioningActions_Should_HaveSmallBodyLimits(Type controllerType)
     {
-        RequestSizeLimitAttribute? attribute = controllerType
-            .GetMethod("Handle")!
+        System.Reflection.MethodInfo handle = controllerType.GetMethod("Handle")
+            ?? throw new ShouldAssertException($"Expected {controllerType.FullName} to expose a Handle action.");
+
+        RequestSizeLimitAttribute? attribute = handle
             .GetCustomAttributes(typeof(RequestSizeLimitAttribute), inherit: true)
             .Cast<RequestSizeLimitAttribute>()
             .SingleOrDefault();
