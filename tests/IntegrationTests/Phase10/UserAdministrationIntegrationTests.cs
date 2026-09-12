@@ -94,12 +94,12 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         using var listBody = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
-        JsonElement item = listBody.RootElement.GetProperty("data")[0];
+        JsonElement item = listBody.RootElement.GetProperty("data").GetProperty("items")[0];
         item.GetProperty("id").GetGuid().ShouldBe(managedUserId);
         item.GetProperty("email").GetString().ShouldBe(User.NormalizeEmail(email));
         item.GetProperty("firstName").GetString().ShouldBe("Updated");
         item.GetProperty("status").GetString().ShouldBe("Suspended");
-        listBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(1);
+        listBody.RootElement.GetProperty("data").GetProperty("page_info").GetProperty("total_items").GetInt32().ShouldBe(1);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

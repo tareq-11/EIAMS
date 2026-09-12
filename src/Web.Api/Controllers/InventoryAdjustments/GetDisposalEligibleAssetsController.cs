@@ -19,7 +19,7 @@ public sealed class GetDisposalEligibleAssetsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Assets.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<DisposalEligibleAssetResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<DisposalEligibleAssetResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

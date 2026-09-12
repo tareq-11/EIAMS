@@ -27,12 +27,12 @@ public sealed class AuditKeysetPaginationTests : BaseIntegrationTest
         HttpResponseMessage firstResponse = await HttpClient.GetAsync("audit-logs/cursor?pageSize=1");
         firstResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var first = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
-        JsonElement firstItem = first.RootElement.GetProperty("data")[0];
+        JsonElement firstItem = first.RootElement.GetProperty("data").GetProperty("items")[0];
         Guid firstId = firstItem.GetProperty("id").GetGuid();
-        JsonElement pagination = first.RootElement.GetProperty("pagination");
-        pagination.GetProperty("has_next_page").GetBoolean().ShouldBeTrue();
-        DateTime nextCreatedAtUtc = pagination.GetProperty("next_created_at_utc").GetDateTime();
-        Guid nextId = pagination.GetProperty("next_id").GetGuid();
+        JsonElement pageInfo = first.RootElement.GetProperty("data").GetProperty("page_info");
+        pageInfo.GetProperty("has_next_page").GetBoolean().ShouldBeTrue();
+        DateTime nextCreatedAtUtc = pageInfo.GetProperty("next_created_at_utc").GetDateTime();
+        Guid nextId = pageInfo.GetProperty("next_id").GetGuid();
 
         commandCounter.GetCommandTexts().Any(command =>
             command.Contains("COUNT(", StringComparison.OrdinalIgnoreCase)).ShouldBeFalse();
@@ -41,7 +41,7 @@ public sealed class AuditKeysetPaginationTests : BaseIntegrationTest
         HttpResponseMessage secondResponse = await HttpClient.GetAsync(secondPageUrl);
         secondResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var second = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
-        Guid secondId = second.RootElement.GetProperty("data")[0].GetProperty("id").GetGuid();
+        Guid secondId = second.RootElement.GetProperty("data").GetProperty("items")[0].GetProperty("id").GetGuid();
 
         secondId.ShouldNotBe(firstId);
     }

@@ -3626,6 +3626,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
+                    b.Property<string>("Username")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("username");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -3677,6 +3682,9 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("Status", "Email")
                         .HasDatabaseName("ix_users_status_email");
+
+                    b.HasIndex("Username")
+                        .HasDatabaseName("ix_users_username");
 
                     b.ToTable("users", "public");
                 });

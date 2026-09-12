@@ -17,7 +17,7 @@ public sealed class GetMaterialDomainsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Materials.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialDomainResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<MaterialDomainResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Status? status,

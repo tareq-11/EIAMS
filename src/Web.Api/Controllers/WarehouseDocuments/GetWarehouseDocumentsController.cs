@@ -18,7 +18,7 @@ public sealed class GetWarehouseDocumentsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseDocumentResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<WarehouseDocumentResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

@@ -18,7 +18,7 @@ public sealed class GetAssetsReportController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Assets.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<AssetsReportRow>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<AssetsReportRow>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

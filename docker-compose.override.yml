@@ -1,9 +1,16 @@
 services:
   web-api:
+    env_file:
+      - .env
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_HTTP_PORTS=8080
       - ASPNETCORE_HTTPS_PORTS=8081
+      - Jwt__Secret=${JWT_SECRET}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - Jwt__ExpirationInMinutes=${JWT_EXPIRATION_MINUTES}
+      - BootstrapAdministrator__Enabled=${BOOTSTRAP_ADMIN_ENABLED}
     ports:
       - "8080"
       - "8081"

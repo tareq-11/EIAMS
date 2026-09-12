@@ -17,7 +17,7 @@ public sealed class GetAssetCustodyTimelineController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Custodies.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<AssetCustodyTimelineResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<AssetCustodyTimelineResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(

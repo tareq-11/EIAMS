@@ -16,9 +16,9 @@ public sealed class GetWarehouseCapabilityOperationsController(
     : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityOperationResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<WarehouseCapabilityOperationResponse>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Warehouses.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityOperationResponse>>>(
+    [ProducesResponseType<ApiResponse<PagedData<WarehouseCapabilityOperationResponse>>>(
         StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

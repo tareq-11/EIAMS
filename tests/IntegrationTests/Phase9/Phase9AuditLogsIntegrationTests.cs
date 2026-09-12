@@ -78,14 +78,14 @@ public sealed class Phase9AuditLogsIntegrationTests : BaseIntegrationTest
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        ApiResponse<IReadOnlyList<AuditLogListItemResponse>>? content =
-            await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<AuditLogListItemResponse>>>();
+        ApiResponse<PagedData<AuditLogListItemResponse>>? content =
+            await response.Content.ReadFromJsonAsync<ApiResponse<PagedData<AuditLogListItemResponse>>>();
 
         content.ShouldNotBeNull();
         content.Data.ShouldNotBeNull();
-        content.Data.Any(x => x.Id == logId).ShouldBeTrue();
+        content.Data.Items.Any(x => x.Id == logId).ShouldBeTrue();
 
-        AuditLogListItemResponse item = content.Data.First(x => x.Id == logId);
+        AuditLogListItemResponse item = content.Data.Items.First(x => x.Id == logId);
         item.ActionDisplayAr.ShouldBe("ترحيل");
         item.ActionDisplayEn.ShouldBe("Post");
         item.EntityTypeDisplayAr.ShouldBe("مستند مستودعي");
@@ -199,15 +199,15 @@ public sealed class Phase9AuditLogsIntegrationTests : BaseIntegrationTest
         using (var globalBody = JsonDocument.Parse(await globalResponse.Content.ReadAsStringAsync()))
         {
             JsonElement root = globalBody.RootElement;
-            root.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(1);
-            root.GetProperty("data")[0].GetProperty("id").GetGuid().ShouldBe(allowedLogId);
+            root.GetProperty("data").GetProperty("page_info").GetProperty("total_items").GetInt32().ShouldBe(1);
+            root.GetProperty("data").GetProperty("items")[0].GetProperty("id").GetGuid().ShouldBe(allowedLogId);
         }
 
         allowedDetailsResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         outsideDetailsResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         outsideEntityResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var outsideEntityBody = JsonDocument.Parse(await outsideEntityResponse.Content.ReadAsStringAsync());
-        outsideEntityBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(0);
+        outsideEntityBody.RootElement.GetProperty("data").GetProperty("page_info").GetProperty("total_items").GetInt32().ShouldBe(0);
     }
 
     [Fact]

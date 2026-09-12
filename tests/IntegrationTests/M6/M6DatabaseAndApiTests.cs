@@ -270,21 +270,21 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
             await timelineResponse.Content.ReadFromJsonAsync<PagedEnvelope<CustodyTimelineDetails>>();
         timeline.ShouldNotBeNull();
         timeline.Success.ShouldBeTrue();
-        timeline.Data.Count.ShouldBe(1);
-        timeline.Pagination.Page.ShouldBe(1);
-        timeline.Pagination.PageSize.ShouldBe(1);
-        timeline.Pagination.TotalItems.ShouldBe(1);
+        timeline.Data.Items.Count.ShouldBe(1);
+        timeline.Data.PageInfo.Page.ShouldBe(1);
+        timeline.Data.PageInfo.PageSize.ShouldBe(1);
+        timeline.Data.PageInfo.TotalItems.ShouldBe(1);
 
         pendingResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         PagedEnvelope<PendingCustodyDetails>? pending =
             await pendingResponse.Content.ReadFromJsonAsync<PagedEnvelope<PendingCustodyDetails>>();
         pending.ShouldNotBeNull();
         pending.Success.ShouldBeTrue();
-        pending.Data.Count.ShouldBe(1);
-        pending.Pagination.Page.ShouldBe(1);
-        pending.Pagination.PageSize.ShouldBe(1);
-        pending.Pagination.TotalItems.ShouldBe(2);
-        pending.Pagination.TotalPages.ShouldBe(2);
+        pending.Data.Items.Count.ShouldBe(1);
+        pending.Data.PageInfo.Page.ShouldBe(1);
+        pending.Data.PageInfo.PageSize.ShouldBe(1);
+        pending.Data.PageInfo.TotalItems.ShouldBe(2);
+        pending.Data.PageInfo.TotalPages.ShouldBe(2);
     }
 
     [Fact]
@@ -671,14 +671,18 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         Guid AssetId,
         Guid ReceivedHistoryId);
 
-    private sealed record M6ApiEnvelope<T>(bool Success, T Data);
-    private sealed record PagedEnvelope<T>(bool Success, List<T> Data, PaginationDetails Pagination);
-    private sealed record PaginationDetails(
-        int Page,
+    private sealed record M6ApiEnvelope<T>(bool Success, T Data, M6ApiMeta Meta);
+    private sealed record M6ApiMeta([property: JsonPropertyName("request_id")] string RequestId, [property: JsonPropertyName("timestamp_utc")] DateTime TimestampUtc);
+    private sealed record PagedEnvelope<T>(bool Success, PagedData<T> Data, M6ApiMeta Meta);
+    private sealed record PagedData<T>([property: JsonPropertyName("items")] List<T> Items, [property: JsonPropertyName("page_info")] PageInfo PageInfo);
+    private sealed record PageInfo(
+        [property: JsonPropertyName("page")] int Page,
         [property: JsonPropertyName("page_size")] int PageSize,
         [property: JsonPropertyName("total_items")] int TotalItems,
-        [property: JsonPropertyName("total_pages")] int TotalPages);
-    private sealed record ApiErrorEnvelope(bool Success, ApiErrorDetails Error);
+        [property: JsonPropertyName("total_pages")] int TotalPages,
+        [property: JsonPropertyName("has_previous_page")] bool HasPreviousPage,
+        [property: JsonPropertyName("has_next_page")] bool HasNextPage);
+    private sealed record ApiErrorEnvelope(bool Success, ApiErrorDetails Error, M6ApiMeta Meta);
     private sealed record ApiErrorDetails(string Code);
     private sealed record DocumentDetails(ReturnInfoDetails? ReturnInfo, List<DocumentLineDetails> Lines);
     private sealed record ReturnInfoDetails(Guid OriginalIssueDocumentId, string ReturnReason);

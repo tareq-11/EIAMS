@@ -19,7 +19,8 @@ public abstract class BaseIntegrationTest
 
     protected sealed record AccessTokens(string AccessToken, string RefreshToken);
 
-    protected sealed record ApiEnvelope<T>(bool Success, T Data);
+    protected sealed record ApiEnvelope<T>(bool Success, T Data, ApiMeta Meta);
+    protected sealed record ApiMeta(string RequestId, DateTime TimestampUtc);
 
     private sealed record ResourceId(Guid Id);
 

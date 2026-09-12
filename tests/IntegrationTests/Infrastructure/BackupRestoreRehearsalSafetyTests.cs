@@ -56,14 +56,7 @@ public sealed class BackupRestoreRehearsalSafetyTests
     public async Task BackupRestoreRehearsal_ShouldPassBashSyntaxValidation()
     {
         string scriptPath = Path.Combine(FindRepositoryRoot(), "scripts", "backup-restore-rehearsal.sh");
-        var startInfo = new ProcessStartInfo("bash")
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false
-        };
-        startInfo.ArgumentList.Add("-n");
-        startInfo.ArgumentList.Add(scriptPath);
+        ProcessStartInfo startInfo = ShellScriptProcess.Create("bash", ["-n", scriptPath]);
         using var process = Process.Start(startInfo);
 
         process.ShouldNotBeNull();
@@ -91,12 +84,8 @@ public sealed class BackupRestoreRehearsalSafetyTests
             string sourceUri = $"postgresql://{sourceRole}:{sourcePassword}@localhost:{source.Port}/clean_architecture_integration_test";
             string adminUri = $"postgresql://postgres:postgres@localhost:{source.Port}/postgres";
             string root = factory.Services.GetRequiredService<IOptions<LocalFileStorageOptions>>().Value.RootPath;
-            var startInfo = new ProcessStartInfo(Path.Combine(repositoryRoot, "scripts", "backup-restore-rehearsal.sh"))
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
+            ProcessStartInfo startInfo = ShellScriptProcess.Create(
+                Path.Combine(repositoryRoot, "scripts", "backup-restore-rehearsal.sh"));
             startInfo.Environment["RUN_LOCAL_BACKUP_RESTORE_REHEARSAL"] = "1";
             startInfo.Environment["EIAMS_REHEARSAL_SOURCE_DATABASE_URL"] = sourceUri;
             startInfo.Environment["EIAMS_REHEARSAL_ADMIN_DATABASE_URL"] = adminUri;

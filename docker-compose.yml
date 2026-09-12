@@ -9,15 +9,15 @@ services:
       - 5000:8080
       - 5001:8081
     environment:
-      - ConnectionStrings__Database=Host=postgres;Port=5432;Database=clean-architecture-template;Username=postgres;Password=postgres;Include Error Detail=true
+      - ConnectionStrings__Database=Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Include Error Detail=true
 
   postgres:
     image: postgres:17
     container_name: postgres
     environment:
-      - POSTGRES_DB=clean-architecture-template
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - ./.containers/db:/var/lib/postgresql/data
     ports:

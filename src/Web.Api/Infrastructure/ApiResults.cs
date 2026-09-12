@@ -4,14 +4,19 @@ namespace Web.Api.Infrastructure;
 
 internal static class ApiResults
 {
-    internal static IResult Ok<T>(HttpContext context, T data, ApiPagination? pagination = null) =>
-        Results.Ok(CreateSuccessResponse(context, data, pagination));
+    internal static IResult Ok<T>(HttpContext context, T data) =>
+        Results.Ok(CreateSuccessResponse(context, data));
+
+    internal static IResult Ok<T>(HttpContext context, PagedData<T> pagedData) =>
+        Results.Ok(CreateSuccessResponse(context, pagedData));
+
+    internal static IResult Ok<T>(HttpContext context, KeysetPagedData<T> pagedData) =>
+        Results.Ok(CreateSuccessResponse(context, pagedData));
 
     internal static IResult Success(HttpContext context) =>
         Results.Ok(new ApiResponse<EmptyResponse>(
             Success: true,
             Data: null,
-            Pagination: null,
             Meta: new ApiResponseMeta(
                 ApiRequestContext.GetRequestId(context),
                 DateTime.UtcNow)));
@@ -62,17 +67,31 @@ internal static class ApiResults
             Error: new ApiError(
                 NormalizeErrorCode(code),
                 message,
-                details ?? new Dictionary<string, object?>(),
-                ApiRequestContext.GetRequestId(context)));
+                details ?? new Dictionary<string, object?>()),
+            Meta: new ApiResponseMeta(
+                ApiRequestContext.GetRequestId(context),
+                DateTime.UtcNow));
 
-    private static ApiResponse<T> CreateSuccessResponse<T>(
-        HttpContext context,
-        T data,
-        ApiPagination? pagination = null) =>
+    internal static ApiResponse<T> CreateSuccessResponse<T>(HttpContext context, T data) =>
         new(
             Success: true,
             Data: data,
-            Pagination: pagination,
+            Meta: new ApiResponseMeta(
+                ApiRequestContext.GetRequestId(context),
+                DateTime.UtcNow));
+
+    internal static ApiResponse<PagedData<T>> CreateSuccessResponse<T>(HttpContext context, PagedData<T> pagedData) =>
+        new(
+            Success: true,
+            Data: pagedData,
+            Meta: new ApiResponseMeta(
+                ApiRequestContext.GetRequestId(context),
+                DateTime.UtcNow));
+
+    internal static ApiResponse<KeysetPagedData<T>> CreateSuccessResponse<T>(HttpContext context, KeysetPagedData<T> pagedData) =>
+        new(
+            Success: true,
+            Data: pagedData,
             Meta: new ApiResponseMeta(
                 ApiRequestContext.GetRequestId(context),
                 DateTime.UtcNow));

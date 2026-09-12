@@ -17,7 +17,7 @@ public sealed class GetInventoryBalancesByWarehouseController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Inventory.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<InventoryBalanceResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<InventoryBalanceResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

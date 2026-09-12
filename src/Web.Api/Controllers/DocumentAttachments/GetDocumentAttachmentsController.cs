@@ -15,7 +15,7 @@ public sealed class GetDocumentAttachmentsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
-    [ProducesResponseType<ApiResponse<List<DocumentAttachmentResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<DocumentAttachmentResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]

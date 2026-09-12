@@ -75,7 +75,10 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         // Tests intentionally do not require a live ClamAV instance; malware-specific tests inject their scanner.
         builder.UseSetting("AttachmentStorage:MalwareScan:Policy", "Disabled");
 
-        // Relax rate limiting so the test suite is not throttled.
+        // Enable bootstrap so tests that exercise the bootstrap endpoint work.
+        // Tests that need bootstrap disabled must use EmptySystemWebAppFactory.
+        builder.UseSetting("BootstrapAdministrator:Enabled", "true");
+        builder.UseSetting("BootstrapAdministrator:Token", Convert.ToBase64String(new byte[32]));
         builder.UseSetting("RateLimiting:Global:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:PermitLimit", "100000");
         builder.UseSetting("RateLimiting:Authentication:ConcurrencyLimit", "100000");

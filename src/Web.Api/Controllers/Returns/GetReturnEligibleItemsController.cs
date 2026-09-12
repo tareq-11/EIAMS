@@ -17,7 +17,7 @@ public sealed class GetReturnEligibleItemsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<ReturnEligibleItemResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]

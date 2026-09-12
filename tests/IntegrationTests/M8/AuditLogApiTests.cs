@@ -188,8 +188,8 @@ public sealed class AuditLogApiTests : BaseIntegrationTest
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         JsonElement root = body.RootElement;
         root.GetProperty("success").GetBoolean().ShouldBeTrue();
-        root.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(1);
-        JsonElement.ArrayEnumerator data = root.GetProperty("data").EnumerateArray();
+        root.GetProperty("data").GetProperty("page_info").GetProperty("total_items").GetInt32().ShouldBe(1);
+        JsonElement.ArrayEnumerator data = root.GetProperty("data").GetProperty("items").EnumerateArray();
         data.Select(item => item.GetProperty("id").GetGuid()).ShouldBe([auditLogId]);
     }
 }

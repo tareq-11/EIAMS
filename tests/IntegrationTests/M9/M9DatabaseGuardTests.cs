@@ -178,6 +178,28 @@ public sealed class M9DatabaseGuardTests : BaseIntegrationTest
         }
     }
 
+    [Fact]
+    public async Task MovementIdempotencyIndex_ShouldAllowOnePostingKeyAcrossMultipleMovements()
+    {
+        // A document posting can write several movement rows. Request replay protection is
+        // enforced by idempotency_records; this index only supports ledger correlation.
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await context.Database.OpenConnectionAsync();
+        DbConnection connection = context.Database.GetDbConnection();
+        await using DbCommand command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT i.indisunique
+            FROM pg_index i
+            WHERE i.indexrelid = 'public.ix_stock_movements_idempotency'::regclass
+            """;
+
+        object? value = await command.ExecuteScalarAsync();
+
+        value.ShouldBe(false);
+    }
+
     private static async Task<WarehouseDocument> SeedDocumentAsync(ApplicationDbContext context)
     {
         string suffix = Guid.NewGuid().ToString("N");

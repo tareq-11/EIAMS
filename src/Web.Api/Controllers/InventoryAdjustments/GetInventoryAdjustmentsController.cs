@@ -25,7 +25,7 @@ public sealed class GetInventoryAdjustmentsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<InventoryAdjustmentResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<InventoryAdjustmentResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

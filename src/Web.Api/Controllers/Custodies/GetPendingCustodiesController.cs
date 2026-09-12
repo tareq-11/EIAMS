@@ -17,7 +17,7 @@ public sealed class GetPendingCustodiesController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Custodies.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<PendingCustodyResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<PendingCustodyResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(

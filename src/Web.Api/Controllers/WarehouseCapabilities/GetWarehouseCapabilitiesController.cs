@@ -17,7 +17,7 @@ public sealed class GetWarehouseCapabilitiesController(
 {
     [HttpGet("{warehouseId:guid}/capabilities")]
     [HasPermission(PermissionCodes.Warehouses.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseCapabilityResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<WarehouseCapabilityResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

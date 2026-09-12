@@ -100,7 +100,7 @@ public sealed class StagingReleaseEvidenceSafetyTests
     }
     #pragma warning restore CA1054
 
-    [Fact]
+    [ShellJsonContractFact]
     public async Task StagingReleaseEvidence_ShouldUseFakeCommandsAndWriteOnlySanitizedReadOnlyEvidence()
     {
         string root = Path.Combine(Path.GetTempPath(), $"eiams-staging-evidence-test-{Guid.NewGuid():N}");
@@ -157,7 +157,7 @@ printf '%s\t%s' "$status" '0.001'
                 ["EIAMS_STAGING_ADMIN_EMAIL"] = "admin@example.test",
                 ["EIAMS_STAGING_ADMIN_PASSWORD"] = "not-in-evidence",
                 ["TMPDIR"] = root,
-                ["PATH"] = $"{fakeBin}:{Environment.GetEnvironmentVariable("PATH")}"
+                ["PATH"] = $"{fakeBin}{Path.PathSeparator}{Environment.GetEnvironmentVariable("PATH")}"
             };
             ProcessResult result = await RunAsync(ScriptPath, environment: environment);
 
@@ -286,16 +286,7 @@ printf '%s\t%s' "$status" '0.001'
         IReadOnlyList<string>? arguments = null,
         IReadOnlyDictionary<string, string?>? environment = null)
     {
-        var startInfo = new ProcessStartInfo(fileName)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        foreach (string argument in arguments ?? [])
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
+        ProcessStartInfo startInfo = ShellScriptProcess.Create(fileName, arguments);
 
         foreach ((string name, string? value) in environment ?? new Dictionary<string, string?>())
         {
@@ -320,4 +311,16 @@ printf '%s\t%s' "$status" '0.001'
     }
 
     private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
+}
+
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+internal sealed class ShellJsonContractFactAttribute : FactAttribute
+{
+    public ShellJsonContractFactAttribute()
+    {
+        if (OperatingSystem.IsWindows() && !ShellScriptProcess.IsNativeCommandAvailable("jq.exe"))
+        {
+            Skip = "The shell JSON contract test requires jq. Install jq on Windows or run it on the Linux CI host.";
+        }
+    }
 }

@@ -1,4 +1,5 @@
 using SharedKernel;
+using Web.Api.Infrastructure;
 
 namespace Web.Api.Infrastructure;
 

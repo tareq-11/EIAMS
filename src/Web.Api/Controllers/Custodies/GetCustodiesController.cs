@@ -18,7 +18,7 @@ public sealed class GetCustodiesController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Custodies.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CustodyResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<CustodyResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     public async Task<IResult> Handle(
