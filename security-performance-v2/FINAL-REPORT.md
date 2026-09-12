@@ -4,7 +4,7 @@
 
 ## الخلاصة
 
-نُفذت حزمة hardening واسعة (75 commit فوق `main`؛ `290` ملفًا متغيرًا، `36,806` إضافة و`596` حذفًا في مقارنة `main...HEAD`). توجد أدلة اختبارات محلية حديثة وحواجز تشغيلية قابلة للتنفيذ، لكن **لا تتحقق بوابة الإصدار النهائية بعد**. لا يجوز وصف هذه النتيجة بأنها staging أو production sign-off، ولا أنها حققت SLO.
+نُفذت حزمة hardening واسعة (75 commit فوق `main`؛ `290` ملفًا متغيرًا، `36,806` إضافة و`596` حذفًا في مقارنة `main...d4866e5`، وهي مراجعة الكود قبل commit الوثائق). توجد أدلة اختبارات محلية حديثة وحواجز تشغيلية قابلة للتنفيذ، لكن **لا تتحقق بوابة الإصدار النهائية بعد**. لا يجوز وصف هذه النتيجة بأنها staging أو production sign-off، ولا أنها حققت SLO.
 
 أهم ما هو مثبت بالكود والاختبارات يشمل: ثقة proxy مغلقة افتراضيًا، حدود الطلبات/المنافسة/rate limiting، سباقات session وauthorization-cache، versioned password hashes، idempotency للـpost/reversal، حراسة migrations ودور DB محدود، وفحص المرفقات fail-closed. أما CI/SBOM/secret scanning فهي مكوّنة بعقود workflow في الكود، لا دليل على تشغيل CI بعيد في هذا التقرير. هذا التقرير مستقل عن ملفات التخطيط المحلية غير المتتبعة؛ أدلة التسليم والتشغيل اللازمة موجودة ضمن ملفات مرحلة 11 أو في الملفات المتتبعة المرتبطة أدناه.
 
@@ -25,7 +25,7 @@
 | Quick soak recovery | ready=true وrepresentative read=true؛ pool 0/110 مستخدم، 0 timeout؛ 412 عينة lock wait و0 انتظار | ليست مدة soak طويلة، وmanaged memory (-2,321,368 bytes end-start، peak 81,080,064) ملاحظة لا برهان تسرب. |
 | Comparator | `no_threshold_regression_detected` عند حدود 10% | المقارنة artifact مع نفسه عمليًا (الأرقام متماثلة)، فتثبت صلاحية comparator فقط ولا تثبت before/after. |
 
-مصدر أرقام soak هو artifact المنقح المحلي `/tmp/eiams-api-soak-results/v2-review/api-soak-QuickValidation-20260911224522491.json` ومقارنته المجاورة. لا يُنقل هذان الملفان إلى المستودع ولا يحتوي هذا التقرير أسرارًا. أجريت نتائج build/tests وworkflow/NuGet أعلاه محليًا في 2026-09-12؛ لا يوجد ادعاء بتشغيل CI بعيد أو staging حي. لم يُشغّل Gitleaks محليًا ضمن هذه الأدلة. في الجولة المحلية الأولى ظهرت failures كشفت shadowing؛ لم تُخفَ، وعولج السبب في `d4866e5` ثم أعيدت المجموعة كاملة بالنتائج المسجلة أعلاه. فحص `git diff --check main...HEAD` نجح.
+مصدر أرقام soak هو artifact المنقح المحلي `/tmp/eiams-api-soak-results/v2-review/api-soak-QuickValidation-20260911224522491.json` ومقارنته المجاورة. لا يُنقل هذان الملفان إلى المستودع ولا يحتوي هذا التقرير أسرارًا. أجريت نتائج build/tests وworkflow/NuGet أعلاه محليًا في 2026-09-12؛ لا يوجد ادعاء بتشغيل CI بعيد أو staging حي. لم يُشغّل Gitleaks محليًا ضمن هذه الأدلة. في الجولة المحلية الأولى ظهرت failures كشفت shadowing؛ لم تُخفَ، وعولج السبب في `d4866e5` ثم أعيدت المجموعة كاملة بالنتائج المسجلة أعلاه. فحص `git diff --check main...d4866e5` لمراجعة الكود نجح.
 
 ## حالة مخاطر الإصدار
 
