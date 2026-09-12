@@ -7,6 +7,7 @@ public sealed class User : Entity, IAuditableEntity
     private User() { }
 
     public string Email { get; private set; }
+    public string? Username { get; private set; }
     public string FirstName { get; private set; }
     public string LastName { get; private set; }
     public string PasswordHash { get; private set; }
@@ -25,6 +26,7 @@ public sealed class User : Entity, IAuditableEntity
         {
             Id = id,
             Email = NormalizeEmail(email),
+            Username = null,
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
             PasswordHash = passwordHash,

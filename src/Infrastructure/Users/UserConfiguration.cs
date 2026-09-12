@@ -23,6 +23,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.PasswordHash).HasMaxLength(500);
 
+        builder.Property(u => u.Username).HasMaxLength(100);
+
+        builder.HasIndex(u => u.Username).IsUnique(false);
+
         builder.Property(u => u.Status)
             .HasConversion<string>()
             .HasMaxLength(20)
