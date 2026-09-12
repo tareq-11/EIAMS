@@ -1,0 +1,14 @@
+title = "EIAMS Gitleaks configuration"
+minVersion = "v8.25.0"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known historical Neon development credentials; rotate externally and do not reuse"
+condition = "AND"
+commits = [
+  "18b4bd35310aad3022bbb483363b2aa823ab576b",
+  "38cf599fd7ab89d038ad8f446cb879b5496afd3b",
+]
+paths = ['''^src/Web\.Api/appsettings\.Development\.json$''']

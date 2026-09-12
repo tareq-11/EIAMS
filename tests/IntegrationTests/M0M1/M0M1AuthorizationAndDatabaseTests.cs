@@ -107,6 +107,71 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task ScopedWarehouseEditor_Should_NotPerformAdministratorUserMutation()
+    {
+        WarehouseSeed seed = await SeedWarehouseAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantPermissionAsync(userId, WellKnownPermissions.WarehousesManageId, ScopeType.Warehouse, seed.WarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("admin/users", new
+        {
+            email = $"scoped-editor-{Guid.NewGuid():N}@example.test",
+            firstName = "Scoped",
+            lastName = "Editor",
+            password = "Password123!"
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task UpdateWarehouse_Should_AuthorizeOrganizationalUnitDescendantsButRejectSibling()
+    {
+        WarehouseSeed seed = await SeedWarehouseAsync();
+        var descendantWarehouseId = Guid.NewGuid();
+        var siblingWarehouseId = Guid.NewGuid();
+        var descendantUnitId = Guid.NewGuid();
+        var siblingUnitId = Guid.NewGuid();
+
+        await using (AsyncServiceScope setupScope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = setupScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            context.OrganizationalUnits.AddRange(
+                Domain.OrganizationalUnits.OrganizationalUnit.Create(descendantUnitId, seed.SiteId, seed.OrganizationalUnitId, "Descendant", "Department"),
+                Domain.OrganizationalUnits.OrganizationalUnit.Create(siblingUnitId, seed.SiteId, null, "Sibling", "Department"));
+            context.Warehouses.AddRange(
+                Warehouse.Create(descendantWarehouseId, seed.SiteId, "Descendant warehouse", $"D-{descendantWarehouseId:N}"[..20], "Main", true, descendantUnitId),
+                Warehouse.Create(siblingWarehouseId, seed.SiteId, "Sibling warehouse", $"S-{siblingWarehouseId:N}"[..20], "Main", true, siblingUnitId));
+            await context.SaveChangesAsync();
+        }
+
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantPermissionAsync(userId, WellKnownPermissions.WarehousesManageId, ScopeType.OrganizationalUnit, seed.OrganizationalUnitId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage descendant = await HttpClient.PutAsJsonAsync($"warehouses/{descendantWarehouseId}", new
+        {
+            organizationalUnitId = descendantUnitId,
+            name = "Descendant updated",
+            warehouseType = "Main",
+            canHoldStock = true,
+            expectedRowVersion = 1
+        });
+        HttpResponseMessage sibling = await HttpClient.PutAsJsonAsync($"warehouses/{siblingWarehouseId}", new
+        {
+            organizationalUnitId = siblingUnitId,
+            name = "Sibling must not update",
+            warehouseType = "Main",
+            canHoldStock = true,
+            expectedRowVersion = 1
+        });
+
+        descendant.StatusCode.ShouldBe(HttpStatusCode.OK);
+        sibling.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
     public async Task CreateOrganization_Should_AuthorizeEnterpriseGrant()
     {
         // Arrange

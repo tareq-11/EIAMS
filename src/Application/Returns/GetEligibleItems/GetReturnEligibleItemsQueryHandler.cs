@@ -157,6 +157,7 @@ internal sealed class GetReturnEligibleItemsQueryHandler(
 
         var rows = candidateRows
             .OrderByDescending(row => row.FromUtc)
+            .ThenBy(row => row.SubjectType)
             .ThenBy(row => row.SubjectId)
             .Skip(offset)
             .Take(pageSize)

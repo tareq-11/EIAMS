@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Application.Abstractions.Filtering;
 using Application.Abstractions.Pagination;
 using Domain.AuditLogs;
 using FluentValidation;
@@ -13,7 +14,7 @@ public sealed partial class GetAuditLogsQueryValidator : AbstractValidator<GetAu
     public GetAuditLogsQueryValidator()
     {
         RuleFor(q => q.Page)
-            .GreaterThanOrEqualTo(PaginationDefaults.DefaultPage);
+            .InclusiveBetween(PaginationDefaults.DefaultPage, PaginationDefaults.MaximumPage);
 
         RuleFor(q => q.PageSize)
             .InclusiveBetween(1, PaginationDefaults.MaximumPageSize);
@@ -30,8 +31,11 @@ public sealed partial class GetAuditLogsQueryValidator : AbstractValidator<GetAu
             .Must(fieldName => fieldName is null || FieldNamePattern().IsMatch(fieldName))
             .WithMessage("The specified field name is invalid.");
 
+        RuleFor(q => q.Search)
+            .MaximumLength(200);
+
         RuleFor(q => q)
-            .Must(q => !q.FromUtc.HasValue || !q.ToUtc.HasValue || q.FromUtc.Value < q.ToUtc.Value)
-            .WithMessage("FromUtc must be earlier than ToUtc.");
+            .Must(q => DateRangeLimits.IsValid(q.FromUtc, q.ToUtc))
+            .WithMessage("FromUtc and ToUtc must form a half-open range no longer than 366 days.");
     }
 }

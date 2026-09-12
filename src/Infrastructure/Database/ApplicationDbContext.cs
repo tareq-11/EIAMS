@@ -16,6 +16,7 @@ using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
+using Domain.Idempotency;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -41,6 +42,7 @@ using Domain.WarehouseDocuments;
 using Domain.WarehouseMaterialSettings;
 using Domain.Warehouses;
 using Infrastructure.DomainEvents;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
@@ -56,10 +58,14 @@ public sealed class ApplicationDbContext(
     : DbContext(options), IApplicationDbContext
 {
     private readonly HashSet<string> pendingCacheInvalidationTags = new(StringComparer.Ordinal);
+    private readonly List<IDomainEvent> pendingDomainEvents = [];
+    private long? pendingCacheInvalidationStartedTimestamp;
 
     public DbSet<User> Users { get; set; }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+
+    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; }
 
     public DbSet<Organization> Organizations { get; set; }
 
@@ -164,15 +170,8 @@ public sealed class ApplicationDbContext(
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // When should you publish domain events?
-        //
-        // 1. BEFORE calling SaveChangesAsync
-        //     - domain events are part of the same transaction
-        //     - immediate consistency
-        // 2. AFTER calling SaveChangesAsync
-        //     - domain events are a separate transaction
-        //     - eventual consistency
-        //     - handlers can fail
+        // Persist state first. With an explicit application transaction, domain-event handlers are
+        // deferred until commit so external side effects cannot extend locks or roll back valid data.
 
         string[] invalidatedCacheTags = GetInvalidatedCacheTags();
         List<IDomainEvent> domainEvents = ExtractDomainEvents();
@@ -181,20 +180,35 @@ public sealed class ApplicationDbContext(
         if (Database.CurrentTransaction is not null)
         {
             pendingCacheInvalidationTags.UnionWith(invalidatedCacheTags);
+            pendingDomainEvents.AddRange(domainEvents);
+            if (invalidatedCacheTags.Length > 0)
+            {
+                pendingCacheInvalidationStartedTimestamp ??= Stopwatch.GetTimestamp();
+            }
         }
         else
         {
-            await InvalidateCacheTagsAsync(invalidatedCacheTags, cancellationToken);
+            await InvalidateCacheTagsWithMetricsAsync(
+                invalidatedCacheTags,
+                phase: "immediate",
+                pendingStartedTimestamp: null,
+                cancellationToken);
+            await PublishDomainEventsAsync(domainEvents, cancellationToken);
         }
-
-        await PublishDomainEventsAsync(domainEvents);
 
         return result;
     }
 
     internal async Task FlushPostCommitActionsAsync(CancellationToken cancellationToken)
     {
+        await FlushCacheInvalidationAsync(cancellationToken);
+        await FlushDomainEventsAsync(cancellationToken);
+    }
+
+    private async Task FlushCacheInvalidationAsync(CancellationToken cancellationToken)
+    {
         string[] tags = pendingCacheInvalidationTags.ToArray();
+        long? pendingStartedTimestamp = pendingCacheInvalidationStartedTimestamp;
         if (tags.Length == 0)
         {
             return;
@@ -205,8 +219,13 @@ public sealed class ApplicationDbContext(
         {
             try
             {
-                await InvalidateCacheTagsAsync(tags, cancellationToken);
+                await InvalidateCacheTagsWithMetricsAsync(
+                    tags,
+                    phase: "post_commit",
+                    pendingStartedTimestamp,
+                    cancellationToken);
                 pendingCacheInvalidationTags.ExceptWith(tags);
+                pendingCacheInvalidationStartedTimestamp = null;
                 return;
             }
             catch (Exception exception) when (attempt < maximumAttempts)
@@ -229,12 +248,69 @@ public sealed class ApplicationDbContext(
                     maximumAttempts,
                     tags.Length);
                 pendingCacheInvalidationTags.ExceptWith(tags);
+                pendingCacheInvalidationStartedTimestamp = null;
                 return;
             }
         }
     }
 
-    internal void DiscardPostCommitActions() => pendingCacheInvalidationTags.Clear();
+    private async Task FlushDomainEventsAsync(CancellationToken cancellationToken)
+    {
+        IDomainEvent[] domainEvents = pendingDomainEvents.ToArray();
+        pendingDomainEvents.Clear();
+
+        if (domainEvents.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await PublishDomainEventsAsync(domainEvents, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // The database transaction has committed. Propagating the exception would invite the
+            // caller to retry a write that already succeeded. Side effects requiring guaranteed
+            // delivery must use a durable outbox rather than an in-memory domain-event handler.
+            logger?.LogCritical(
+                exception,
+                "Post-commit domain event dispatch failed for {DomainEventCount} events",
+                domainEvents.Length);
+        }
+    }
+
+    internal void DiscardPostCommitActions()
+    {
+        pendingCacheInvalidationTags.Clear();
+        pendingCacheInvalidationStartedTimestamp = null;
+        pendingDomainEvents.Clear();
+    }
+
+    private async Task InvalidateCacheTagsWithMetricsAsync(
+        string[] tags,
+        string phase,
+        long? pendingStartedTimestamp,
+        CancellationToken cancellationToken)
+    {
+        long startedTimestamp = Stopwatch.GetTimestamp();
+        bool succeeded = false;
+
+        try
+        {
+            await InvalidateCacheTagsAsync(tags, cancellationToken);
+            succeeded = true;
+        }
+        finally
+        {
+            CacheInvalidationMetrics.Record(
+                phase,
+                tags.Length,
+                startedTimestamp,
+                succeeded,
+                pendingStartedTimestamp);
+        }
+    }
 
     private async Task InvalidateCacheTagsAsync(
         string[] tags,
@@ -273,9 +349,11 @@ public sealed class ApplicationDbContext(
         .Distinct(StringComparer.Ordinal)
         .ToArray();
 
-    private async Task PublishDomainEventsAsync(IEnumerable<IDomainEvent> domainEvents)
+    private async Task PublishDomainEventsAsync(
+        IEnumerable<IDomainEvent> domainEvents,
+        CancellationToken cancellationToken)
     {
-        await domainEventsDispatcher.DispatchAsync(domainEvents);
+        await domainEventsDispatcher.DispatchAsync(domainEvents, cancellationToken);
     }
 
     private List<IDomainEvent> ExtractDomainEvents()

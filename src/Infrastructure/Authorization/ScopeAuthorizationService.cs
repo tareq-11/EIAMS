@@ -9,8 +9,13 @@ namespace Infrastructure.Authorization;
 internal sealed class ScopeAuthorizationService(
     ApplicationDbContext context,
     HybridCache hybridCache,
-    AuthorizationVersionProvider authorizationVersionProvider) : IScopeAuthorizationService
+    AuthorizationVersionProvider authorizationVersionProvider,
+    AuthorizationCacheCoalescingTracker coalescingTracker) : IScopeAuthorizationService
 {
+    // A corrupt/imported parent graph must not make authorization traversal unbounded.
+    // Depth is inclusive of the scoped root (root = 0), so a scope can cover 65 levels.
+    private const int MaximumOrganizationalUnitHierarchyDepth = 64;
+
     public async Task<UserAuthorizationAssignment?> GetUserAssignmentAsync(
         Guid userId,
         CancellationToken cancellationToken)
@@ -464,15 +469,17 @@ internal sealed class ScopeAuthorizationService(
             "organizational_unit_descendants",
             async ct => await context.Database.SqlQuery<Guid>($$"""
                     WITH RECURSIVE descendants AS (
-                        SELECT id
+                        SELECT id, ARRAY[id] AS path, 0 AS depth
                         FROM public.organizational_units
                         WHERE id = {{organizationalUnitId}}
 
                         UNION ALL
 
-                        SELECT child.id
+                        SELECT child.id, parent.path || child.id, parent.depth + 1
                         FROM public.organizational_units AS child
                         INNER JOIN descendants AS parent ON child.parent_id = parent.id
+                        WHERE parent.depth < {{MaximumOrganizationalUnitHierarchyDepth}}
+                          AND NOT (child.id = ANY(parent.path))
                     )
                     SELECT id AS "Value"
                     FROM descendants
@@ -526,26 +533,26 @@ internal sealed class ScopeAuthorizationService(
         IEnumerable<string> tags,
         CancellationToken cancellationToken)
     {
-        bool factoryInvoked = false;
+        AuthorizationCacheCoalescingTracker.CacheLookup lookup = coalescingTracker.Begin(cacheKey, keyType);
 
-        T value = await hybridCache.GetOrCreateAsync(
-            cacheKey,
-            async ct =>
-            {
-                factoryInvoked = true;
-                AuthorizationCacheMetrics.RecordMiss(keyType);
-                return await factory(ct);
-            },
-            options,
-            tags,
-            cancellationToken);
-
-        if (!factoryInvoked)
+        try
         {
-            AuthorizationCacheMetrics.RecordHit(keyType);
+            return await hybridCache.GetOrCreateAsync(
+                cacheKey,
+                async ct =>
+                {
+                    coalescingTracker.RecordFactoryExecution(lookup);
+                    AuthorizationCacheMetrics.RecordMiss(keyType);
+                    return await factory(ct);
+                },
+                options,
+                tags,
+                cancellationToken);
         }
-
-        return value;
+        finally
+        {
+            coalescingTracker.Complete(lookup);
+        }
     }
 
     private sealed record UserPermissionScopeGrant(

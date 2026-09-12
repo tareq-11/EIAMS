@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
@@ -38,6 +39,61 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
         setCookie.ShouldContain("httponly", Case.Insensitive);
         setCookie.ShouldContain("samesite=strict", Case.Insensitive);
         response.Headers.CacheControl?.NoStore.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task CookieRefresh_Should_RejectUntrustedOriginWithoutConsumingToken()
+    {
+        string email = UniqueEmail();
+        await RegisterUserAsync(email);
+        HttpClient.DefaultRequestHeaders.Authorization = null;
+        HttpResponseMessage login = await HttpClient.PostAsJsonAsync("auth/login", new
+        {
+            email,
+            password = IntegrationTestWebAppFactory.AdministratorPassword
+        });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        using var crossSiteRequest = new HttpRequestMessage(HttpMethod.Post, "auth/refresh");
+        crossSiteRequest.Headers.Add("Origin", "https://untrusted.example");
+        crossSiteRequest.Headers.Add("Sec-Fetch-Site", "cross-site");
+        HttpResponseMessage crossSite = await HttpClient.SendAsync(crossSiteRequest);
+        crossSite.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        using var sameOriginRequest = new HttpRequestMessage(HttpMethod.Post, "auth/refresh");
+        sameOriginRequest.Headers.Add("Origin", "http://localhost");
+        sameOriginRequest.Headers.Add("Sec-Fetch-Site", "same-origin");
+        HttpResponseMessage sameOrigin = await HttpClient.SendAsync(sameOriginRequest);
+        sameOrigin.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task CookieOnlyTransitionMode_Should_OmitResponseTokenAndRejectBodyTransport()
+    {
+        await using WebApplicationFactory<Program> cookieOnlyFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("Authentication:RefreshTokenTransport:AllowRequestBody", "false");
+            builder.UseSetting("Authentication:RefreshTokenTransport:IncludeInResponseBody", "false");
+        });
+        using HttpClient cookieClient = CreateVersionedClient(cookieOnlyFactory);
+
+        HttpResponseMessage login = await cookieClient.PostAsJsonAsync("auth/login", new
+        {
+            email = IntegrationTestWebAppFactory.AdministratorEmail,
+            password = IntegrationTestWebAppFactory.AdministratorPassword
+        });
+        login.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var loginJson = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        loginJson.RootElement.GetProperty("data").TryGetProperty("refreshToken", out _).ShouldBeFalse();
+        login.Headers.GetValues("Set-Cookie").ShouldContain(value =>
+            value.StartsWith("eiams_refresh_token=", StringComparison.Ordinal));
+
+        using HttpClient bodyClient = CreateVersionedClient(cookieOnlyFactory);
+        HttpResponseMessage bodyRefresh = await bodyClient.PostAsJsonAsync(
+            "auth/refresh",
+            new { refreshToken = "body-transport-is-disabled" });
+        bodyRefresh.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await bodyRefresh.Content.ReadAsStringAsync()).ShouldContain("REFRESH_TOKEN_BODY_DISABLED");
     }
 
     [Fact]
@@ -116,5 +172,64 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.Contains("Strict-Transport-Security").ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task JwtKeyRing_Should_AcceptPreviousKeyDuringOverlap_AndRejectItAfterRemoval()
+    {
+        const string previousKey = "previous-signing-key-with-at-least-32-bytes";
+        const string currentKey = "current-signing-key-with-at-least-32-bytes";
+
+        await using WebApplicationFactory<Program> previousKeyFactory = factory.WithWebHostBuilder(builder =>
+            builder.UseSetting("Jwt:Secret", previousKey));
+        using HttpClient previousKeyClient = CreateVersionedClient(previousKeyFactory);
+        HttpResponseMessage loginResponse = await previousKeyClient.PostAsJsonAsync("auth/login", new
+        {
+            email = IntegrationTestWebAppFactory.AdministratorEmail,
+            password = IntegrationTestWebAppFactory.AdministratorPassword
+        });
+        loginResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        ApiEnvelope<AccessTokens>? login =
+            await loginResponse.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
+        login.ShouldNotBeNull();
+
+        await using WebApplicationFactory<Program> overlapFactory = factory.WithWebHostBuilder(builder =>
+            ConfigureJwtKeyRing(builder, "current", legacySecret: previousKey, currentKey));
+        using HttpClient overlapClient = CreateVersionedClient(overlapFactory);
+        overlapClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
+
+        HttpResponseMessage acceptedDuringOverlap = await overlapClient.GetAsync("auth/session");
+        acceptedDuringOverlap.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        await using WebApplicationFactory<Program> currentOnlyFactory = factory.WithWebHostBuilder(builder =>
+            ConfigureJwtKeyRing(builder, "current", legacySecret: null, currentKey));
+        using HttpClient currentOnlyClient = CreateVersionedClient(currentOnlyFactory);
+        currentOnlyClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
+
+        HttpResponseMessage rejectedAfterRemoval = await currentOnlyClient.GetAsync("auth/session");
+        rejectedAfterRemoval.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    private static void ConfigureJwtKeyRing(
+        IWebHostBuilder builder,
+        string activeKeyId,
+        string? legacySecret,
+        string? currentKey)
+    {
+        builder.UseSetting("Jwt:Secret", legacySecret ?? string.Empty);
+        builder.UseSetting("Jwt:ActiveKeyId", activeKeyId);
+        if (currentKey is not null)
+        {
+            builder.UseSetting("Jwt:Keys:current", currentKey);
+        }
+    }
+
+    private static HttpClient CreateVersionedClient(WebApplicationFactory<Program> factory)
+    {
+        HttpClient client = factory.CreateClient();
+        client.BaseAddress = new Uri("http://localhost/api/v1/");
+        return client;
     }
 }

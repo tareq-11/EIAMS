@@ -2,6 +2,8 @@ using System.IO.Compression;
 using Application;
 using Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http.Timeouts;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.ResponseCompression;
 using Serilog;
 using Web.Api;
@@ -32,6 +34,21 @@ builder.Services.AddCorsPolicy(builder.Configuration, builder.Environment);
 
 builder.Services.AddForwardedHeaders(builder.Configuration);
 
+int requestTimeoutSeconds = builder.Configuration.GetValue<int?>("DatabasePerformance:RequestTimeoutSeconds") ?? 30;
+builder.Services.AddRequestTimeouts(options =>
+{
+    options.DefaultPolicy = new RequestTimeoutPolicy
+    {
+        Timeout = TimeSpan.FromSeconds(requestTimeoutSeconds),
+        TimeoutStatusCode = StatusCodes.Status504GatewayTimeout,
+        WriteTimeoutResponse = async context =>
+        {
+            IResult result = ApiResults.ErrorFromStatusCode(context, StatusCodes.Status504GatewayTimeout);
+            await result.ExecuteAsync(context);
+        }
+    };
+});
+
 builder.Services.AddResponseCompression(options =>
 {
     options.EnableForHttps = true;
@@ -55,7 +72,13 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwaggerWithUi();
 
-    app.ApplyMigrations();
+    // Applying migrations from every web-process startup is unsafe for long-running DDL.
+    // Local developers may opt in explicitly; deployed environments use one dedicated
+    // migration-owner job after the preflight script succeeds.
+    if (builder.Configuration.GetValue<bool>("DatabaseMigrations:ApplyOnStartup"))
+    {
+        app.ApplyMigrations();
+    }
 }
 
 app.UseForwardedHeaders();
@@ -69,24 +92,35 @@ if (!app.Environment.IsDevelopment())
 app.MapHealthChecks("api/v1/health", new HealthCheckOptions
 {
     ResponseWriter = HealthCheckResponseWriter.WriteAsync
-});
+})
+    .RequireRateLimiting(RateLimitingPolicies.Health)
+    .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 
 app.MapHealthChecks("api/v1/health/live", new HealthCheckOptions
 {
-    Predicate = registration => registration.Tags.Contains("live")
-});
+    Predicate = registration => registration.Tags.Contains("live"),
+    ResponseWriter = HealthCheckResponseWriter.WriteAsync
+})
+    .RequireRateLimiting(RateLimitingPolicies.Health)
+    .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 
 app.MapHealthChecks("api/v1/health/ready", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready"),
     ResponseWriter = HealthCheckResponseWriter.WriteAsync
-});
+})
+    .RequireRateLimiting(RateLimitingPolicies.Health)
+    .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]));
 
 app.UseRequestContextLogging();
 
 app.UseSerilogRequestLogging();
 
+app.UseSecurityOutcomeMetrics();
+
 app.UseExceptionHandler();
+
+app.UseRequestTimeouts();
 
 app.UseSecurityHeaders();
 
@@ -101,7 +135,9 @@ app.UseStatusCodePages(async statusCodeContext =>
 
 app.UseCors(CorsExtensions.PolicyName);
 
-app.UseResponseCompression();
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api/v1/auth"),
+    branch => branch.UseResponseCompression());
 
 app.UseAuthentication();
 

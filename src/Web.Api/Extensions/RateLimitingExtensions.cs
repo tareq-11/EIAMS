@@ -22,6 +22,9 @@ internal static class RateLimitingExtensions
         int reportingConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Concurrency:Reporting") ?? 8;
         int uploadConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Concurrency:Upload") ?? 2;
         int postingConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Concurrency:Posting") ?? 4;
+        int healthPermitLimit = configuration.GetValue<int?>("RateLimiting:Health:PermitLimit") ?? 30;
+        int healthWindowSeconds = configuration.GetValue<int?>("RateLimiting:Health:WindowInSeconds") ?? 60;
+        int healthConcurrencyLimit = configuration.GetValue<int?>("RateLimiting:Health:ConcurrencyLimit") ?? 4;
 
         ValidatePositive(globalPermitLimit, "RateLimiting:Global:PermitLimit");
         ValidatePositive(globalWindowSeconds, "RateLimiting:Global:WindowInSeconds");
@@ -32,6 +35,9 @@ internal static class RateLimitingExtensions
         ValidatePositive(reportingConcurrencyLimit, "RateLimiting:Concurrency:Reporting");
         ValidatePositive(uploadConcurrencyLimit, "RateLimiting:Concurrency:Upload");
         ValidatePositive(postingConcurrencyLimit, "RateLimiting:Concurrency:Posting");
+        ValidatePositive(healthPermitLimit, "RateLimiting:Health:PermitLimit");
+        ValidatePositive(healthWindowSeconds, "RateLimiting:Health:WindowInSeconds");
+        ValidatePositive(healthConcurrencyLimit, "RateLimiting:Health:ConcurrencyLimit");
 
         services.AddRateLimiter(options =>
         {
@@ -50,15 +56,17 @@ internal static class RateLimitingExtensions
             // A global fixed-window limiter, partitioned by authenticated user or client IP.
             var requestRateLimiter =
                 PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: GetPartitionKey(httpContext),
-                    factory: _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = globalPermitLimit,
-                        Window = TimeSpan.FromSeconds(globalWindowSeconds),
-                        QueueLimit = 0,
-                        AutoReplenishment = true
-                    }));
+                    UsesHealthPolicy(httpContext)
+                        ? RateLimitPartition.GetNoLimiter("health-probes")
+                        : RateLimitPartition.GetFixedWindowLimiter(
+                            partitionKey: GetPartitionKey(httpContext),
+                            factory: _ => new FixedWindowRateLimiterOptions
+                            {
+                                PermitLimit = globalPermitLimit,
+                                Window = TimeSpan.FromSeconds(globalWindowSeconds),
+                                QueueLimit = 0,
+                                AutoReplenishment = true
+                            }));
 
             var authenticationConcurrencyLimiter =
                 PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
@@ -72,9 +80,22 @@ internal static class RateLimitingExtensions
                             })
                         : RateLimitPartition.GetNoLimiter("non-authentication"));
 
+            var healthConcurrencyLimiter =
+                PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+                    UsesHealthPolicy(httpContext)
+                        ? RateLimitPartition.GetConcurrencyLimiter(
+                            partitionKey: "health-process",
+                            factory: _ => new ConcurrencyLimiterOptions
+                            {
+                                PermitLimit = healthConcurrencyLimit,
+                                QueueLimit = 0
+                            })
+                        : RateLimitPartition.GetNoLimiter("non-health"));
+
             options.GlobalLimiter = PartitionedRateLimiter.CreateChained(
                 requestRateLimiter,
-                authenticationConcurrencyLimiter);
+                authenticationConcurrencyLimiter,
+                healthConcurrencyLimiter);
 
             // Authentication needs both a request-rate ceiling and a concurrency ceiling because
             // password verification deliberately consumes significant CPU.
@@ -94,6 +115,19 @@ internal static class RateLimitingExtensions
                             PermitLimit = authConcurrencyLimit,
                             QueueLimit = 0
                         }))));
+
+            // The request budget is per trusted caller so one public client cannot spend the
+            // probe allowance for another. The separate global chain above caps concurrent work.
+            options.AddPolicy(RateLimitingPolicies.Health, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: GetPartitionKey(httpContext),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = healthPermitLimit,
+                        Window = TimeSpan.FromSeconds(healthWindowSeconds),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    }));
 
             AddConcurrencyPolicy(options, RateLimitingPolicies.Reporting, reportingConcurrencyLimit);
             AddConcurrencyPolicy(options, RateLimitingPolicies.Upload, uploadConcurrencyLimit);
@@ -126,7 +160,13 @@ internal static class RateLimitingExtensions
             RateLimitingPolicies.Authentication,
             StringComparison.Ordinal);
 
-    private static string GetPartitionKey(HttpContext httpContext)
+    private static bool UsesHealthPolicy(HttpContext httpContext) =>
+        string.Equals(
+            httpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName,
+            RateLimitingPolicies.Health,
+            StringComparison.Ordinal);
+
+    internal static string GetPartitionKey(HttpContext httpContext)
     {
         string? userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ??
                          httpContext.User.FindFirstValue("sub");

@@ -1,6 +1,7 @@
 using Application.Abstractions.Audit;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Filtering;
 using Application.Abstractions.Pagination;
 using Domain.AuditLogs;
 using Domain.Common;
@@ -33,7 +34,7 @@ internal static class AuditLogQuerySupport
 
     public static bool AreFiltersValid(string? action, DateTimeOffset? fromUtc, DateTimeOffset? toUtc) =>
         (action is null || AuditActions.All.Contains(action)) &&
-        (!fromUtc.HasValue || !toUtc.HasValue || fromUtc.Value < toUtc.Value);
+        DateRangeLimits.IsValid(fromUtc, toUtc);
 
     public static bool ArePaginationParametersValid(int page, int pageSize) =>
         page is >= PaginationDefaults.DefaultPage and <= PaginationDefaults.MaximumPage &&

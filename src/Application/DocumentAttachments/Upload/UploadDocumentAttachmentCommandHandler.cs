@@ -16,11 +16,13 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
+    IAttachmentMalwareScanner malwareScanner,
     IFileStorage fileStorage,
     IAttachmentFileCleanup fileCleanup,
     IDatabaseExceptionClassifier databaseExceptionClassifier,
     IDateTimeProvider dateTimeProvider,
-    IOptions<AttachmentStorageOptions> storageOptions)
+    IOptions<AttachmentStorageOptions> storageOptions,
+    IOptions<AttachmentMalwareScanOptions> malwareScanOptions)
     : ICommandHandler<UploadDocumentAttachmentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(UploadDocumentAttachmentCommand command, CancellationToken cancellationToken)
@@ -83,6 +85,20 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             return Result.Failure<Guid>(DocumentAttachmentErrors.FileSignatureMismatch);
         }
 
+        if (malwareScanOptions.Value.Policy == AttachmentMalwareScanPolicy.Required)
+        {
+            AttachmentMalwareScanVerdict verdict = await malwareScanner.ScanAsync(command.Content, cancellationToken);
+            if (verdict == AttachmentMalwareScanVerdict.Infected)
+            {
+                return Result.Failure<Guid>(DocumentAttachmentErrors.MalwareScanRejected);
+            }
+
+            if (verdict != AttachmentMalwareScanVerdict.Clean)
+            {
+                return Result.Failure<Guid>(DocumentAttachmentErrors.MalwareScannerUnavailable);
+            }
+        }
+
         DocumentAttachment? activeSignedOriginal = command.AttachmentType == AttachmentType.SignedOriginal
             ? await context.DocumentAttachments.SingleOrDefaultAsync(
                 a => a.DocumentId == command.DocumentId &&
@@ -112,7 +128,8 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             storedFile.Checksum,
             userContext.UserId,
             nowUtc,
-            activeSignedOriginal?.Id);
+            activeSignedOriginal?.Id,
+            malwareScanOptions.Value.Policy == AttachmentMalwareScanPolicy.Required);
 
         context.DocumentAttachments.Add(attachment);
 
@@ -188,16 +205,17 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
 
     private static string SanitizeFilename(string filename)
     {
-        string name = Path.GetFileName(filename);
+        string name = Path.GetFileName(filename.Replace('\\', '/'));
         char[] invalidChars = Path.GetInvalidFileNameChars();
         Span<char> buffer = name.Length <= 300 ? stackalloc char[name.Length] : new char[300];
         int length = Math.Min(name.Length, buffer.Length);
 
         for (int i = 0; i < length; i++)
         {
-            buffer[i] = invalidChars.Contains(name[i]) ? '_' : name[i];
+            buffer[i] = invalidChars.Contains(name[i]) || char.IsControl(name[i]) ? '_' : name[i];
         }
 
-        return new string(buffer[..length]);
+        string sanitized = new(buffer[..length]);
+        return string.IsNullOrWhiteSpace(sanitized) ? "attachment" : sanitized;
     }
 }

@@ -35,7 +35,7 @@ internal sealed class GetAssetsReportQueryHandler(
             where query.WarehouseId == null || asset.WarehouseId == query.WarehouseId
             where query.Status == null || current.CurrentStatus == query.Status
             group asset by new { warehouse.Id, warehouse.Code, warehouse.Name, current.CurrentStatus } into grouped
-            orderby grouped.Key.Code, grouped.Key.CurrentStatus
+            orderby grouped.Key.Code, grouped.Key.CurrentStatus, grouped.Key.Id
             select new AssetsReportRow(
                 grouped.Key.Id,
                 grouped.Key.Code,

@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Posting;
+using Application.Abstractions.Idempotency;
 using Domain.Common;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
@@ -93,10 +94,18 @@ internal sealed class PostDocumentCommandHandler(
             }
         }
 
+        IdempotencyRequest? idempotencyRequest = command.IdempotencyKey.HasValue
+            ? IdempotencyRequest.Create(
+                command.IdempotencyKey.Value,
+                "warehouse-document.post",
+                $"{command.DocumentId:D}|{command.ExpectedRowVersion}|{command.RequiredDocumentType?.ToString() ?? "any"}")
+            : null;
+
         Result<PostingOutcome> postResult = await postingCoordinator.PostAsync(
             command.DocumentId,
             command.ExpectedRowVersion,
             userContext.UserId,
+            idempotencyRequest,
             cancellationToken);
 
         if (postResult.IsFailure)

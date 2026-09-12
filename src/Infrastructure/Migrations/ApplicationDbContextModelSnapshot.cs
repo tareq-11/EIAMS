@@ -601,6 +601,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("mime_type");
 
+                    b.Property<bool>("MalwareScanClean")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("malware_scan_clean");
+
                     b.Property<string>("OriginalFilename")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -1355,6 +1361,62 @@ namespace Infrastructure.Migrations
                             t.HasCheckConstraint("ck_external_parties_row_version_positive", "row_version > 0");
 
                             t.HasCheckConstraint("ck_external_parties_status_valid", "status IN ('Active', 'Inactive')");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Idempotency.IdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Key")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("key");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("operation");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("request_hash")
+                        .IsFixedLength();
+
+                    b.Property<string>("ResponsePayload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("response_payload");
+
+                    b.HasKey("Key")
+                        .HasName("pk_idempotency_records");
+
+                    b.HasIndex("ActorUserId")
+                        .HasDatabaseName("ix_idempotency_records_actor_user_id");
+
+                    b.HasIndex("ExpiresAtUtc")
+                        .HasDatabaseName("ix_idempotency_records_expires_at_utc");
+
+                    b.ToTable("idempotency_records", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_idempotency_records_expiry", "expires_at_utc > created_at_utc");
+
+                            t.HasCheckConstraint("ck_idempotency_records_operation_not_blank", "btrim(operation) <> ''");
+
+                            t.HasCheckConstraint("ck_idempotency_records_request_hash_length", "length(request_hash) = 64");
                         });
                 });
 
@@ -4293,6 +4355,16 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_employees_organizational_units_org_unit_id");
+                });
+
+            modelBuilder.Entity("Domain.Idempotency.IdempotencyRecord", b =>
+                {
+                    b.HasOne("Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_idempotency_records_users_actor_user_id");
                 });
 
             modelBuilder.Entity("Domain.InventoryAdjustments.AdjustmentLine", b =>

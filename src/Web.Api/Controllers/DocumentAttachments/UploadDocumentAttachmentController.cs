@@ -40,6 +40,7 @@ public sealed class UploadDocumentAttachmentController(ICommandHandler<UploadDoc
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status503ServiceUnavailable)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Upload)]
     public async Task<IResult> Handle(Guid documentId, [FromForm] RequestForm request, CancellationToken cancellationToken)

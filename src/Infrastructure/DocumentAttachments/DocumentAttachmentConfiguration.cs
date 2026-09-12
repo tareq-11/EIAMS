@@ -36,6 +36,7 @@ internal sealed class DocumentAttachmentConfiguration : IEntityTypeConfiguration
         builder.Property(a => a.MimeType).HasMaxLength(100);
 
         builder.Property(a => a.Checksum).HasMaxLength(128);
+        builder.Property(a => a.MalwareScanClean).HasDefaultValue(false);
 
         builder.ToTable(tableBuilder =>
         {

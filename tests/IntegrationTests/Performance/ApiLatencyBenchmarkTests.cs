@@ -6,6 +6,10 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Application.Abstractions.Authentication;
+using Domain.Users;
+using Infrastructure.Database;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 
@@ -30,14 +34,35 @@ public sealed class ApiLatencyBenchmarkTests
 
     [ExplicitApiBenchmarkFact]
     [Trait("Category", "Performance")]
+    [Trait("WorkloadClass", PerformanceWorkloadContracts.NormalExpectedTraffic)]
     public async Task MeasureRepresentativeApiLatency()
     {
         DateTime startedAtUtc = DateTime.UtcNow;
-        using HttpClient client = factory.CreateClient();
-        client.BaseAddress = new Uri("http://localhost/api/v1/");
+        SqlCommandCounterInterceptor commandCounter = factory.Services
+            .GetRequiredService<SqlCommandCounterInterceptor>();
+        using var poolCollector = new NpgsqlPoolStateCollector();
+        await using var lockWaitSampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString);
+        ApiBenchmarkWorkerProfile workerProfile = ApiBenchmarkWorkerProfiles.GetRequestedProfile();
+        using IntegrationTestWebAppFactory.BenchmarkProfiledWebAppFactory benchmarkFactory =
+            factory.CreateSiblingFactory(commandCounter, workerProfile);
+        var hostStartupAndJitStopwatch = Stopwatch.StartNew();
+        benchmarkFactory.UseKestrel(0);
+        using HttpClient client = benchmarkFactory.CreateClient();
+        hostStartupAndJitStopwatch.Stop();
+        client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
         int sampleIterations = GetSampleIterations();
         var measurements = new List<ApiLatencyMeasurement>();
         var failures = new List<string>();
+        (HttpStatusCode firstDatabaseProbeStatus, double firstDatabaseProbeMs, _) =
+            await GetAsync(client, "health/ready", commandCounter);
+        if (firstDatabaseProbeStatus != HttpStatusCode.OK)
+        {
+            failures.Add($"GET health/ready: first database health probe HTTP {(int)firstDatabaseProbeStatus}");
+        }
+
+        IReadOnlyList<BenchmarkPhaseResult> phases = BenchmarkPhaseMetadata.Create(
+            hostStartupAndJitStopwatch.Elapsed.TotalMilliseconds,
+            firstDatabaseProbeMs);
 
         (HttpResponseMessage firstLogin, double firstLoginMs) = await LoginAsync(client);
         firstLogin.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -51,34 +76,52 @@ public sealed class ApiLatencyBenchmarkTests
             loginResponse.Dispose();
         }
 
-        var repeatedLoginDurations = new List<double>(sampleIterations);
-        for (int iteration = 0; iteration < sampleIterations; iteration++)
-        {
-            (HttpResponseMessage loginResponse, double elapsedMs) = await LoginAsync(client);
-            if (loginResponse.StatusCode != HttpStatusCode.OK)
-            {
-                failures.Add($"POST auth/login: sample HTTP {(int)loginResponse.StatusCode}");
-                loginResponse.Dispose();
-                break;
-            }
+        ApiBenchmarkScenarioWindow repeatedLogin = await MeasureLoginWindowAsync(
+            client,
+            IntegrationTestWebAppFactory.AdministratorEmail,
+            IntegrationTestWebAppFactory.AdministratorPassword,
+            HttpStatusCode.OK,
+            sampleIterations,
+            commandCounter, poolCollector, lockWaitSampler);
+        measurements.Add(CreateMeasurement(
+            "POST /api/v1/auth/login [valid]",
+            firstLoginMs,
+            repeatedLogin));
+        AddWindowFailures("POST auth/login", repeatedLogin.Metrics, failures);
 
-            repeatedLoginDurations.Add(elapsedMs);
-            loginResponse.Dispose();
-        }
-
-        if (repeatedLoginDurations.Count > 0)
-        {
-            measurements.Add(CreateMeasurement(
-                "POST /api/v1/auth/login",
-                firstLoginMs,
-                repeatedLoginDurations,
-                sqlCommands: null));
-        }
+        await MeasureRejectedLoginAsync(
+            client,
+            "POST /api/v1/auth/login [missing-user]",
+            $"missing-{Guid.NewGuid():N}@example.com",
+            IntegrationTestWebAppFactory.AdministratorPassword,
+            HttpStatusCode.NotFound,
+            sampleIterations,
+            measurements,
+            failures,
+            commandCounter, poolCollector, lockWaitSampler);
+        await MeasureRejectedLoginAsync(
+            client,
+            "POST /api/v1/auth/login [wrong-password]",
+            IntegrationTestWebAppFactory.AdministratorEmail,
+            "WrongPassword1!",
+            HttpStatusCode.NotFound,
+            sampleIterations,
+            measurements,
+            failures,
+            commandCounter, poolCollector, lockWaitSampler);
+        (string suspendedEmail, string suspendedPassword) = await CreateSuspendedUserAsync();
+        await MeasureRejectedLoginAsync(
+            client,
+            "POST /api/v1/auth/login [suspended]",
+            suspendedEmail,
+            suspendedPassword,
+            HttpStatusCode.Forbidden,
+            sampleIterations,
+            measurements,
+            failures,
+            commandCounter, poolCollector, lockWaitSampler);
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        SqlCommandCounterInterceptor commandCounter = factory.Services
-            .GetRequiredService<SqlCommandCounterInterceptor>();
-
         string[] endpoints =
         [
             "health/live",
@@ -116,10 +159,10 @@ public sealed class ApiLatencyBenchmarkTests
 
         foreach (string endpoint in endpoints)
         {
-            (HttpStatusCode coldStatus, double coldMs, _) = await GetAsync(client, endpoint, commandCounter);
-            if (coldStatus != HttpStatusCode.OK)
+            (HttpStatusCode firstRequestStatus, double firstRequestMs, _) = await GetAsync(client, endpoint, commandCounter);
+            if (firstRequestStatus != HttpStatusCode.OK)
             {
-                failures.Add($"GET {endpoint}: HTTP {(int)coldStatus}");
+                failures.Add($"GET {endpoint}: first request HTTP {(int)firstRequestStatus}");
                 continue;
             }
 
@@ -138,41 +181,27 @@ public sealed class ApiLatencyBenchmarkTests
                 continue;
             }
 
-            var warmDurations = new List<double>(sampleIterations);
-            var warmSqlCounts = new List<int>(sampleIterations);
-            for (int iteration = 0; iteration < sampleIterations; iteration++)
-            {
-                (HttpStatusCode status, double elapsedMs, int sqlCommands) =
-                    await GetAsync(client, endpoint, commandCounter);
-                if (status != HttpStatusCode.OK)
-                {
-                    failures.Add($"GET {endpoint}: warm HTTP {(int)status}");
-                    warmDurations.Clear();
-                    break;
-                }
-                warmDurations.Add(elapsedMs);
-                warmSqlCounts.Add(sqlCommands);
-            }
-
-            if (warmDurations.Count == 0)
-            {
-                continue;
-            }
-
-            measurements.Add(CreateMeasurement(
-                $"GET {endpoint}",
-                coldMs,
-                warmDurations,
-                warmSqlCounts.Average()));
+            ApiBenchmarkScenarioWindow window = await MeasureGetWindowAsync(
+                client,
+                endpoint,
+                commandCounter,
+                poolCollector, lockWaitSampler,
+                HttpStatusCode.OK,
+                sampleIterations);
+            measurements.Add(CreateMeasurement($"GET {endpoint}", firstRequestMs, window));
+            AddWindowFailures($"GET {endpoint}", window.Metrics, failures);
         }
 
         string runId = $"{DateTime.UtcNow:yyyyMMddTHHmmssZ}-{Guid.NewGuid():N}";
         string resultDirectory = Environment.GetEnvironmentVariable("EIAMS_BENCHMARK_RESULTS_DIR")
             ?? Path.GetTempPath();
         Directory.CreateDirectory(resultDirectory);
-        string resultPath = Path.Combine(resultDirectory, $"eiams-api-latency-{runId}.json");
+        string resultPath = Path.Combine(
+            resultDirectory,
+            $"eiams-api-latency-{benchmarkFactory.WorkerProfileMetadata.Profile}-{runId}.json");
         var benchmarkRun = new
         {
+            WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
             RunId = runId,
             Commit = GetBuildVersion(),
             StartedAtUtc = startedAtUtc,
@@ -180,23 +209,48 @@ public sealed class ApiLatencyBenchmarkTests
             Runtime = RuntimeInformation.FrameworkDescription,
             OperatingSystem = RuntimeInformation.OSDescription,
             Environment.ProcessorCount,
-            Transport = "ASP.NET Core TestServer; excludes real network and TLS",
+            Transport = "Kestrel over loopback HTTP; includes the network stack and excludes TLS",
+            WorkerProfile = benchmarkFactory.WorkerProfileMetadata,
+            Dataset = ApiBenchmarkWorkerProfiles.CreateLatencyDatasetMetadata(),
+            Phases = phases,
             WarmupIterations,
             SampleIterations = sampleIterations,
             Measurements = measurements,
-            Failures = failures
+            Failures = failures,
+            MeasurementMetadata = new
+            {
+                ProcessSnapshots = "CPU, resident-set (RSS/working-set), allocations, GC, and ThreadPool snapshots and deltas are process-wide; they are not endpoint attribution.",
+                MeasurementModel = "Single-client sequential closed-loop sampling; throughput is not open-loop or concurrent-capacity throughput.",
+                ThroughputDefinitions = "attempted=all started samples/window; completed=HTTP responses/window; successful=expected HTTP responses/window.",
+                SqlCommandDurations = "EF/Npgsql command execution duration from DbCommandInterceptor; bounded logarithmic histogram p50/p95/p99 is an approximate upper bound (never below the selected bucket's observed durations). The measurement collector is reset after setup/warmup and snapshotted after each sequential scenario window.",
+                NpgsqlPoolWait = "not_available: Npgsql 10.0.3 Meter exposes pool state/timeouts but no connection-acquisition wait duration.",
+                NpgsqlPoolState = "Npgsql Meter process-wide aggregate across all pools per snapshot: db.client.connection.count state=idle|used, db.client.connection.max, and phase timeouts. Provider tags are discarded; this is neither endpoint/pool attribution nor pool-wait duration.",
+                PostgreSqlSampledLockWaitOccupancy = "A separate Pooling=false monitor runs one pg_stat_activity query per configured interval, scoped to the current database and excluding its PID; this adds monitoring overhead. sampleCount is polling observations; samplesWithLockWaits counts observations with one or more sessions where wait_event_type=Lock; totalWaitingSessionObservations sums waiting sessions across samples; maxConcurrentWaitingSessions is the observed maximum. approximateObservedWaitingSessionMilliseconds uses monotonic elapsed time between observations with a left-endpoint occupancy assumption and saturates at a bounded maximum. It is a sampled estimate, not exact lock-wait duration, per-request attribution, or a complete census between samples. No connection details, PIDs, query text, SQL, or workload identifiers are emitted.",
+                RawSql = "not_measured"
+            }
         };
         await File.WriteAllTextAsync(
             resultPath,
             JsonSerializer.Serialize(benchmarkRun, JsonOptions));
 
-        foreach (ApiLatencyMeasurement measurement in measurements.OrderByDescending(item => item.WarmP95Ms))
+        foreach (ApiLatencyMeasurement measurement in measurements.OrderByDescending(item => item.Window.P95Ms))
         {
             output.WriteLine(
-                $"{measurement.Name}: first-observed={measurement.FirstObservedMs:F1}ms, " +
-                $"warm p50={measurement.WarmP50Ms:F1}ms, p95={measurement.WarmP95Ms:F1}ms, " +
-                $"p99={measurement.WarmP99Ms:F1}ms, " +
-                $"avg SQL={measurement.AverageSqlCommands?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}");
+                $"{measurement.Name}: first-request-for-scenario={measurement.FirstRequestForScenarioMs:F1}ms, " +
+                $"samples={measurement.Window.SampleCount}, p50={measurement.Window.P50Ms?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}ms, " +
+                $"p95={measurement.Window.P95Ms?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}ms, " +
+                $"p99={measurement.Window.P99Ms?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}ms, " +
+                $"attempted_rps={measurement.Window.AttemptedThroughputRequestsPerSecond:F2}, " +
+                $"completed_rps={measurement.Window.CompletedThroughputRequestsPerSecond:F2}, " +
+                $"successful_rps={measurement.Window.SuccessfulThroughputRequestsPerSecond:F2}, " +
+                $"completed_response_payload_bytes={measurement.Window.CompletedResponsePayloadBytes}, " +
+                $"avg_payload_bytes_per_completed_response={measurement.Window.AverageResponsePayloadBytesPerCompletedResponse?.ToString("F1", CultureInfo.InvariantCulture) ?? "n/a"}, " +
+                $"unexpected_http={measurement.Window.UnexpectedHttpErrorCount}, " +
+                $"timeouts_or_cancellations={measurement.Window.TimeoutOrCancellationCount}, " +
+                $"transport_failures={measurement.Window.TransportFailureCount}, " +
+                $"http_429={measurement.Window.RateLimitedCount}, " +
+                $"sql_commands={measurement.SqlCommands.Count}, sql_p95={measurement.SqlCommands.ApproximateP95Ms?.ToString("F3", CultureInfo.InvariantCulture) ?? "n/a"}ms, " +
+                $"sql_total={measurement.SqlCommands.TotalDurationMs:F3}ms");
         }
 
         foreach (string failure in failures)
@@ -209,16 +263,93 @@ public sealed class ApiLatencyBenchmarkTests
     }
 
     private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(HttpClient client)
+        => await LoginAsync(
+            client,
+            IntegrationTestWebAppFactory.AdministratorEmail,
+            IntegrationTestWebAppFactory.AdministratorPassword);
+
+    private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(
+        HttpClient client,
+        string email,
+        string password)
     {
         var stopwatch = Stopwatch.StartNew();
         HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new
         {
-            email = IntegrationTestWebAppFactory.AdministratorEmail,
-            password = IntegrationTestWebAppFactory.AdministratorPassword
+            email,
+            password
         });
         await response.Content.LoadIntoBufferAsync();
         stopwatch.Stop();
         return (response, stopwatch.Elapsed.TotalMilliseconds);
+    }
+
+    private static async Task MeasureRejectedLoginAsync(
+        HttpClient client,
+        string name,
+        string email,
+        string password,
+        HttpStatusCode expectedStatus,
+        int sampleIterations,
+        List<ApiLatencyMeasurement> measurements,
+        List<string> failures,
+        SqlCommandCounterInterceptor commandCounter,
+        NpgsqlPoolStateCollector poolCollector,
+        PostgreSqlLockWaitSampler lockWaitSampler)
+    {
+        (HttpResponseMessage firstResponse, double firstObservedMs) = await LoginAsync(client, email, password);
+        using (firstResponse)
+        {
+            if (firstResponse.StatusCode != expectedStatus)
+            {
+                failures.Add($"{name}: first HTTP {(int)firstResponse.StatusCode}");
+                return;
+            }
+        }
+
+        for (int iteration = 0; iteration < WarmupIterations; iteration++)
+        {
+            (HttpResponseMessage response, _) = await LoginAsync(client, email, password);
+            using (response)
+            {
+                if (response.StatusCode != expectedStatus)
+                {
+                    failures.Add($"{name}: warmup HTTP {(int)response.StatusCode}");
+                    return;
+                }
+            }
+        }
+
+        ApiBenchmarkScenarioWindow window = await MeasureLoginWindowAsync(
+            client,
+            email,
+            password,
+            expectedStatus,
+            sampleIterations,
+            commandCounter,
+            poolCollector,
+            lockWaitSampler);
+        measurements.Add(CreateMeasurement(name, firstObservedMs, window));
+        AddWindowFailures(name, window.Metrics, failures);
+    }
+
+    private async Task<(string Email, string Password)> CreateSuspendedUserAsync()
+    {
+        const string password = "SuspendedPassword1!";
+        string email = $"suspended-{Guid.NewGuid():N}@example.com";
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var user = User.Create(
+            Guid.NewGuid(),
+            email,
+            "Suspended",
+            "Benchmark",
+            passwordHasher.Hash(password));
+        user.SetStatus(UserStatus.Suspended);
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        return (email, password);
     }
 
     private static async Task<string> ReadAccessTokenAsync(HttpResponseMessage response)
@@ -245,26 +376,165 @@ public sealed class ApiLatencyBenchmarkTests
 
     private static ApiLatencyMeasurement CreateMeasurement(
         string name,
-        double firstObservedMs,
-        IReadOnlyCollection<double> warmDurations,
-        double? sqlCommands)
+        double firstRequestForScenarioMs,
+        ApiBenchmarkScenarioWindow window) =>
+        new(name, firstRequestForScenarioMs, window.Metrics, window.SqlCommands, window.PoolState, window.SampledLockWaitOccupancy);
+
+    private static async Task<ApiBenchmarkScenarioWindow> MeasureLoginWindowAsync(
+        HttpClient client,
+        string email,
+        string password,
+        HttpStatusCode expectedStatus,
+        int sampleIterations,
+        SqlCommandCounterInterceptor commandCounter,
+        NpgsqlPoolStateCollector poolCollector,
+        PostgreSqlLockWaitSampler lockWaitSampler) =>
+        await MeasureWindowAsync(
+            sampleIterations,
+            commandCounter,
+            poolCollector,
+            lockWaitSampler,
+            () => ObserveAsync(
+                () => client.PostAsJsonAsync("auth/login", new { email, password }),
+                expectedStatus,
+                getSqlCommands: null));
+
+    private static async Task<ApiBenchmarkScenarioWindow> MeasureGetWindowAsync(
+        HttpClient client,
+        string endpoint,
+        SqlCommandCounterInterceptor commandCounter,
+        NpgsqlPoolStateCollector poolCollector,
+        PostgreSqlLockWaitSampler lockWaitSampler,
+        HttpStatusCode expectedStatus,
+        int sampleIterations) =>
+        await MeasureWindowAsync(
+            sampleIterations,
+            commandCounter,
+            poolCollector,
+            lockWaitSampler,
+            async () =>
+            {
+                return await ObserveAsync(
+                    () => client.GetAsync(endpoint),
+                    expectedStatus,
+                    () => commandCounter.CommandCount);
+            });
+
+    private static async Task<ApiBenchmarkScenarioWindow> MeasureWindowAsync(
+        int sampleIterations,
+        SqlCommandCounterInterceptor? commandCounter,
+        NpgsqlPoolStateCollector? poolCollector,
+        PostgreSqlLockWaitSampler? lockWaitSampler,
+        Func<Task<ApiBenchmarkObservedSample>> measureSample)
     {
-        double[] ordered = warmDurations.OrderBy(value => value).ToArray();
-        return new ApiLatencyMeasurement(
-            name,
-            firstObservedMs,
-            Percentile(ordered, 0.50),
-            Percentile(ordered, 0.95),
-            Percentile(ordered, 0.99),
-            ordered.Average(),
-            ordered.Length,
-            sqlCommands);
+        var samples = new List<ApiBenchmarkSample>(sampleIterations);
+        // Explicit phase boundary: setup, first request, and warm-up are excluded.
+        commandCounter?.Reset();
+        poolCollector?.Reset();
+        if (lockWaitSampler is not null)
+        {
+            await lockWaitSampler.StartAsync();
+        }
+        try
+        {
+            ApiBenchmarkProcessSnapshot before = ApiLatencyBenchmarkMetrics.CaptureProcessSnapshot();
+            var stopwatch = Stopwatch.StartNew();
+            for (int iteration = 0; iteration < sampleIterations; iteration++)
+            {
+                ApiBenchmarkObservedSample observed = await measureSample();
+                samples.Add(observed.Sample);
+            }
+            stopwatch.Stop();
+            ApiBenchmarkProcessSnapshot after = ApiLatencyBenchmarkMetrics.CaptureProcessSnapshot();
+            PostgreSqlLockWaitSnapshot lockWait = lockWaitSampler is null
+                ? new PostgreSqlLockWaitSnapshot(false, 0, 0, 0, 0, 0, 0, 0)
+                : await lockWaitSampler.StopAsync();
+            return new ApiBenchmarkScenarioWindow(
+                ApiLatencyBenchmarkMetrics.Calculate(samples, stopwatch.Elapsed, before, after),
+                commandCounter?.Snapshot() ?? new SqlCommandDurationSnapshot(0, 0, 0, 0, 0, null, null, null, 0),
+                poolCollector?.Snapshot() ?? new NpgsqlPoolStateSnapshot(false, false, false, 0, 0, 0, 0),
+                lockWait);
+        }
+        finally
+        {
+            if (lockWaitSampler is not null)
+            {
+                await lockWaitSampler.StopAsync();
+            }
+        }
     }
 
-    private static double Percentile(double[] orderedValues, double percentile)
+    private static async Task<ApiBenchmarkObservedSample> ObserveAsync(
+        Func<Task<HttpResponseMessage>> sendAsync,
+        HttpStatusCode expectedStatus,
+        Func<int?>? getSqlCommands)
     {
-        int index = Math.Max(0, (int)Math.Ceiling(orderedValues.Length * percentile) - 1);
-        return orderedValues[index];
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using HttpResponseMessage response = await sendAsync();
+            byte[] payload = await response.Content.ReadAsByteArrayAsync();
+            stopwatch.Stop();
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            double? retryAfterSeconds = ApiLatencyBenchmarkMetrics.ParseRetryAfterSeconds(
+                response.Headers.RetryAfter,
+                nowUtc);
+            return new ApiBenchmarkObservedSample(
+                new ApiBenchmarkSample(
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    payload.Length,
+                    ApiLatencyBenchmarkMetrics.Classify((int)response.StatusCode, (int)expectedStatus, false),
+                    (int)response.StatusCode,
+                    retryAfterSeconds),
+                getSqlCommands?.Invoke());
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            return new ApiBenchmarkObservedSample(
+                new ApiBenchmarkSample(
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    0,
+                    ApiBenchmarkResponseClassification.TimeoutOrCancellation,
+                    null,
+                    null),
+                getSqlCommands?.Invoke());
+        }
+        catch (HttpRequestException)
+        {
+            stopwatch.Stop();
+            return new ApiBenchmarkObservedSample(
+                new ApiBenchmarkSample(
+                    stopwatch.Elapsed.TotalMilliseconds,
+                    0,
+                    ApiBenchmarkResponseClassification.TransportFailure,
+                    null,
+                    null),
+                getSqlCommands?.Invoke());
+        }
+    }
+
+    internal static void AddWindowFailures(
+        string scenario,
+        ApiLatencyWindowMetrics metrics,
+        List<string> failures)
+    {
+        if (metrics.UnexpectedHttpErrorCount > 0)
+        {
+            failures.Add($"{scenario}: unexpected HTTP errors={metrics.UnexpectedHttpErrorCount}");
+        }
+        if (metrics.TimeoutOrCancellationCount > 0)
+        {
+            failures.Add($"{scenario}: timeouts/cancellations={metrics.TimeoutOrCancellationCount}");
+        }
+        if (metrics.TransportFailureCount > 0)
+        {
+            failures.Add($"{scenario}: transport failures={metrics.TransportFailureCount}");
+        }
+        if (metrics.RateLimitedCount > 0)
+        {
+            failures.Add($"{scenario}: HTTP 429 responses={metrics.RateLimitedCount}; retry-after={metrics.RetryAfter}");
+        }
     }
 
     private static int GetSampleIterations()
@@ -280,15 +550,21 @@ public sealed class ApiLatencyBenchmarkTests
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion ?? "unknown";
 
+    private sealed record ApiBenchmarkObservedSample(ApiBenchmarkSample Sample, int? SqlCommands);
+
+    private sealed record ApiBenchmarkScenarioWindow(
+        ApiLatencyWindowMetrics Metrics,
+        SqlCommandDurationSnapshot SqlCommands,
+        NpgsqlPoolStateSnapshot PoolState,
+        PostgreSqlLockWaitSnapshot SampledLockWaitOccupancy);
+
     private sealed record ApiLatencyMeasurement(
         string Name,
-        double FirstObservedMs,
-        double WarmP50Ms,
-        double WarmP95Ms,
-        double WarmP99Ms,
-        double WarmAverageMs,
-        int SampleCount,
-        double? AverageSqlCommands);
+        double FirstRequestForScenarioMs,
+        ApiLatencyWindowMetrics Window,
+        SqlCommandDurationSnapshot SqlCommands,
+        NpgsqlPoolStateSnapshot PoolState,
+        PostgreSqlLockWaitSnapshot SampledLockWaitOccupancy);
 }
 
 [AttributeUsage(AttributeTargets.Method)]

@@ -67,6 +67,15 @@ public sealed class AuditOverheadTests : BaseIntegrationTest
 
         output.WriteLine(
             $"Audit posting measurement: lines={lineCount}, elapsed={stopwatch.ElapsedMilliseconds}ms.");
+
+        if (string.Equals(Environment.GetEnvironmentVariable("RUN_PERFORMANCE_TESTS"), "1", StringComparison.Ordinal))
+        {
+            string directory = Environment.GetEnvironmentVariable("EIAMS_AUDIT_OVERHEAD_RESULT_DIR")
+                ?? Path.Combine(Path.GetTempPath(), "eiams-audit-overhead-results");
+            await ApiLoadSuiteArtifactWriter.WriteAsync(directory,
+                $"audit-overhead-{lineCount}.json",
+                new { Status = "passed", WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic, lineCount, stopwatch.ElapsedMilliseconds });
+        }
     }
 
     [ExplicitPerformanceFact]

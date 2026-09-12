@@ -10,6 +10,7 @@ public sealed class EndpointAuthorizationTests : BaseTest
     private static readonly HashSet<string> AnonymousAllowlist =
     [
         "Web.Api.Controllers.Users.RegisterController",
+        "Web.Api.Controllers.Users.RecoverAdministratorController",
         "Web.Api.Controllers.Users.LoginController",
         "Web.Api.Controllers.Users.RefreshTokenController",
         "Web.Api.Controllers.Users.LogoutController"

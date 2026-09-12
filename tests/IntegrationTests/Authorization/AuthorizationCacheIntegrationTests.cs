@@ -7,6 +7,7 @@ using Domain.UserRoleScopes;
 using Domain.Users;
 using Infrastructure.Database;
 using IntegrationTests.Performance;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
@@ -98,6 +99,35 @@ public sealed class AuthorizationCacheIntegrationTests
             PermissionCodes.Organizations.Manage);
 
         isAuthorizedAfterExternalRevocation.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task DatabaseAuthorizationVersion_ShouldInvalidateTwoIndependentApplicationCaches()
+    {
+        (Guid userId, Guid roleId) = await CreateUserWithRoleAndPermissionAsync(
+            PermissionCodes.Organizations.Manage);
+        using WebApplicationFactory<Program> sibling = factory.CreateSiblingFactory();
+
+        (await HasPermissionAsync(factory.Services, userId, PermissionCodes.Organizations.Manage))
+            .ShouldBeTrue();
+        (await HasPermissionAsync(sibling.Services, userId, PermissionCodes.Organizations.Manage))
+            .ShouldBeTrue();
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            int affectedRows = await context.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM public.role_permissions
+                WHERE role_id = {roleId}
+                  AND permission_id = {WellKnownPermissions.OrganizationsManageId}
+                """);
+            affectedRows.ShouldBe(1);
+        }
+
+        (await HasPermissionAsync(factory.Services, userId, PermissionCodes.Organizations.Manage))
+            .ShouldBeFalse();
+        (await HasPermissionAsync(sibling.Services, userId, PermissionCodes.Organizations.Manage))
+            .ShouldBeFalse();
     }
 
     [Fact]
@@ -238,6 +268,11 @@ public sealed class AuthorizationCacheIntegrationTests
             item.KeyType == "user_grants" &&
             item.TagCount == 1).ShouldBeTrue();
         measurements.Any(item =>
+            item.InstrumentName == "authorization.cache.factory_executions" &&
+            item.Value == 1 &&
+            item.KeyType == "user_grants" &&
+            item.TagCount == 1).ShouldBeTrue();
+        measurements.Any(item =>
             item.InstrumentName == "authorization.cache.hits" &&
             item.Value == 1 &&
             item.KeyType == "user_grants" &&
@@ -245,8 +280,14 @@ public sealed class AuthorizationCacheIntegrationTests
     }
 
     private async Task<bool> HasPermissionAsync(Guid userId, string permission)
+        => await HasPermissionAsync(factory.Services, userId, permission);
+
+    private static async Task<bool> HasPermissionAsync(
+        IServiceProvider services,
+        Guid userId,
+        string permission)
     {
-        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        await using AsyncServiceScope scope = services.CreateAsyncScope();
         IScopeAuthorizationService authorization = scope.ServiceProvider.GetRequiredService<IScopeAuthorizationService>();
         return await authorization.HasPermissionAsync(userId, permission, CancellationToken.None);
     }

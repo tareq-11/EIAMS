@@ -7,6 +7,7 @@ using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Application.DocumentAttachments.GetContent;
@@ -15,7 +16,8 @@ internal sealed class GetDocumentAttachmentContentQueryHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
-    IFileStorage fileStorage)
+    IFileStorage fileStorage,
+    IOptions<AttachmentMalwareScanOptions> malwareScanOptions)
     : IQueryHandler<GetDocumentAttachmentContentQuery, DocumentAttachmentContentResponse>
 {
     public async Task<Result<DocumentAttachmentContentResponse>> Handle(
@@ -52,6 +54,13 @@ internal sealed class GetDocumentAttachmentContentQueryHandler(
         if (attachment is null)
         {
             return Result.Failure<DocumentAttachmentContentResponse>(DocumentAttachmentErrors.NotFound(query.AttachmentId));
+        }
+
+        // Existing rows migrate as false; Required mode therefore blocks legacy/unscanned content
+        // until an approved re-scan workflow exists, never treating it as clean by default.
+        if (malwareScanOptions.Value.Policy == AttachmentMalwareScanPolicy.Required && !attachment.MalwareScanClean)
+        {
+            return Result.Failure<DocumentAttachmentContentResponse>(DocumentAttachmentErrors.MalwareScanRequired);
         }
 
         Result<Stream> contentResult = await fileStorage.OpenAsync(attachment.StorageKey, cancellationToken);

@@ -13,13 +13,15 @@ namespace Web.Api.Controllers.Users;
 [AllowAnonymous]
 [Route("auth")]
 [Tags(Tags.Users)]
-public sealed class LoginController(ICommandHandler<LoginUserCommand, AccessTokensResponse> handler) : ControllerBase
+public sealed class LoginController(
+    ICommandHandler<LoginUserCommand, AccessTokensResponse> handler,
+    RefreshTokenTransport refreshTokenTransport) : ControllerBase
 {
     public sealed record RequestBody(string Email, string Password);
 
     [HttpPost("login")]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
-    [ProducesResponseType<ApiResponse<AccessTokensResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<AuthenticationTokensResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
@@ -34,6 +36,8 @@ public sealed class LoginController(ICommandHandler<LoginUserCommand, AccessToke
             AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
         }
 
-        return result.ToApiResponse(HttpContext);
+        return result.Match(
+            tokens => ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(tokens)),
+            failure => CustomResults.Problem(failure, HttpContext));
     }
 }

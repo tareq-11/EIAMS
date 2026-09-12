@@ -45,6 +45,7 @@ internal static class ApiResults
             StatusCodes.Status429TooManyRequests => ("RATE_LIMIT_EXCEEDED", "Too many requests were sent. Wait before trying again."),
             StatusCodes.Status500InternalServerError => ("SERVER_FAILURE", "An unexpected server error occurred."),
             StatusCodes.Status503ServiceUnavailable => ("SERVICE_UNAVAILABLE", "The service is temporarily unavailable. Try again later."),
+            StatusCodes.Status504GatewayTimeout => ("REQUEST_TIMEOUT", "The request took too long to complete. Try again."),
             _ => ("REQUEST_FAILED", "The request could not be completed.")
         };
 

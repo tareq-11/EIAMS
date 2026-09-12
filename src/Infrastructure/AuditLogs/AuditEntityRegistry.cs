@@ -15,6 +15,7 @@ using Domain.ExternalParties;
 using Domain.InventoryAdjustments;
 using Domain.InventoryBalances;
 using Domain.InventoryCounts;
+using Domain.Idempotency;
 using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
@@ -72,6 +73,8 @@ internal sealed class AuditEntityRegistry
                 "Dedicated immutable document lifecycle ledger; field-audit capture would duplicate the same evidence.",
             [typeof(RefreshToken)] =
                 "Holds bearer token secrets; login/refresh are captured as synthetic User-root Authenticate/TokenRefresh headers instead.",
+            [typeof(IdempotencyRecord)] =
+                "Technical replay cache; the protected business command and its effects are audited instead, and response payloads must not be duplicated into audit entries.",
             [typeof(PendingFileDeletion)] =
                 "Operational infrastructure queue backing attachment cleanup; not business data.",
             [typeof(DocumentSequence)] =

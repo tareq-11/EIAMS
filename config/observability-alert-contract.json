@@ -1,0 +1,17 @@
+{
+  "disabled": true,
+  "purpose": "Deployment-owned alert recommendations; thresholds remain null until an agreed production SLO exists.",
+  "signals": [
+    { "kind": "metric", "source": "EIAMS.SecurityOperations", "signal": "eiam.security.http.outcomes", "labels": ["outcome"], "threshold": null },
+    { "kind": "metric", "source": "EIAMS.SecurityOperations", "signal": "eiam.security.operations", "labels": ["event_type", "outcome"], "threshold": null },
+    { "kind": "metric", "source": "CleanArchitecture.Application.Authentication", "signal": "security.refresh.events", "labels": ["event_type", "outcome"], "threshold": null },
+    { "kind": "metric", "source": "CleanArchitecture.Infrastructure.Cache", "signal": "cache.invalidation.pending_lag", "labels": ["succeeded"], "threshold": null },
+    { "kind": "metric", "source": "CleanArchitecture.Infrastructure.BackgroundWork", "signal": "background_worker.cycles", "labels": ["worker", "outcome"], "threshold": null },
+    { "kind": "metric", "source": "Microsoft.AspNetCore.Hosting", "signal": "http.server.request.duration", "labels": [], "threshold": null },
+    { "kind": "metric", "source": "Npgsql", "signal": "db.client.connection.count", "labels": ["db.client.connection.state"], "threshold": null },
+    { "kind": "metric", "source": "Npgsql", "signal": "db.client.connection.max", "labels": [], "threshold": null },
+    { "kind": "metric", "source": "Npgsql", "signal": "db.client.connection.npgsql.timeouts", "labels": [], "threshold": null },
+    { "kind": "trace", "source": "Npgsql", "signal": "activity.duration", "labels": [], "threshold": null },
+    { "kind": "manual_evidence_gap", "source": "performance_harness", "signal": "database.lock_wait", "labels": [], "threshold": null }
+  ]
+}

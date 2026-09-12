@@ -5,6 +5,7 @@ using Application.Abstractions.Audit;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Idempotency;
 using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Ledger;
 using Application.Abstractions.Numbering;
@@ -22,6 +23,7 @@ using Infrastructure.Database;
 using Infrastructure.DomainEvents;
 using Infrastructure.DocumentLifecycleEvents;
 using Infrastructure.InventoryCounts;
+using Infrastructure.Idempotency;
 using Infrastructure.Ledger;
 using Infrastructure.Numbering;
 using Infrastructure.Policies;
@@ -39,7 +41,9 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using SharedKernel;
 
 namespace Infrastructure;
@@ -62,6 +66,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IBootstrapAdministratorAuthorizer, BootstrapAdministratorAuthorizer>();
 
+        services.AddSingleton<IAdministratorRecoveryAuthorizer, AdministratorRecoveryAuthorizer>();
+
         services.AddScoped<IAuditOperationContextAccessor, AuditOperationContextAccessor>();
 
         services.AddScoped<IRequestAuditContext, RequestAuditContext>();
@@ -83,6 +89,10 @@ public static class DependencyInjection
         services.AddScoped<IApplicationTransaction, EfApplicationTransaction>();
 
         services.AddScoped<IApplicationLock, PostgresApplicationLock>();
+
+        services.AddScoped<IIdempotencyService, IdempotencyService>();
+
+        services.AddHostedService<IdempotencyCleanupWorker>();
 
         services.AddScoped<IDocumentLock, ApplicationDocumentLock>();
 
@@ -141,6 +151,10 @@ public static class DependencyInjection
         services.AddScoped<AssetPostingSelectionService>();
 
         services.AddScoped<IFileStorage, LocalFileStorage>();
+        services.AddScoped<IAttachmentMalwareScanner, ClamAvAttachmentMalwareScanner>();
+        services.AddHostedService<AttachmentMalwareScanStartupDiagnostics>();
+
+        services.AddSingleton<IValidateOptions<LocalFileStorageOptions>, LocalFileStorageOptionsValidator>();
 
         services.AddScoped<IAttachmentFileCleanup, AttachmentFileCleanup>();
 
@@ -151,6 +165,15 @@ public static class DependencyInjection
             .Validate(options => !string.IsNullOrWhiteSpace(options.RootPath),
                 "AttachmentStorage:Local:RootPath is required.")
             .ValidateOnStart();
+
+        services.AddSingleton<IValidateOptions<AttachmentMalwareScanOptions>, AttachmentMalwareScanOptionsValidator>();
+        services.AddOptions<AttachmentMalwareScanOptions>()
+            .Bind(configuration.GetSection(AttachmentMalwareScanOptions.SectionName))
+            .ValidateOnStart();
+        services.AddOptions<ClamAvAttachmentMalwareScanOptions>()
+            .Bind(configuration.GetSection("AttachmentStorage:MalwareScan:ClamAv"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<ClamAvAttachmentMalwareScanOptions>, ClamAvAttachmentMalwareScanOptionsValidator>();
 
         services.AddOptions<AssetCreationOptions>()
             .Bind(configuration.GetSection(AssetCreationOptions.SectionName))
@@ -232,6 +255,31 @@ public static class DependencyInjection
                 $"BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled.")
             .ValidateOnStart();
 
+        services.AddOptions<IdempotencyCleanupOptions>()
+            .Bind(configuration.GetSection(IdempotencyCleanupOptions.SectionName))
+            .Validate(options => options.InitialDelay >= TimeSpan.Zero,
+                "Idempotency:Cleanup:InitialDelay must not be negative.")
+            .Validate(options => options.Interval > TimeSpan.Zero,
+                "Idempotency:Cleanup:Interval must be greater than zero.")
+            .Validate(options => options.BatchSize is > 0 and <= 10_000,
+                "Idempotency:Cleanup:BatchSize must be between 1 and 10000.")
+            .ValidateOnStart();
+
+        services.AddOptions<AdministratorRecoveryOptions>()
+            .Bind(configuration.GetSection(AdministratorRecoveryOptions.SectionName))
+            .Validate(
+                options => !options.Enabled ||
+                           AdministratorRecoveryOptions.TryDecodeToken(options.Token, out _),
+                $"AdministratorRecovery:Token must be Base64 for exactly {AdministratorRecoveryOptions.TokenBytes} random bytes when recovery is enabled.")
+            .Validate(
+                options => !options.Enabled ||
+                           options.ExpiresAtUtc.Offset == TimeSpan.Zero,
+                "AdministratorRecovery:ExpiresAtUtc must be an explicit UTC timestamp when recovery is enabled.")
+            .Validate(
+                options => !options.Enabled || options.ExpiresAtUtc > DateTime.UtcNow,
+                "AdministratorRecovery:ExpiresAtUtc must be in the future when recovery is enabled.")
+            .ValidateOnStart();
+
 #pragma warning disable EXTEXP0018 // HybridCache is released; the API is stable in .NET 10.
         services.AddHybridCache();
 #pragma warning restore EXTEXP0018
@@ -245,13 +293,34 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Database connection string is not configured. " +
                 "Set 'ConnectionStrings:Database' in appsettings.json or user secrets.");
-        int commandTimeoutSeconds = configuration.GetValue<int?>("DatabasePerformance:CommandTimeoutSeconds") ?? 30;
-
-        if (commandTimeoutSeconds is < 1 or > 600)
+        DatabaseConnectionOptions databaseOptions = configuration
+            .GetSection(DatabaseConnectionOptions.SectionName)
+            .Get<DatabaseConnectionOptions>() ?? new DatabaseConnectionOptions();
+        var databaseOptionsValidator = new DatabaseConnectionOptionsValidator();
+        ValidateOptionsResult validationResult = databaseOptionsValidator.Validate(null, databaseOptions);
+        if (validationResult.Failed)
         {
-            throw new InvalidOperationException(
-                "DatabasePerformance:CommandTimeoutSeconds must be between 1 and 600 seconds.");
+            throw new OptionsValidationException(
+                DatabaseConnectionOptions.SectionName,
+                typeof(DatabaseConnectionOptions),
+                validationResult.Failures);
         }
+
+        DatabaseEndpointClassifier.ValidateExpectedMode(connectionString, databaseOptions.EndpointMode);
+
+        DatabaseTopologyConfiguration.Validate(configuration);
+
+        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Pooling = databaseOptions.Pooling,
+            MaxPoolSize = databaseOptions.MaxPoolSize,
+            MinPoolSize = databaseOptions.MinPoolSize,
+            Timeout = databaseOptions.ConnectionTimeoutSeconds,
+            CommandTimeout = databaseOptions.CommandTimeoutSeconds,
+            KeepAlive = databaseOptions.KeepAliveSeconds,
+            CancellationTimeout = databaseOptions.CancellationTimeoutSeconds
+        };
+        PostgresStartupOptions.ApplyTimeouts(connectionStringBuilder, databaseOptions);
 
         services.AddScoped<AuditableEntityInterceptor>();
 
@@ -259,12 +328,19 @@ public static class DependencyInjection
 
         services.AddScoped<DocumentLifecycleSaveChangesInterceptor>();
 
+        services.AddSingleton(databaseOptions);
+
+        services.AddHostedService(sp => new DatabaseConnectionStartupDiagnostics(
+            databaseOptions,
+            connectionString,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<DatabaseConnectionStartupDiagnostics>>()));
+
         services.AddDbContext<ApplicationDbContext>(
             (sp, options) => options
-                .UseNpgsql(connectionString, npgsqlOptions =>
+                .UseNpgsql(connectionStringBuilder.ConnectionString, npgsqlOptions =>
                     npgsqlOptions
                         .MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schemas.Default)
-                        .CommandTimeout(commandTimeoutSeconds))
+                        .CommandTimeout(databaseOptions.CommandTimeoutSeconds))
                 .UseSnakeCaseNamingConvention()
                 .AddInterceptors(
                     sp.GetRequiredService<AuditableEntityInterceptor>(),
@@ -279,6 +355,19 @@ public static class DependencyInjection
 
     private static IServiceCollection AddHealthChecks(this IServiceCollection services, IConfiguration configuration)
     {
+        string connectionString = configuration.GetConnectionString("Database")!;
+        DatabaseConnectionOptions databaseOptions = configuration
+            .GetSection(DatabaseConnectionOptions.SectionName)
+            .Get<DatabaseConnectionOptions>() ?? new DatabaseConnectionOptions();
+        string readinessConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            // A health probe is short-lived and must not create another long-lived pool per process.
+            Pooling = false,
+            Timeout = databaseOptions.ConnectionTimeoutSeconds,
+            CommandTimeout = databaseOptions.CommandTimeoutSeconds,
+            CancellationTimeout = databaseOptions.CancellationTimeoutSeconds
+        }.ConnectionString;
+
         services
             .AddHealthChecks()
             .AddCheck(
@@ -286,7 +375,7 @@ public static class DependencyInjection
                 () => HealthCheckResult.Healthy(),
                 tags: ["live"])
             .AddNpgSql(
-                configuration.GetConnectionString("Database")!,
+                readinessConnectionString,
                 name: "postgresql",
                 tags: ["ready"]);
 
@@ -306,7 +395,12 @@ public static class DependencyInjection
                 o.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret)),
+                    IssuerSigningKeyResolver = (_, _, keyId, _) => jwtOptions
+                        .GetValidationSecrets(keyId)
+                        .Select(secret => new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret))
+                        {
+                            KeyId = keyId
+                        }),
                     ValidateIssuer = true,
                     ValidIssuer = jwtOptions.Issuer,
                     ValidateAudience = true,
@@ -348,6 +442,8 @@ public static class DependencyInjection
         services.AddAuthorization();
 
         services.AddScoped<AuthorizationVersionProvider>();
+
+        services.AddSingleton<AuthorizationCacheCoalescingTracker>();
 
         services.AddScoped<IScopeAuthorizationService, ScopeAuthorizationService>();
 

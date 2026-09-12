@@ -104,7 +104,13 @@ internal sealed class LocalFileStorage(
         }
 
 #pragma warning disable CA2000 // Ownership transfers to the caller, who is responsible for disposing the stream.
-        Stream stream = File.OpenRead(filePath);
+        Stream stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81_920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
 #pragma warning restore CA2000
 
         return Task.FromResult(Result.Success(stream));
@@ -127,16 +133,14 @@ internal sealed class LocalFileStorage(
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            logger.LogWarning(exception, "Failed to delete attachment file with storage key {StorageKey}", storageKey);
+            logger.LogWarning(exception, "Failed to delete an attachment file");
 
             return Task.FromResult(Result.Failure(DocumentAttachmentErrors.StorageFailure));
         }
     }
 
     private string ResolveRootPath() =>
-        Path.IsPathRooted(options.Value.RootPath)
-            ? options.Value.RootPath
-            : Path.GetFullPath(Path.Combine(hostEnvironment.ContentRootPath, options.Value.RootPath));
+        LocalFileStoragePath.Resolve(options.Value.RootPath, hostEnvironment.ContentRootPath);
 
     private static bool IsValidStorageKey(string storageKey) =>
         storageKey.Length == 32 && Guid.TryParseExact(storageKey, "N", out _);

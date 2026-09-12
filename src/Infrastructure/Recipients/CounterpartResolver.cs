@@ -2,6 +2,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Pagination;
 using Application.Abstractions.Recipients;
+using Application.Abstractions.Searching;
 using Domain.Common;
 using Domain.Custodies;
 using Domain.Employees;
@@ -182,7 +183,7 @@ internal sealed class CounterpartResolver(
         int pageSize,
         CancellationToken cancellationToken)
     {
-        string? term = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+        string? term = SqlLikePattern.CreateContains(search);
         int normalizedPage = page <= 0 ? 1 : page;
         int normalizedPageSize = pageSize <= 0 ? 20 : Math.Min(pageSize, 100);
         int offset = checked((normalizedPage - 1) * normalizedPageSize);
@@ -205,8 +206,8 @@ internal sealed class CounterpartResolver(
             IQueryable<Employee> employeeQuery = context.Employees.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
                 .Where(item => term == null ||
-                    EF.Functions.ILike(item.FullName, $"%{term}%") ||
-                    EF.Functions.ILike(item.EmployeeNumber, $"%{term}%"));
+                    EF.Functions.ILike(item.FullName, term, SqlLikePattern.EscapeCharacter) ||
+                    EF.Functions.ILike(item.EmployeeNumber, term, SqlLikePattern.EscapeCharacter));
 
             if (!access.HasEnterpriseAccess)
             {
@@ -230,7 +231,7 @@ internal sealed class CounterpartResolver(
         {
             IQueryable<OrganizationalUnit> unitQuery = context.OrganizationalUnits.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
-                .Where(item => term == null || EF.Functions.ILike(item.Name, $"%{term}%"));
+                .Where(item => term == null || EF.Functions.ILike(item.Name, term, SqlLikePattern.EscapeCharacter));
 
             if (!access.HasEnterpriseAccess)
             {
@@ -254,8 +255,8 @@ internal sealed class CounterpartResolver(
             IQueryable<Site> siteQuery = context.Sites.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
                 .Where(item => term == null ||
-                    EF.Functions.ILike(item.Name, $"%{term}%") ||
-                    EF.Functions.ILike(item.Code, $"%{term}%"));
+                    EF.Functions.ILike(item.Name, term, SqlLikePattern.EscapeCharacter) ||
+                    EF.Functions.ILike(item.Code, term, SqlLikePattern.EscapeCharacter));
 
             if (!access.HasEnterpriseAccess)
             {
@@ -279,8 +280,8 @@ internal sealed class CounterpartResolver(
             IQueryable<ExternalParty> externalQuery = context.ExternalParties.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
                 .Where(item => term == null ||
-                    EF.Functions.ILike(item.NameAr, $"%{term}%") ||
-                    item.Code != null && EF.Functions.ILike(item.Code, $"%{term}%"));
+                    EF.Functions.ILike(item.NameAr, term, SqlLikePattern.EscapeCharacter) ||
+                    item.Code != null && EF.Functions.ILike(item.Code, term, SqlLikePattern.EscapeCharacter));
 
             IQueryable<CounterpartSearchRow> externalParties = externalQuery
                 .Select(item => new CounterpartSearchRow

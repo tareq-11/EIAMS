@@ -84,6 +84,7 @@ internal sealed class RefreshTokenCommandHandler(
         // Replay detection: If a revoked token is presented again, invalidate all active tokens for this user.
         if (refreshToken.RevokedOnUtc is not null)
         {
+            RefreshSecurityMetrics.ReplayDetected();
             List<RefreshToken> activeTokens = await context.RefreshTokens
                 .Where(rt => rt.UserId == refreshToken.UserId && rt.RevokedOnUtc == null)
                 .ToListAsync(cancellationToken);

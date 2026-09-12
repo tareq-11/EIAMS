@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using Domain.Common;
 using Domain.AssetMovementHistories;
@@ -21,6 +22,7 @@ using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Domain.Warehouses;
 using Infrastructure.Database;
+using IntegrationTests.Performance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedKernel;
@@ -47,7 +49,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Authenticate(tokens.AccessToken);
 
         // Act + Assert: global balance list contains only the assigned warehouse.
-        HttpResponseMessage balancesResponse = await HttpClient.GetAsync("inventory/balances?page=1&pageSize=10");
+        HttpResponseMessage balancesResponse = await HttpClient.GetAsync(
+            "inventory/balances?search=%D9%85%D8%A7%D8%AF%D8%A9&page=1&pageSize=10");
         string balancesJson = await balancesResponse.Content.ReadAsStringAsync();
         balancesResponse.StatusCode.ShouldBe(HttpStatusCode.OK, balancesJson);
         using var balancesBody = JsonDocument.Parse(balancesJson);
@@ -82,6 +85,34 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         HttpResponseMessage outsideDetailResponse = await HttpClient.GetAsync(
             $"inventory/movements/{seed.OutsideMovementId}");
         outsideDetailResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        HttpResponseMessage allowedAttachments = await HttpClient.GetAsync(
+            $"warehouse-documents/{seed.AllowedDocumentId}/attachments");
+        allowedAttachments.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        HttpResponseMessage outsideAttachments = await HttpClient.GetAsync(
+            $"warehouse-documents/{seed.OutsideDocumentId}/attachments");
+        outsideAttachments.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        HttpResponseMessage swappedAttachment = await HttpClient.GetAsync(
+            $"warehouse-documents/{seed.AllowedDocumentId}/attachments/{seed.OutsideAttachmentId}/content");
+        swappedAttachment.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        using var upload = new MultipartFormDataContent();
+        using var file = new ByteArrayContent("%PDF-1.7\nscoped-test"u8.ToArray());
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        upload.Add(file, "File", "outside.pdf");
+        upload.Add(new StringContent("SignedOriginal"), "AttachmentType");
+        upload.Add(new StringContent("1"), "ExpectedRowVersion");
+        HttpResponseMessage outsideUpload = await HttpClient.PostAsync(
+            $"warehouse-documents/{seed.OutsideDocumentId}/attachments",
+            upload);
+        outsideUpload.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        HttpResponseMessage outsideDelete = await HttpClient.DeleteAsync(
+            $"warehouse-documents/{seed.OutsideDocumentId}/attachments/{seed.OutsideAttachmentId}" +
+            "?expectedRowVersion=1");
+        outsideDelete.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -145,6 +176,210 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             HttpResponseMessage response = await HttpClient.GetAsync(route);
             response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         }
+
+        string[] pagedReportRoutes =
+        [
+            "reports/inventory?page=1&pageSize=10",
+            "reports/assets?page=1&pageSize=10",
+            "reports/documents?page=1&pageSize=10",
+            "reports/count-adjustments?page=1&pageSize=10"
+        ];
+        foreach (string route in pagedReportRoutes)
+        {
+            HttpResponseMessage outsideScope = await HttpClient.GetAsync(
+                $"{route}&warehouseId={seed.OutsideWarehouseId}");
+            string outsideScopeContent = await outsideScope.Content.ReadAsStringAsync();
+            outsideScope.StatusCode.ShouldBe(HttpStatusCode.OK, outsideScopeContent);
+
+            using var outsideScopeBody = JsonDocument.Parse(outsideScopeContent);
+            outsideScopeBody.RootElement.GetProperty("data").GetArrayLength().ShouldBe(0);
+            outsideScopeBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32()
+                .ShouldBe(0);
+        }
+    }
+
+    [Fact]
+    public async Task ReadListsAndReports_ShouldRejectOversizedPagesAndUnboundedDateRanges()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        // Act + Assert
+        string[] oversizedPageRoutes =
+        [
+            "reports/inventory?page=1&pageSize=101",
+            "warehouse-documents?page=1&pageSize=101"
+        ];
+        foreach (string route in oversizedPageRoutes)
+        {
+            HttpResponseMessage response = await HttpClient.GetAsync(route);
+            string content = await response.Content.ReadAsStringAsync();
+            response.StatusCode.ShouldBe(HttpStatusCode.BadRequest, content);
+
+            using var body = JsonDocument.Parse(content);
+            body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
+        }
+
+        HttpResponseMessage oneSidedRange = await HttpClient.GetAsync(
+            "reports/documents?fromUtc=2026-01-01T00:00:00Z&page=1&pageSize=10");
+        oneSidedRange.StatusCode.ShouldBe(HttpStatusCode.BadRequest,
+            await oneSidedRange.Content.ReadAsStringAsync());
+
+        HttpResponseMessage oversizedRange = await HttpClient.GetAsync(
+            "reports/count-adjustments?fromUtc=2025-01-01T00:00:00Z&toUtc=2026-01-03T00:00:00Z&page=1&pageSize=10");
+        oversizedRange.StatusCode.ShouldBe(HttpStatusCode.BadRequest,
+            await oversizedRange.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task WarehouseDocumentDateFilter_ShouldUseAnExclusiveUpperBound_AndPreserveScope()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        DateTime fromUtc = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        DateTime toUtc = fromUtc.AddDays(1);
+        var atUpperBoundDocumentId = Guid.NewGuid();
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            WarehouseDocument lowerBoundDocument = await context.WarehouseDocuments
+                .SingleAsync(document => document.Id == seed.AllowedDocumentId);
+            lowerBoundDocument.CreatedAtUtc = fromUtc;
+
+            var upperBoundDocument = WarehouseDocument.CreateDraft(
+                atUpperBoundDocumentId,
+                seed.AllowedWarehouseId,
+                DocumentType.Receiving,
+                $"EXCLUSIVE-{atUpperBoundDocumentId:N}");
+            context.WarehouseDocuments.Add(upperBoundDocument);
+            await context.SaveChangesAsync();
+
+            upperBoundDocument.CreatedAtUtc = toUtc;
+            await context.SaveChangesAsync();
+        }
+
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        string period = "fromDateUtc=2026-01-01T00:00:00Z&toDateUtc=2026-01-02T00:00:00Z";
+
+        // Act
+        HttpResponseMessage allowedResponse = await HttpClient.GetAsync(
+            $"warehouse-documents?warehouseId={seed.AllowedWarehouseId}&{period}&page=1&pageSize=10");
+        HttpResponseMessage outsideScopeResponse = await HttpClient.GetAsync(
+            $"warehouse-documents?warehouseId={seed.OutsideWarehouseId}&{period}&page=1&pageSize=10");
+
+        // Assert
+        string allowedContent = await allowedResponse.Content.ReadAsStringAsync();
+        allowedResponse.StatusCode.ShouldBe(HttpStatusCode.OK, allowedContent);
+        using (var body = JsonDocument.Parse(allowedContent))
+        {
+            Guid[] documentIds = body.RootElement.GetProperty("data")
+                .EnumerateArray()
+                .Select(document => document.GetProperty("id").GetGuid())
+                .ToArray();
+            documentIds.ShouldBe([seed.AllowedDocumentId]);
+            documentIds.ShouldNotContain(atUpperBoundDocumentId);
+        }
+
+        string outsideScopeContent = await outsideScopeResponse.Content.ReadAsStringAsync();
+        outsideScopeResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden, outsideScopeContent);
+    }
+
+    [Fact]
+    public async Task Dashboard_Should_PreserveScopedTotals_AndUseABoundedQueryBudget()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        SqlCommandCounterInterceptor commandCounter =
+            factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        commandCounter.Reset();
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("reports/dashboard");
+        string content = await response.Content.ReadAsStringAsync();
+
+        // Assert: the response remains restricted to the assigned warehouse; the second seeded
+        // warehouse has nine units and must never be included in the five-unit total below.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        using var body = JsonDocument.Parse(content);
+        JsonElement data = body.RootElement.GetProperty("data");
+        data.GetProperty("warehouseCount").GetInt32().ShouldBe(1);
+        data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(1);
+        data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(5m);
+        data.GetProperty("assetCount").GetInt32().ShouldBe(1);
+        data.GetProperty("activeCustodyCount").GetInt32().ShouldBe(0);
+        data.GetProperty("openDocumentCount").GetInt32().ShouldBe(1);
+        data.GetProperty("activeInventoryCountCount").GetInt32().ShouldBe(0);
+
+        // One command reads the scoped dashboard metrics. The remaining allowance covers the
+        // authorization-version/grant cache on a cold request; it prevents a regression to
+        // independently querying each aggregate.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(4);
+    }
+
+    [Fact]
+    public async Task Dashboard_Should_ReturnZeroPermittedMetrics_WhenRequestedWarehouseIsOutsideScope()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"reports/dashboard?warehouseId={seed.OutsideWarehouseId}");
+        string content = await response.Content.ReadAsStringAsync();
+
+        // Assert: filtering can narrow the assigned scope to no warehouses, but it must not
+        // turn permitted optional metrics into null or expose the outside warehouse.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        using var body = JsonDocument.Parse(content);
+        JsonElement data = body.RootElement.GetProperty("data");
+        data.GetProperty("warehouseCount").GetInt32().ShouldBe(0);
+        data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(0);
+        data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(0m);
+        data.GetProperty("assetCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeCustodyCount").GetInt32().ShouldBe(0);
+        data.GetProperty("openDocumentCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeInventoryCountCount").GetInt32().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Dashboard_Should_ReturnNullOnlyForMetricsWithoutPermission_WhenScopeHasNoWarehouses()
+    {
+        // Arrange: the assignment is valid from an authorization perspective, but its
+        // warehouse was intentionally not created. This reaches the empty aggregate fallback.
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantInventoryOnlyPermissionAsync(userId, Guid.NewGuid());
+        Authenticate(tokens.AccessToken);
+
+        // Act
+        HttpResponseMessage response = await HttpClient.GetAsync("reports/dashboard");
+        string content = await response.Content.ReadAsStringAsync();
+
+        // Assert: inventory metrics are zero for an empty permitted scope; the other metrics
+        // remain null because the caller lacks their respective view permissions.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        using var body = JsonDocument.Parse(content);
+        JsonElement data = body.RootElement.GetProperty("data");
+        data.GetProperty("warehouseCount").GetInt32().ShouldBe(0);
+        data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(0);
+        data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(0m);
+        data.GetProperty("assetCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("activeCustodyCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("openDocumentCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("activeInventoryCountCount").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]
@@ -360,6 +595,9 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             allowedMovement.Value.Id,
             outsideMovement.Value.Id,
             allowedReference,
+            allowedDocument.Id,
+            outsideDocument.Id,
+            outsideAttachment.Id,
             allowedAsset.Value.Id,
             outsideAsset.Value.Id,
             allowedAdjustment.Value.Id,
@@ -377,7 +615,30 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             RolePermission.Create(roleId, WellKnownPermissions.AssetsViewId),
             RolePermission.Create(roleId, WellKnownPermissions.CustodiesViewId),
             RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
+            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
             RolePermission.Create(roleId, WellKnownPermissions.InventoryCountsViewId));
+
+        UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
+        if (assignment is null)
+        {
+            context.UserRoleScopes.Add(UserRoleScope.Create(
+                Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+        }
+        else
+        {
+            assignment.ReplaceAssignment(roleId, ScopeType.Warehouse, warehouseId);
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    private async Task GrantInventoryOnlyPermissionAsync(Guid userId, Guid warehouseId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleId = Guid.NewGuid();
+        context.Roles.Add(Role.Create(roleId, $"InventoryOnly-{roleId:N}", null));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)
@@ -420,6 +681,9 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         Guid AllowedMovementId,
         Guid OutsideMovementId,
         string AllowedDocumentReference,
+        Guid AllowedDocumentId,
+        Guid OutsideDocumentId,
+        Guid OutsideAttachmentId,
         Guid AllowedAssetId,
         Guid OutsideAssetId,
         Guid AllowedAdjustmentId,

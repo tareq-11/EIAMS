@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Abstractions.Searching;
 using Domain.Common;
 using Domain.InventoryBalances;
 using Microsoft.EntityFrameworkCore;
@@ -31,9 +32,7 @@ internal sealed class GetInventoryBalancesQueryHandler(
         }
 
         Guid[] allowedWarehouseIds = access.WarehouseIds.ToArray();
-        string? search = string.IsNullOrWhiteSpace(query.Search)
-            ? null
-            : query.Search.Trim().ToUpperInvariant();
+        string? search = SqlLikePattern.CreateContains(query.Search, normalizeToUpper: true);
 
         IQueryable<InventoryBalanceResponse> source =
             from balance in context.InventoryBalances.AsNoTracking()
@@ -44,10 +43,10 @@ internal sealed class GetInventoryBalancesQueryHandler(
             where query.MaterialId == null || balance.MaterialId == query.MaterialId
             where search == null ||
 #pragma warning disable CA1304, CA1311 // Translated by EF Core to the database UPPER function.
-                  EF.Functions.Like(warehouse.Code.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(warehouse.Name.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(material.Code.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(material.NameAr.ToUpper(), $"%{search}%")
+                  EF.Functions.Like(warehouse.Code.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(warehouse.Name.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.Code.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(material.NameAr.ToUpper(), search, SqlLikePattern.EscapeCharacter)
 #pragma warning restore CA1304, CA1311
             orderby warehouse.Code, material.Code, balance.Id
             select new InventoryBalanceResponse(

@@ -5,6 +5,8 @@ permissions:
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * 0"
   pull_request:
     branches:
       - main
@@ -16,49 +18,131 @@ env:
   DOTNET_VERSION: "10.0.107"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+  fast-pr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          fetch-depth: 0
           persist-credentials: false
-
+      - name: Validate CI workflow contract
+        run: scripts/validate-ci-workflow.sh
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-
+      - name: Restore pinned .NET tools
+        run: dotnet tool restore
       - name: Restore
         run: dotnet restore CleanArchitectureTemplate.slnx
-
+      - name: Generate CycloneDX SBOM
+        run: >-
+          dotnet tool run dotnet-CycloneDX CleanArchitectureTemplate.slnx
+          --output artifacts/sbom --filename bom.json --output-format Json
+          --disable-package-restore --set-name EIAMS --set-version "${GITHUB_SHA}"
+      - name: Retain SBOM
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: cyclonedx-sbom-${{ github.sha }}
+          path: artifacts/sbom/bom.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Audit NuGet dependencies
         shell: bash
         run: |
           set -euo pipefail
           while IFS= read -r -d '' project; do
-            dotnet package list \
-              --project "$project" \
-              --vulnerable \
-              --include-transitive \
-              --format json \
-              --no-restore | jq -e '
-              (.version == 1) and
-              (((.projects // []) | length) == 1) and
-              ((.problems // []) | length == 0) and
-              ([
-                .projects[]?.frameworks[]?.topLevelPackages[]?,
-                .projects[]?.frameworks[]?.transitivePackages[]?
-              ] | all(((.vulnerabilities // []) | length) == 0))
+            dotnet package list --project "$project" --vulnerable --include-transitive --format json --no-restore | jq -e '
+              (.version == 1) and (((.projects // []) | length) == 1) and ((.problems // []) | length == 0) and
+              ([.projects[]?.frameworks[]?.topLevelPackages[]?, .projects[]?.frameworks[]?.transitivePackages[]?] | all(((.vulnerabilities // []) | length) == 0))
             ' > /dev/null
           done < <(find src tests -name '*.csproj' -print0)
-
       - name: Build
         run: dotnet build CleanArchitectureTemplate.slnx --configuration Release --no-restore
-
-      - name: Test
-        run: dotnet test CleanArchitectureTemplate.slnx --configuration Release --no-restore --no-build
-
-      - name: Publish
+      - name: Unit tests
+        run: >-
+          dotnet test tests/Application.UnitTests/Application.UnitTests.csproj
+          --configuration Release --no-restore --no-build
+          --logger "trx;LogFileName=unit.trx" --results-directory artifacts/test-results/unit
+      - name: Require unit test execution
+        run: scripts/assert-trx-tests-ran.sh artifacts/test-results/unit
+      - name: Architecture tests
+        run: >-
+          dotnet test tests/ArchitectureTests/ArchitectureTests.csproj
+          --configuration Release --no-restore --no-build
+          --logger "trx;LogFileName=architecture.trx" --results-directory artifacts/test-results/architecture
+      - name: Require architecture test execution
+        run: scripts/assert-trx-tests-ran.sh artifacts/test-results/architecture
+      - name: Targeted security contracts
+        run: >-
+          dotnet test tests/Application.UnitTests/Application.UnitTests.csproj
+          --configuration Release --no-restore --no-build
+          --filter "FullyQualifiedName~Security|FullyQualifiedName~AttachmentMalwareScan|FullyQualifiedName~FileSignatureValidator"
+          --logger "trx;LogFileName=security-contracts.trx" --results-directory artifacts/test-results/security-contracts
+      - name: Require security contract execution
+        run: scripts/assert-trx-tests-ran.sh artifacts/test-results/security-contracts
+      - name: Publish verification
         run: dotnet publish CleanArchitectureTemplate.slnx --configuration Release --no-restore --no-build
+
+  postgres-integration:
+    needs: fast-pr
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Verify disposable Docker engine
+        run: docker info
+      - name: Restore and build integration test assembly
+        run: |
+          dotnet restore CleanArchitectureTemplate.slnx
+          dotnet build CleanArchitectureTemplate.slnx --configuration Release --no-restore
+      - name: PostgreSQL Testcontainers integration tests
+        run: >-
+          dotnet test tests/IntegrationTests/IntegrationTests.csproj
+          --configuration Release --no-restore --no-build --filter "Category!=Performance"
+          --logger "trx;LogFileName=postgres-integration.trx" --results-directory artifacts/test-results/postgres-integration
+      - name: Require PostgreSQL integration test execution
+        run: scripts/assert-trx-tests-ran.sh artifacts/test-results/postgres-integration
+
+  scheduled-performance:
+    if: github.event_name == 'schedule'
+    needs: postgres-integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore and build scheduled performance tests
+        run: |
+          dotnet restore CleanArchitectureTemplate.slnx
+          dotnet build CleanArchitectureTemplate.slnx --configuration Release --no-restore
+      - name: Run bounded weekly performance checks
+        run: scripts/run-weekly-performance-checks.sh artifacts/performance/${{ github.sha }}
+      - name: Retain scheduled performance results
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: weekly-performance-${{ github.sha }}
+          path: artifacts/performance
+          if-no-files-found: error
+          retention-days: 30

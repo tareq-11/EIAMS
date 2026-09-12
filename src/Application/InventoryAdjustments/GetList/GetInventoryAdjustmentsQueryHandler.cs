@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Abstractions.Searching;
 using Domain.Common;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +31,7 @@ internal sealed class GetInventoryAdjustmentsQueryHandler(
         }
 
         Guid[] warehouseIds = access.WarehouseIds.ToArray();
-        string? search = string.IsNullOrWhiteSpace(query.Search) ? null : query.Search.Trim().ToUpperInvariant();
+        string? search = SqlLikePattern.CreateContains(query.Search, normalizeToUpper: true);
         DateTime? fromDate = query.FromUtc?.UtcDateTime;
         DateTime? toDate = query.ToUtc?.UtcDateTime;
 
@@ -45,8 +46,8 @@ internal sealed class GetInventoryAdjustmentsQueryHandler(
             where fromDate == null || adjustment.CreatedAtUtc >= fromDate
             where toDate == null || adjustment.CreatedAtUtc < toDate
 #pragma warning disable CA1304, CA1311 // Translated by EF Core into SQL UPPER.
-            where search == null || EF.Functions.Like(adjustment.Reason.ToUpper(), $"%{search}%") ||
-                  EF.Functions.Like(document.SystemReferenceNumber.ToUpper(), $"%{search}%")
+            where search == null || EF.Functions.Like(adjustment.Reason.ToUpper(), search, SqlLikePattern.EscapeCharacter) ||
+                  EF.Functions.Like(document.SystemReferenceNumber.ToUpper(), search, SqlLikePattern.EscapeCharacter)
 #pragma warning restore CA1304, CA1311
             orderby adjustment.CreatedAtUtc descending, adjustment.Id descending
             select new InventoryAdjustmentResponse(

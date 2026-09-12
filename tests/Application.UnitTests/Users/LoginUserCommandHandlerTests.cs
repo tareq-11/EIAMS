@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
@@ -211,6 +213,54 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         passwordHasher.Received(1).Verify(Password, "hash");
         passwordHasher.Received(1).Verify(Password, "changed-hash");
         context.RefreshTokens.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_Should_RecordFixedLoginPhasesWithoutUserIdentifiers()
+    {
+        var measurements = new ConcurrentBag<(string Phase, int TagCount)>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == LoginMetrics.MeterName &&
+                instrument.Name == LoginMetrics.InstrumentName)
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<double>((_, _, tags, _) =>
+        {
+            ReadOnlySpan<KeyValuePair<string, object?>> tagSpan = tags;
+            string? phase = null;
+
+            foreach (KeyValuePair<string, object?> tag in tagSpan)
+            {
+                if (tag.Key == "auth.phase")
+                {
+                    phase = tag.Value as string;
+                }
+            }
+
+            measurements.Add((phase ?? string.Empty, tagSpan.Length));
+        });
+        listener.Start();
+
+        await using TestDbContext context = CreateDbContext();
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        var handler = new LoginUserCommandHandler(
+            context,
+            CreateTransaction(),
+            CreateLock(),
+            passwordHasher,
+            Substitute.For<ITokenProvider>(),
+            Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+
+        await handler.Handle(new LoginUserCommand(Email, Password), CancellationToken.None);
+
+        measurements.ShouldContain(item => item.Phase == "user_lookup");
+        measurements.ShouldContain(item => item.Phase == "password_verification");
+        measurements.ShouldAllBe(item => item.TagCount == 1);
     }
 
     private static async Task SeedUserAsync(TestDbContext context)

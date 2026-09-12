@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Numbering;
+using Application.Abstractions.Idempotency;
 using Domain.Common;
 using Domain.DocumentLines;
 using Domain.InventoryAdjustments;
@@ -18,10 +19,19 @@ internal sealed class CreateReversalDocumentCommandHandler(
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
     IReferenceNumberGenerator referenceNumberGenerator,
-    IDatabaseExceptionClassifier databaseExceptionClassifier)
+    IDatabaseExceptionClassifier databaseExceptionClassifier,
+    IApplicationTransaction transaction,
+    IIdempotencyService idempotencyService)
     : ICommandHandler<CreateReversalDocumentCommand, Guid>
 {
-    public async Task<Result<Guid>> Handle(CreateReversalDocumentCommand command, CancellationToken cancellationToken)
+    public Task<Result<Guid>> Handle(
+        CreateReversalDocumentCommand command,
+        CancellationToken cancellationToken) =>
+        transaction.ExecuteAsync(ct => HandleInTransactionAsync(command, ct), cancellationToken);
+
+    private async Task<Result<Guid>> HandleInTransactionAsync(
+        CreateReversalDocumentCommand command,
+        CancellationToken cancellationToken)
     {
         WarehouseDocument? source = await context.WarehouseDocuments
             .SingleOrDefaultAsync(d => d.Id == command.SourceDocumentId, cancellationToken);
@@ -59,6 +69,31 @@ internal sealed class CreateReversalDocumentCommandHandler(
         if (!canReverse)
         {
             return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
+        }
+
+        IdempotencyRequest? idempotencyRequest = command.IdempotencyKey.HasValue
+            ? IdempotencyRequest.Create(
+                command.IdempotencyKey.Value,
+                "warehouse-document.create-reversal",
+                $"{command.SourceDocumentId:D}|{command.RequiredDocumentType?.ToString() ?? "any"}")
+            : null;
+
+        if (idempotencyRequest is not null)
+        {
+            Result<IdempotencyReplay<Guid>> beginResult = await idempotencyService.TryBeginAsync<Guid>(
+                idempotencyRequest,
+                userContext.UserId,
+                cancellationToken);
+
+            if (beginResult.IsFailure)
+            {
+                return Result.Failure<Guid>(beginResult.Error);
+            }
+
+            if (beginResult.Value.HasResponse)
+            {
+                return beginResult.Value.Response;
+            }
         }
 
         // Only a Posted, non-reversal document may be reversed (M3-PLAN.md §1.6): this single check
@@ -141,6 +176,11 @@ internal sealed class CreateReversalDocumentCommandHandler(
 
         try
         {
+            if (idempotencyRequest is not null)
+            {
+                idempotencyService.Complete(idempotencyRequest, userContext.UserId, reversal.Id);
+            }
+
             await context.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException exception) when (databaseExceptionClassifier.IsUniqueConstraintViolation(
