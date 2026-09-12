@@ -18,7 +18,7 @@ public sealed class GetOrganizationsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Organizations.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<OrganizationResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Status? status,

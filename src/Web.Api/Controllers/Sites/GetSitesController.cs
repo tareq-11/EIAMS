@@ -17,7 +17,7 @@ public sealed class GetSitesController(IQueryHandler<GetSitesQuery, PagedResult<
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Sites.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<SiteResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<SiteResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid? organizationId,

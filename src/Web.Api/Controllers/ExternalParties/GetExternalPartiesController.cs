@@ -18,7 +18,7 @@ public sealed class GetExternalPartiesController(
     : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<ExternalPartyResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<ExternalPartyResponse>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Organizations.View)]
     public async Task<IResult> Handle(
         string? search,

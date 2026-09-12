@@ -168,8 +168,8 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
         getResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using JsonDocument body = await ReadJsonAsync(getResponse);
-        body.RootElement.GetProperty("data").GetArrayLength().ShouldBe(1);
-        body.RootElement.GetProperty("data")[0].GetProperty("materialDomainId").GetGuid().ShouldBe(domainId);
+        body.RootElement.GetProperty("data").GetProperty("items").GetArrayLength().ShouldBe(1);
+        body.RootElement.GetProperty("data").GetProperty("items")[0].GetProperty("materialDomainId").GetGuid().ShouldBe(domainId);
     }
 
     [Fact]

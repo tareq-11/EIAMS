@@ -15,7 +15,7 @@ public sealed class GetSupplierSuggestionsController(
     : ControllerBase
 {
     [HttpGet("suppliers")]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<string>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<string>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
     public async Task<IResult> Handle(string? search, CancellationToken cancellationToken)
     {

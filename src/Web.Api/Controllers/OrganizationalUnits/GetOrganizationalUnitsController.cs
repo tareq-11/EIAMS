@@ -17,7 +17,7 @@ public sealed class GetOrganizationalUnitsController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.OrganizationalUnits.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationalUnitResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<OrganizationalUnitResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid? siteId,

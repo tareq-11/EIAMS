@@ -17,7 +17,7 @@ public sealed class GetMaterialFamiliesController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Materials.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialFamilyResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<MaterialFamilyResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid? categoryId,

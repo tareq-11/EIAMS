@@ -17,7 +17,7 @@ public sealed class GetByMaterialController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Materials.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialUnitConversionResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<MaterialUnitConversionResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid materialId,

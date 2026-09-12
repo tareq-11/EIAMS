@@ -54,10 +54,10 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         string balancesJson = await balancesResponse.Content.ReadAsStringAsync();
         balancesResponse.StatusCode.ShouldBe(HttpStatusCode.OK, balancesJson);
         using var balancesBody = JsonDocument.Parse(balancesJson);
-        JsonElement balances = balancesBody.RootElement.GetProperty("data");
+        JsonElement balances = balancesBody.RootElement.GetProperty("data").GetProperty("items");
         balances.GetArrayLength().ShouldBe(1);
         balances[0].GetProperty("warehouseId").GetGuid().ShouldBe(seed.AllowedWarehouseId);
-        balancesBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(1);
+        balancesBody.RootElement.GetProperty("data").GetProperty("page_info").GetProperty("total_items").GetInt32().ShouldBe(1);
 
         // A WarehouseId query parameter only narrows the authorized result; it cannot expand Scope.
         HttpResponseMessage outsideFilterResponse = await HttpClient.GetAsync(
@@ -65,15 +65,15 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         outsideFilterResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var outsideFilterBody = JsonDocument.Parse(
             await outsideFilterResponse.Content.ReadAsStringAsync());
-        outsideFilterBody.RootElement.GetProperty("data").GetArrayLength().ShouldBe(0);
-        outsideFilterBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(0);
+        outsideFilterBody.RootElement.GetProperty("data").GetProperty("items").GetArrayLength().ShouldBe(0);
+        outsideFilterBody.RootElement.GetProperty("data").GetProperty("page_info").GetProperty("total_items").GetInt32().ShouldBe(0);
 
         // The same Scope rule is applied to both movement list and movement detail.
         HttpResponseMessage movementsResponse = await HttpClient.GetAsync(
             "inventory/movements?movementType=Receipt&page=1&pageSize=10");
         movementsResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         using var movementsBody = JsonDocument.Parse(await movementsResponse.Content.ReadAsStringAsync());
-        JsonElement movements = movementsBody.RootElement.GetProperty("data");
+        JsonElement movements = movementsBody.RootElement.GetProperty("data").GetProperty("items");
         movements.GetArrayLength().ShouldBe(1);
         movements[0].GetProperty("id").GetGuid().ShouldBe(seed.AllowedMovementId);
         movements[0].GetProperty("documentReferenceNumber").GetString().ShouldBe(seed.AllowedDocumentReference);
@@ -129,8 +129,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         adjustments.StatusCode.ShouldBe(HttpStatusCode.OK);
         using (var body = JsonDocument.Parse(await adjustments.Content.ReadAsStringAsync()))
         {
-            body.RootElement.GetProperty("data").GetArrayLength().ShouldBe(1);
-            body.RootElement.GetProperty("data")[0].GetProperty("id").GetGuid().ShouldBe(seed.AllowedAdjustmentId);
+            body.RootElement.GetProperty("data").GetProperty("items").GetArrayLength().ShouldBe(1);
+            body.RootElement.GetProperty("data").GetProperty("items")[0].GetProperty("id").GetGuid().ShouldBe(seed.AllowedAdjustmentId);
         }
 
         (await HttpClient.GetAsync($"adjustments/{seed.AllowedAdjustmentId}"))
@@ -142,8 +142,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         eligible.StatusCode.ShouldBe(HttpStatusCode.OK);
         using (var body = JsonDocument.Parse(await eligible.Content.ReadAsStringAsync()))
         {
-            body.RootElement.GetProperty("data").GetArrayLength().ShouldBe(1);
-            body.RootElement.GetProperty("data")[0].GetProperty("id").GetGuid().ShouldBe(seed.AllowedAssetId);
+            body.RootElement.GetProperty("data").GetProperty("items").GetArrayLength().ShouldBe(1);
+            body.RootElement.GetProperty("data").GetProperty("items")[0].GetProperty("id").GetGuid().ShouldBe(seed.AllowedAssetId);
         }
 
         // Assets
@@ -151,8 +151,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         assets.StatusCode.ShouldBe(HttpStatusCode.OK);
         using (var body = JsonDocument.Parse(await assets.Content.ReadAsStringAsync()))
         {
-            body.RootElement.GetProperty("data").GetArrayLength().ShouldBe(1);
-            body.RootElement.GetProperty("data")[0].GetProperty("currentStatus").GetString().ShouldBe("InStock");
+            body.RootElement.GetProperty("data").GetProperty("items").GetArrayLength().ShouldBe(1);
+            body.RootElement.GetProperty("data").GetProperty("items")[0].GetProperty("currentStatus").GetString().ShouldBe("InStock");
         }
 
         (await HttpClient.GetAsync($"assets/{seed.AllowedAssetId}"))
@@ -192,8 +192,9 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             outsideScope.StatusCode.ShouldBe(HttpStatusCode.OK, outsideScopeContent);
 
             using var outsideScopeBody = JsonDocument.Parse(outsideScopeContent);
-            outsideScopeBody.RootElement.GetProperty("data").GetArrayLength().ShouldBe(0);
-            outsideScopeBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32()
+            JsonElement outsideScopeData = outsideScopeBody.RootElement.GetProperty("data");
+            outsideScopeData.GetProperty("items").GetArrayLength().ShouldBe(0);
+            outsideScopeData.GetProperty("page_info").GetProperty("total_items").GetInt32()
                 .ShouldBe(0);
         }
     }
@@ -279,7 +280,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         allowedResponse.StatusCode.ShouldBe(HttpStatusCode.OK, allowedContent);
         using (var body = JsonDocument.Parse(allowedContent))
         {
-            Guid[] documentIds = body.RootElement.GetProperty("data")
+            Guid[] documentIds = body.RootElement.GetProperty("data").GetProperty("items")
                 .EnumerateArray()
                 .Select(document => document.GetProperty("id").GetGuid())
                 .ToArray();

@@ -17,7 +17,7 @@ public sealed class GetEmployeesController(IQueryHandler<GetEmployeesQuery, Page
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Employees.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<EmployeeResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<EmployeeResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid? orgUnitId,

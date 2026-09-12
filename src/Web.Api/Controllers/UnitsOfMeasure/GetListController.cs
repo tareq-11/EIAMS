@@ -16,7 +16,7 @@ public sealed class GetListController(IQueryHandler<GetUnitsOfMeasureQuery, Page
 {
     [HttpGet]
     [HasPermission(PermissionCodes.UnitsOfMeasure.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<UnitOfMeasureResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<UnitOfMeasureResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         [FromQuery] PaginationQueryParameters pagination,

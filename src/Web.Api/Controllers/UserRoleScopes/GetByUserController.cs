@@ -17,7 +17,7 @@ public sealed class GetByUserController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Roles.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<UserRoleScopeResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<UserRoleScopeResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         Guid userId,

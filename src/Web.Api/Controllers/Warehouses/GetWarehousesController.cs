@@ -17,7 +17,7 @@ public sealed class GetWarehousesController(IQueryHandler<GetWarehousesQuery, Pa
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Warehouses.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<WarehouseResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<WarehouseResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

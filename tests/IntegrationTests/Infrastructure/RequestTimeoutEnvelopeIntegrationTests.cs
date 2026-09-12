@@ -33,7 +33,7 @@ public sealed class RequestTimeoutEnvelopeIntegrationTests(IntegrationTestWebApp
         body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
         body.RootElement.GetProperty("error").GetProperty("code").GetString().ShouldBe("REQUEST_TIMEOUT");
         body.RootElement.GetProperty("error").GetProperty("message").GetString().ShouldNotBeNullOrWhiteSpace();
-        body.RootElement.GetProperty("error").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+        body.RootElement.GetProperty("meta").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 }
 

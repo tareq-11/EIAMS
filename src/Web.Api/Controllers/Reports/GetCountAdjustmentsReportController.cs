@@ -17,7 +17,7 @@ public sealed class GetCountAdjustmentsReportController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.InventoryCounts.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CountAdjustmentsReportRow>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<CountAdjustmentsReportRow>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

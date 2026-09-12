@@ -16,7 +16,7 @@ public sealed class GetListController(IQueryHandler<GetPermissionsQuery, PagedRe
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Roles.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<PermissionResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<PermissionResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         [FromQuery] PaginationQueryParameters pagination,

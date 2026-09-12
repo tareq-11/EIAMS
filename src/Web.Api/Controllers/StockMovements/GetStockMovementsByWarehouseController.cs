@@ -17,7 +17,7 @@ public sealed class GetStockMovementsByWarehouseController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Inventory.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<StockMovementResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<StockMovementResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

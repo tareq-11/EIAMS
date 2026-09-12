@@ -12,6 +12,7 @@ using IntegrationTests.Regression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using SharedKernel;
+using Web.Api.Infrastructure;
 
 namespace IntegrationTests.Authorization;
 
@@ -130,10 +131,10 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
 
         // Assert
         listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        ApiEnvelope<List<WarehouseListItem>>? list =
-            await listResponse.Content.ReadFromJsonAsync<ApiEnvelope<List<WarehouseListItem>>>();
+        ApiEnvelope<PagedData<WarehouseListItem>>? list =
+            await listResponse.Content.ReadFromJsonAsync<ApiEnvelope<PagedData<WarehouseListItem>>>();
         list.ShouldNotBeNull();
-        list.Data.Select(item => item.Id).ShouldBe([seed.WarehouseId]);
+        list.Data.Items.Select(item => item.Id).ShouldBe([seed.WarehouseId]);
 
         byIdResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         capabilitiesResponse.StatusCode.ShouldBe(HttpStatusCode.OK);

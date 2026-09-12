@@ -30,7 +30,7 @@ public sealed class GetAuditLogsKeysetController(
 {
     [HttpGet]
     [HasPermission(PermissionCodes.AuditLogs.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<AuditLogListItemResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<KeysetPagedData<AuditLogListItemResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

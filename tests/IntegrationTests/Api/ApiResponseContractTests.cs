@@ -29,9 +29,8 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
 
         root.GetProperty("success").GetBoolean().ShouldBeTrue();
         root.GetProperty("data").GetProperty("id").GetGuid().ShouldNotBe(Guid.Empty);
-        root.GetProperty("pagination").ValueKind.ShouldBe(JsonValueKind.Null);
         root.GetProperty("meta").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
-        root.GetProperty("meta").GetProperty("timestamp").GetDateTime().ShouldBeLessThanOrEqualTo(DateTime.UtcNow);
+        root.GetProperty("meta").GetProperty("timestamp_utc").GetDateTime().ShouldBeLessThanOrEqualTo(DateTime.UtcNow);
     }
 
     [Fact]
@@ -58,7 +57,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         error.GetProperty("code").GetString().ShouldBe("VALIDATION_GENERAL");
         error.GetProperty("message").GetString().ShouldNotBeNullOrWhiteSpace();
         error.GetProperty("details").EnumerateObject().ShouldNotBeEmpty();
-        error.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+        root.GetProperty("meta").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -125,7 +124,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
         error.GetProperty("code").GetString().ShouldBe("AUTHENTICATION_REQUIRED");
         error.GetProperty("details").ValueKind.ShouldBe(JsonValueKind.Object);
-        error.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+        body.RootElement.GetProperty("meta").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -140,7 +139,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
         error.GetProperty("code").GetString().ShouldBe("RESOURCE_NOT_FOUND");
         error.GetProperty("message").GetString().ShouldNotBeNullOrWhiteSpace();
-        error.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+        body.RootElement.GetProperty("meta").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -166,7 +165,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
         body.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
         error.GetProperty("code").GetString().ShouldNotBeNullOrWhiteSpace();
         error.GetProperty("details").ValueKind.ShouldBe(JsonValueKind.Object);
-        error.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+        body.RootElement.GetProperty("meta").GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
     private static async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response)

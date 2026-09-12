@@ -33,15 +33,15 @@ public static class ResultExtensions
 
         return ApiResults.Ok(
             context,
-            page.Items,
-            new ApiPagination(
-                page.Page,
-                page.PageSize,
-                page.TotalItems,
-                page.TotalPages,
-                HasPreviousPage: page.Page > 1,
-                HasNextPage: page.Page < page.TotalPages,
-                TotalCount: page.TotalItems));
+            new PagedData<T>(
+                page.Items,
+                new PageInfo(
+                    page.Page,
+                    page.PageSize,
+                    page.TotalItems,
+                    page.TotalPages,
+                    HasPreviousPage: page.Page > 1,
+                    HasNextPage: page.Page < page.TotalPages)));
     }
 
     public static IResult ToKeysetApiResponse<T>(
@@ -57,18 +57,14 @@ public static class ResultExtensions
 
         return ApiResults.Ok(
             context,
-            page.Items,
-            new ApiPagination(
-                Page: 1,
-                PageSize: page.PageSize,
-                TotalItems: null,
-                TotalPages: null,
-                HasPreviousPage: false,
-                HasNextPage: page.HasMore,
-                TotalCount: null,
-                Mode: "cursor",
-                NextCreatedAtUtc: page.NextCreatedAtUtc,
-                NextId: page.NextId));
+            new KeysetPagedData<T>(
+                page.Items,
+                new KeysetPageInfo(
+                    PageSize: page.PageSize,
+                    HasNextPage: page.HasMore,
+                    Mode: "cursor",
+                    NextCreatedAtUtc: page.NextCreatedAtUtc,
+                    NextId: page.NextId)));
     }
 
     public static IResult ToApiResponse(this Result<Guid> result, HttpContext context)

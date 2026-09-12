@@ -16,7 +16,7 @@ public sealed class GetRolesController(IQueryHandler<GetRolesQuery, PagedResult<
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Roles.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<RoleResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<RoleResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
         [FromQuery] PaginationQueryParameters pagination,

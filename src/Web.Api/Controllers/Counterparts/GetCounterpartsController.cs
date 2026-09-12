@@ -18,7 +18,7 @@ public sealed class GetCounterpartsController(
     : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CounterpartResolution>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<CounterpartResolution>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
     public async Task<IResult> Handle(
         string? search,

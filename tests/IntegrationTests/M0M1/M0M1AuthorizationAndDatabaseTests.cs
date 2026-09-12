@@ -18,6 +18,7 @@ using Domain.Warehouses;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Web.Api.Infrastructure;
 
 namespace IntegrationTests.M0M1;
 
@@ -222,7 +223,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         listedResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         PagedApiEnvelope<PermissionItem>? listed = await listedResponse.Content.ReadFromJsonAsync<PagedApiEnvelope<PermissionItem>>();
         listed.ShouldNotBeNull();
-        listed.Data.ShouldContain(item => item.Id == WellKnownPermissions.MaterialsManageId);
+        listed.Data.Items.ShouldContain(item => item.Id == WellKnownPermissions.MaterialsManageId);
         removeResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -544,7 +545,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
 
     private sealed record PermissionItem(Guid Id, string Code);
 
-    private sealed record PagedApiEnvelope<T>(bool Success, IReadOnlyList<T> Data);
+    private sealed record PagedApiEnvelope<T>(bool Success, PagedData<T> Data);
 
     private sealed record ApiErrorEnvelope(bool Success, ApiErrorItem Error);
 

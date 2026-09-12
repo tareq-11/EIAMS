@@ -95,11 +95,11 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         // Assert
         string responseContent = await response.Content.ReadAsStringAsync();
         response.StatusCode.ShouldBe(HttpStatusCode.OK, responseContent);
-        ApiResponse<IReadOnlyList<CustodyResponse>>? envelope =
-            await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<CustodyResponse>>>();
+        ApiResponse<PagedData<CustodyResponse>>? envelope =
+            await response.Content.ReadFromJsonAsync<ApiResponse<PagedData<CustodyResponse>>>();
         envelope.ShouldNotBeNull();
         envelope.Data.ShouldNotBeNull();
-        envelope.Data.ShouldContain(c => c.MaterialId == materialId && c.IssuedQuantity == 5m);
+        envelope.Data.Items.ShouldContain(c => c.MaterialId == materialId && c.IssuedQuantity == 5m);
         commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
     }
 
@@ -224,16 +224,16 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         JsonElement root = body.RootElement;
         root.GetProperty("success").GetBoolean().ShouldBeTrue();
 
-        JsonElement data = root.GetProperty("data");
+        JsonElement data = root.GetProperty("data").GetProperty("items");
         data.GetArrayLength().ShouldBe(10);
 
-        JsonElement pagination = root.GetProperty("pagination");
-        pagination.GetProperty("page").GetInt32().ShouldBe(2);
-        pagination.GetProperty("page_size").GetInt32().ShouldBe(10);
-        pagination.GetProperty("total_items").GetInt32().ShouldBe(25);
-        pagination.GetProperty("total_pages").GetInt32().ShouldBe(3);
-        pagination.GetProperty("has_previous_page").GetBoolean().ShouldBeTrue();
-        pagination.GetProperty("has_next_page").GetBoolean().ShouldBeTrue();
+        JsonElement pageInfo = root.GetProperty("data").GetProperty("page_info");
+        pageInfo.GetProperty("page").GetInt32().ShouldBe(2);
+        pageInfo.GetProperty("page_size").GetInt32().ShouldBe(10);
+        pageInfo.GetProperty("total_items").GetInt32().ShouldBe(25);
+        pageInfo.GetProperty("total_pages").GetInt32().ShouldBe(3);
+        pageInfo.GetProperty("has_previous_page").GetBoolean().ShouldBeTrue();
+        pageInfo.GetProperty("has_next_page").GetBoolean().ShouldBeTrue();
 
         decimal[] expectedQuantities = [18m, 19m, 20m, 21m, 22m, 23m, 24m, 25m, 26m, 27m];
         for (int i = 0; i < data.GetArrayLength(); i++)
@@ -243,11 +243,11 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
 
         commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
 
-        ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>? envelope =
-            await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>>();
+        ApiResponse<PagedData<ReturnEligibleItemResponse>>? envelope =
+            await response.Content.ReadFromJsonAsync<ApiResponse<PagedData<ReturnEligibleItemResponse>>>();
         envelope.ShouldNotBeNull();
         envelope.Data.ShouldNotBeNull();
-        envelope.Data.Count.ShouldBe(10);
+        envelope.Data.Items.Count.ShouldBe(10);
     }
 
     private async Task GrantEnterpriseAdministratorAsync(Guid userId)

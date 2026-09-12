@@ -23,7 +23,7 @@ public sealed class GetAssetsController(IQueryHandler<GetAssetsQuery, PagedResul
 {
     [HttpGet]
     [HasPermission(PermissionCodes.Assets.View)]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<AssetResponse>>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<PagedData<AssetResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
