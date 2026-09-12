@@ -421,3 +421,8 @@ FodyWeavers.xsd
 contracts/*
 !contracts/openapi/
 !contracts/openapi/README.md
+
+# Local environment secrets
+.env
+.env.local
+.env.*.local
