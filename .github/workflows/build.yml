@@ -48,7 +48,7 @@ jobs:
           --output artifacts/sbom --filename bom.json --output-format Json
           --disable-package-restore --set-name EIAMS --set-version "${GITHUB_SHA}"
       - name: Retain SBOM
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cyclonedx-sbom-${{ github.sha }}
           path: artifacts/sbom/bom.json
@@ -140,7 +140,7 @@ jobs:
         run: scripts/run-weekly-performance-checks.sh artifacts/performance/${{ github.sha }}
       - name: Retain scheduled performance results
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: weekly-performance-${{ github.sha }}
           path: artifacts/performance
