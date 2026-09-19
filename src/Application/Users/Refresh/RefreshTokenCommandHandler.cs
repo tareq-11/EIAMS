@@ -134,7 +134,7 @@ internal sealed class RefreshTokenCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new AccessTokensResponse(accessToken, newRefreshToken);
+        return new AccessTokensResponse(accessToken, newRefreshToken, refreshToken.UserId);
     }
 
     private const int RefreshTokenExpirationInDays = 7;

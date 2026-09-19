@@ -7,6 +7,7 @@ public sealed class User : Entity, IAuditableEntity
     private User() { }
 
     public string Email { get; private set; }
+    public string Username { get; private set; }
     public string FirstName { get; private set; }
     public string LastName { get; private set; }
     public string PasswordHash { get; private set; }
@@ -21,10 +22,16 @@ public sealed class User : Entity, IAuditableEntity
 
     public static User Create(Guid id, string email, string firstName, string lastName, string passwordHash)
     {
+        return Create(id, email, DeriveUsernameFromEmail(email), firstName, lastName, passwordHash);
+    }
+
+    public static User Create(Guid id, string email, string username, string firstName, string lastName, string passwordHash)
+    {
         var user = new User
         {
             Id = id,
             Email = NormalizeEmail(email),
+            Username = NormalizeUsername(username),
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
             PasswordHash = passwordHash,
@@ -45,7 +52,13 @@ public sealed class User : Entity, IAuditableEntity
 
     public void UpdateProfile(string email, string firstName, string lastName)
     {
+        UpdateProfile(email, DeriveUsernameFromEmail(email), firstName, lastName);
+    }
+
+    public void UpdateProfile(string email, string username, string firstName, string lastName)
+    {
         Email = NormalizeEmail(email);
+        Username = NormalizeUsername(username);
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
     }
@@ -71,4 +84,24 @@ public sealed class User : Entity, IAuditableEntity
 #pragma warning disable CA1308
     public static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 #pragma warning restore CA1308
+
+    // Username canonicalization mirrors PB-002 (NFKC + trim + ToLowerInvariant). Stored lower-case
+    // so callers can present either casing in the login form. Validation is enforced at the command
+    // boundary; this helper only normalizes.
+#pragma warning disable CA1308
+    public static string NormalizeUsername(string username) => username.Trim().ToLowerInvariant();
+#pragma warning restore CA1308
+
+    // PB-002 fallback for the email-based migration window. Trims and lowercases the local part of
+    // an email so legacy registration paths automatically satisfy the username column.
+    public static string DeriveUsernameFromEmail(string email)
+    {
+        string localPart = email;
+        int at = email.IndexOf('@');
+        if (at > 0)
+        {
+            localPart = email[..at];
+        }
+        return NormalizeUsername(localPart);
+    }
 }

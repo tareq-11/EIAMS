@@ -111,6 +111,11 @@ internal sealed class GetUserSessionQueryHandler(
                 assignment.Assignment.ScopeType.ToString(),
                 assignment.Assignment.ScopeId,
                 scopeName),
+            "Selected",
+            new[] { new UserSessionRoleDto(
+                assignment.Role.Id,
+                assignment.Role.Name,
+                assignment.Role.Description) },
             permissionCodes);
     }
 }

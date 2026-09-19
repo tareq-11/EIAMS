@@ -19,31 +19,34 @@ internal sealed class LoginUserCommandHandler(
     IAuditOperationContextAccessor auditContext) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
     // A syntactically valid PBKDF2-SHA512 hash used only to equalize the work performed for an
-    // unknown email and a wrong password. It is not a credential and cannot authenticate a user.
+    // unknown account and a wrong password. It is not a credential and cannot authenticate a user.
     private const string DummyPasswordHash =
         "0000000000000000000000000000000000000000000000000000000000000000-" +
         "00000000000000000000000000000000";
 
     public async Task<Result<AccessTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
-        string email = User.NormalizeEmail(command.Email);
+        string username = User.NormalizeUsername(command.Username);
         long phaseStartedAt = LoginMetrics.Start();
+        // Primary lookup by canonical username. Email is intentionally retained as a fallback for
+        // the username-migration window only — once PB-002 backfill lands it is removed.
         LoginCredentialSnapshot? credentials = await context.Users
             .AsNoTracking()
-            .Where(user => user.Email == email)
+            .Where(user => user.Username == username || user.Email == username)
+            .OrderBy(user => user.Username == username ? 0 : 1)
             .Select(user => new LoginCredentialSnapshot(user.Id, user.PasswordHash))
-            .SingleOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
         LoginMetrics.Record("user_lookup", phaseStartedAt);
 
         // Always run the expensive password verification. Returning before PBKDF2 for an unknown
-        // email creates a measurable timing oracle that reveals which accounts exist.
+        // account creates a measurable timing oracle that reveals which accounts exist.
         phaseStartedAt = LoginMetrics.Start();
         bool verified = passwordHasher.Verify(command.Password, credentials?.PasswordHash ?? DummyPasswordHash);
         LoginMetrics.Record("password_verification", phaseStartedAt);
 
         if (credentials is null || !verified)
         {
-            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
+            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByUsername);
         }
 
         return await transaction.ExecuteAsync(
@@ -54,7 +57,6 @@ internal sealed class LoginUserCommandHandler(
                 LoginMetrics.Record("session_lock", lockStartedAt);
                 return await IssueTokensAsync(
                     credentials.UserId,
-                    email,
                     command.Password,
                     credentials.PasswordHash,
                     ct);
@@ -64,7 +66,6 @@ internal sealed class LoginUserCommandHandler(
 
     private async Task<Result<AccessTokensResponse>> IssueTokensAsync(
         Guid userId,
-        string normalizedEmail,
         string password,
         string previouslyVerifiedPasswordHash,
         CancellationToken cancellationToken)
@@ -75,9 +76,9 @@ internal sealed class LoginUserCommandHandler(
             cancellationToken);
         LoginMetrics.Record("user_recheck", phaseStartedAt);
 
-        if (user is null || !string.Equals(user.Email, normalizedEmail, StringComparison.Ordinal))
+        if (user is null)
         {
-            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
+            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByUsername);
         }
 
         if (user.Status == UserStatus.Suspended)
@@ -88,7 +89,7 @@ internal sealed class LoginUserCommandHandler(
         if (!string.Equals(user.PasswordHash, previouslyVerifiedPasswordHash, StringComparison.Ordinal) &&
             !VerifyChangedPassword(password, user.PasswordHash))
         {
-            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByEmail);
+            return Result.Failure<AccessTokensResponse>(UserErrors.NotFoundByUsername);
         }
 
         if (passwordHasher.NeedsRehash(user.PasswordHash))
@@ -127,7 +128,7 @@ internal sealed class LoginUserCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
         LoginMetrics.Record("persistence", phaseStartedAt);
 
-        return new AccessTokensResponse(accessToken, refreshToken);
+        return new AccessTokensResponse(accessToken, refreshToken, user.Id);
     }
 
     private bool VerifyChangedPassword(string password, string passwordHash)

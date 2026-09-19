@@ -8,6 +8,10 @@ public static class UserErrors
         "Users.NotFound",
         $"The user with the Id = '{userId}' was not found");
 
+    public static readonly Error NotFoundByUsername = Error.NotFound(
+        "Users.NotFound",
+        "The user with the specified username was not found");
+
     public static Error Unauthorized() => Error.Forbidden(
         "Users.Unauthorized",
         "You are not authorized to perform this action.");

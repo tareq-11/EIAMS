@@ -251,9 +251,18 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(BootstrapAdministratorOptions.SectionName))
             .Validate(
                 options => !options.Enabled ||
-                           BootstrapAdministratorOptions.TryDecodeToken(options.Token, out _),
-                $"BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled.")
+                           BootstrapAdministratorOptions.TryDecodeToken(options.Token, out _) ||
+                           !string.IsNullOrWhiteSpace(options.SeedUsername) &&
+                           !string.IsNullOrWhiteSpace(options.SeedPassword),
+                "BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled and SeedUsername/SeedPassword are not configured.")
+            .Validate(
+                options => !options.Enabled ||
+                           !string.IsNullOrWhiteSpace(options.SeedUsername) &&
+                           !string.IsNullOrWhiteSpace(options.SeedPassword),
+                "BootstrapAdministrator:SeedUsername and SeedPassword must both be configured when bootstrap is enabled.")
             .ValidateOnStart();
+
+        services.AddHostedService<BootstrapAdministratorSeeder>();
 
         services.AddOptions<IdempotencyCleanupOptions>()
             .Bind(configuration.GetSection(IdempotencyCleanupOptions.SectionName))

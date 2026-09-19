@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Application.Users;
+using Application.Users.GetSession;
 
 namespace Web.Api.Infrastructure;
 
@@ -48,8 +49,8 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
         return RefreshTokenResolution.Accepted(cookieToken);
     }
 
-    internal AuthenticationTokensResponse CreateResponse(AccessTokensResponse tokens) =>
-        new(tokens.AccessToken, options.IncludeInResponseBody ? tokens.RefreshToken : null);
+    internal AuthenticationTokensResponse CreateResponse(AccessTokensResponse tokens, UserSessionResponse? session = null) =>
+        new(tokens.AccessToken, options.IncludeInResponseBody ? tokens.RefreshToken : null, session);
 
     private bool IsCookieOriginAllowed(HttpContext context)
     {
@@ -117,4 +118,6 @@ internal sealed record RefreshTokenResolution(
 
 public sealed record AuthenticationTokensResponse(
     string AccessToken,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] UserSessionResponse? Session,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ExpiresInSeconds = 3600);

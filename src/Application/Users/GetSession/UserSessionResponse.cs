@@ -1,25 +1,35 @@
+using System.Text.Json.Serialization;
+
 namespace Application.Users.GetSession;
 
+/// <summary>
+/// Authoritative singular session projection (D-SRS-01). JSON property names
+/// are explicitly mapped via <see cref="JsonPropertyNameAttribute"/> so the wire
+/// contract stays stable regardless of C# rename or PascalCase vs camelCase
+/// serializer configuration.
+/// </summary>
 public sealed record UserSessionResponse(
-    UserSessionUserDto User,
-    UserSessionRoleDto Role,
-    UserSessionScopeDto Scope,
-    IReadOnlyList<string> PermissionCodes);
+    [property: JsonPropertyName("user")] UserSessionUserDto User,
+    [property: JsonPropertyName("role")] UserSessionRoleDto Role,
+    [property: JsonPropertyName("activeScope")] UserSessionScopeDto Scope,
+    [property: JsonPropertyName("scopeState")] string ScopeState,
+    [property: JsonPropertyName("activeRoles")] IReadOnlyList<UserSessionRoleDto> ActiveRoles,
+    [property: JsonPropertyName("permissionCodes")] IReadOnlyList<string> PermissionCodes);
 
 public sealed record UserSessionUserDto(
-    Guid Id,
-    string Email,
-    string FirstName,
-    string LastName,
-    Guid? EmployeeId,
-    string? EmployeeName);
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("email")] string Email,
+    [property: JsonPropertyName("firstName")] string FirstName,
+    [property: JsonPropertyName("lastName")] string LastName,
+    [property: JsonPropertyName("employeeId")] Guid? EmployeeId,
+    [property: JsonPropertyName("employeeName")] string? EmployeeName);
 
 public sealed record UserSessionRoleDto(
-    Guid Id,
-    string Name,
-    string? Description);
+    [property: JsonPropertyName("id")] Guid Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("description")] string? Description);
 
 public sealed record UserSessionScopeDto(
-    string ScopeType,
-    Guid? ScopeId,
-    string ScopeName);
+    [property: JsonPropertyName("scopeType")] string ScopeType,
+    [property: JsonPropertyName("scopeId")] Guid? ScopeId,
+    [property: JsonPropertyName("scopeName")] string ScopeName);

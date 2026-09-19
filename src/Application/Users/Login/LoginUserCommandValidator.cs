@@ -6,12 +6,11 @@ internal sealed class LoginUserCommandValidator : AbstractValidator<LoginUserCom
 {
     public LoginUserCommandValidator()
     {
-        RuleFor(command => command.Email)
+        RuleFor(command => command.Username)
             .NotEmpty()
-            .MaximumLength(256)
-            .EmailAddress()
-            .Must(email => email is not null && email.All(character => character <= '\u007F'))
-            .WithMessage("Email must contain ASCII characters only.");
+            .MaximumLength(100)
+            .Must(username => username is not null && username.All(character => character <= '\u007F'))
+            .WithMessage("Username must contain ASCII characters only.");
 
         RuleFor(command => command.Password)
             .NotEmpty()

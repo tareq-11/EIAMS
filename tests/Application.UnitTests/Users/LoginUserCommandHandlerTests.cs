@@ -13,6 +13,7 @@ namespace Application.UnitTests.Users;
 
 public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 {
+    private const string Username = "test";
     private const string Email = "test@example.com";
     private const string Password = "Password123";
 
@@ -33,12 +34,12 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
-            new LoginUserCommand(Email, Password),
+            new LoginUserCommand(Username, Password),
             CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.NotFoundByEmail);
+        result.Error.ShouldBe(UserErrors.NotFoundByUsername);
         passwordHasher.Received(1).Verify(Password, Arg.Any<string>());
     }
 
@@ -63,12 +64,12 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
-            new LoginUserCommand(Email, Password),
+            new LoginUserCommand(Username, Password),
             CancellationToken.None);
 
         // Assert
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.NotFoundByEmail);
+        result.Error.ShouldBe(UserErrors.NotFoundByUsername);
     }
 
     [Fact]
@@ -100,7 +101,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
-            new LoginUserCommand(Email, Password),
+            new LoginUserCommand(Username, Password),
             CancellationToken.None);
 
         // Assert
@@ -138,7 +139,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         Result<AccessTokensResponse> result = await handler.Handle(
-            new LoginUserCommand(Email, Password),
+            new LoginUserCommand(Username, Password),
             CancellationToken.None);
 
         result.IsSuccess.ShouldBeTrue();
@@ -147,7 +148,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_RejectOldEmail_WhenEmailChangesBeforeSessionLock()
+    public async Task Handle_Should_RejectLookup_WhenUserIsDeletedBeforeSessionLock()
     {
         await using TestDbContext context = CreateDbContext();
         await SeedUserAsync(context);
@@ -158,7 +159,9 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
-                user.UpdateProfile("changed@example.com", user.FirstName, user.LastName);
+                // Simulate the user being deleted between the credential snapshot and the session
+                // lock acquisition: detach and remove so the second lookup returns null.
+                context.Users.Remove(user);
                 await context.SaveChangesAsync(call.ArgAt<CancellationToken>(1));
             });
         var handler = new LoginUserCommandHandler(
@@ -171,11 +174,11 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         Result<AccessTokensResponse> result = await handler.Handle(
-            new LoginUserCommand(Email, Password),
+            new LoginUserCommand(Username, Password),
             CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.NotFoundByEmail);
+        result.Error.ShouldBe(UserErrors.NotFoundByUsername);
         context.RefreshTokens.ShouldBeEmpty();
     }
 
@@ -205,11 +208,11 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
         Result<AccessTokensResponse> result = await handler.Handle(
-            new LoginUserCommand(Email, Password),
+            new LoginUserCommand(Username, Password),
             CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(UserErrors.NotFoundByEmail);
+        result.Error.ShouldBe(UserErrors.NotFoundByUsername);
         passwordHasher.Received(1).Verify(Password, "hash");
         passwordHasher.Received(1).Verify(Password, "changed-hash");
         context.RefreshTokens.ShouldBeEmpty();
@@ -256,7 +259,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             Substitute.For<IDateTimeProvider>(),
             Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
 
-        await handler.Handle(new LoginUserCommand(Email, Password), CancellationToken.None);
+        await handler.Handle(new LoginUserCommand(Username, Password), CancellationToken.None);
 
         measurements.ShouldContain(item => item.Phase == "user_lookup");
         measurements.ShouldContain(item => item.Phase == "password_verification");
@@ -268,6 +271,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         context.Users.Add(User.Create(
             Guid.NewGuid(),
             Email,
+            Username,
             "Test",
             "User",
             "hash"));
