@@ -7,6 +7,7 @@ using Domain.Roles;
 using Domain.UserRoleScopes;
 using Infrastructure.Database;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 namespace IntegrationTests.M8;
 
@@ -71,7 +72,9 @@ public sealed class AuditPipelineSmokeTests : BaseIntegrationTest
 
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"Role-{roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.OrganizationsManageId));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationManageId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Enterprise, null));
         await context.SaveChangesAsync();
     }

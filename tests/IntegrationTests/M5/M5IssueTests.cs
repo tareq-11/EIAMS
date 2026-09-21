@@ -103,7 +103,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         M5IssueSeed seed = await SeedAsync();
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -137,7 +137,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         M5IssueSeed seed = await SeedAsync();
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -169,7 +169,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         M5IssueSeed seed = await SeedAsync();
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -195,7 +195,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         WarehouseDocument document = await CreateDraftIssueAsync(seed);
         await SetEmployeeInactiveAsync(seed.EmployeeId);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -242,7 +242,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         }
 
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantWarehouseDocumentPermissionsAsync(userId, seed.OrganizationalUnitId);
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -402,7 +402,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
             : result.Value.DocumentId;
     }
 
-    private async Task GrantWarehouseDocumentPermissionsAsync(Guid userId, Guid organizationalUnitId)
+    private async Task GrantWarehouseDocumentPermissionsAsync(Guid userId, Guid warehouseId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -412,11 +412,13 @@ public sealed class M5IssueTests : BaseIntegrationTest
             .ToListAsync();
         context.UserRoleScopes.RemoveRange(existingGrants);
         context.Roles.Add(Role.Create(roleId, $"M5 Issue {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentUpdateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId));
         context.UserRoleScopes.Add(UserRoleScope.Create(
-            Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, organizationalUnitId));
+            Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();
     }
 

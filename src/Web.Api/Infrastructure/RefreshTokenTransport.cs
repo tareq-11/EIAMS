@@ -49,8 +49,31 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
         return RefreshTokenResolution.Accepted(cookieToken);
     }
 
-    internal AuthenticationTokensResponse CreateResponse(AccessTokensResponse tokens, UserSessionResponse? session = null) =>
-        new(tokens.AccessToken, options.IncludeInResponseBody ? tokens.RefreshToken : null, session);
+    internal AuthenticationTokensResponse CreateResponse(AccessTokensResponse tokens) =>
+        new(tokens.AccessToken, options.IncludeInResponseBody ? tokens.RefreshToken : null, tokens.Session, GetExpiresInSeconds(tokens.AccessToken));
+
+    private static int GetExpiresInSeconds(string accessToken)
+    {
+        string[] segments = accessToken.Split('.');
+        if (segments.Length < 2)
+        {
+            return 0;
+        }
+
+        try
+        {
+            byte[] payload = Convert.FromBase64String(segments[1].Replace('-', '+').Replace('_', '/').PadRight((segments[1].Length + 3) / 4 * 4, '='));
+            using var document = System.Text.Json.JsonDocument.Parse(payload);
+            if (!document.RootElement.TryGetProperty("exp", out System.Text.Json.JsonElement expiration) || !expiration.TryGetInt64(out long unixSeconds))
+            {
+                return 0;
+            }
+
+            return Math.Max(0, (int)Math.Min(int.MaxValue, unixSeconds - DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        }
+        catch (FormatException) { return 0; }
+        catch (System.Text.Json.JsonException) { return 0; }
+    }
 
     private bool IsCookieOriginAllowed(HttpContext context)
     {
@@ -119,5 +142,5 @@ internal sealed record RefreshTokenResolution(
 public sealed record AuthenticationTokensResponse(
     string AccessToken,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] UserSessionResponse? Session,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ExpiresInSeconds = 3600);
+    UserSessionResponse Session,
+    int ExpiresInSeconds);

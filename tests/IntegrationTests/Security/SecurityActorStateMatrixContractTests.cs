@@ -18,7 +18,7 @@ public sealed class SecurityActorStateMatrixContractTests
         { "anonymous_protected_request_401", typeof(ScopeEnforcementTests), "ProtectedEndpoint_Should_Return401_WhenNotAuthenticated" },
         { "authenticated_without_permission_403", typeof(InventoryReadApiIntegrationTests), "GlobalInventoryReads_Should_ReturnForbidden_WhenUserHasNoInventoryScopePermission" },
         { "viewer_reads_and_cannot_mutate", typeof(ScopeEnforcementTests), "WarehouseScopedReadPermissions_Should_AuthorizeMatchingReadEndpointsOnly" },
-        { "site_scope_mutates_descendant_warehouse", typeof(M0M1AuthorizationAndDatabaseTests), "UpdateWarehouse_Should_AuthorizeSiteGrantForWarehouseInsideThatSite" },
+        { "site_scope_cannot_mutate_warehouse", typeof(M0M1AuthorizationAndDatabaseTests), "UpdateWarehouse_Should_DenySiteScopedMutationUnderLegacyPolicy" },
         { "editor_cannot_mutate_outside_scope", typeof(M0M1AuthorizationAndDatabaseTests), "UpdateWarehouse_Should_ReturnForbidden_WhenSiteGrantTargetsAnotherSite" },
         { "scoped_editor_cannot_perform_admin_mutation", typeof(M0M1AuthorizationAndDatabaseTests), "ScopedWarehouseEditor_Should_NotPerformAdministratorUserMutation" },
         { "warehouse_scope_denies_outside_resource", typeof(ScopeEnforcementTests), "WarehouseScopedReadPermissions_Should_AuthorizeMatchingReadEndpointsOnly" },

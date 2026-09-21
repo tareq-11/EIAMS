@@ -1,4 +1,5 @@
 using SharedKernel;
+using System.Text;
 
 namespace Domain.Users;
 
@@ -20,10 +21,8 @@ public sealed class User : Entity, IAuditableEntity
     public Guid? CreatedBy { get; set; }
     public Guid? UpdatedBy { get; set; }
 
-    public static User Create(Guid id, string email, string firstName, string lastName, string passwordHash)
-    {
-        return Create(id, email, DeriveUsernameFromEmail(email), firstName, lastName, passwordHash);
-    }
+    public static User Create(Guid id, string email, string firstName, string lastName, string passwordHash) =>
+        Create(id, email, CreateLegacyUsername(id), firstName, lastName, passwordHash);
 
     public static User Create(Guid id, string email, string username, string firstName, string lastName, string passwordHash)
     {
@@ -52,7 +51,7 @@ public sealed class User : Entity, IAuditableEntity
 
     public void UpdateProfile(string email, string firstName, string lastName)
     {
-        UpdateProfile(email, DeriveUsernameFromEmail(email), firstName, lastName);
+        UpdateProfile(email, Username, firstName, lastName);
     }
 
     public void UpdateProfile(string email, string username, string firstName, string lastName)
@@ -86,22 +85,17 @@ public sealed class User : Entity, IAuditableEntity
 #pragma warning restore CA1308
 
     // Username canonicalization mirrors PB-002 (NFKC + trim + ToLowerInvariant). Stored lower-case
-    // so callers can present either casing in the login form. Validation is enforced at the command
-    // boundary; this helper only normalizes.
+    // so callers can present either casing in the login form.
 #pragma warning disable CA1308
-    public static string NormalizeUsername(string username) => username.Trim().ToLowerInvariant();
+    public static string NormalizeUsername(string username) =>
+        username.Normalize(NormalizationForm.FormKC).Trim().ToLowerInvariant();
 #pragma warning restore CA1308
 
-    // PB-002 fallback for the email-based migration window. Trims and lowercases the local part of
-    // an email so legacy registration paths automatically satisfy the username column.
-    public static string DeriveUsernameFromEmail(string email)
-    {
-        string localPart = email;
-        int at = email.IndexOf('@');
-        if (at > 0)
-        {
-            localPart = email[..at];
-        }
-        return NormalizeUsername(localPart);
-    }
+    public static bool IsValidUsername(string username) =>
+        username.Length is >= 3 and <= 100 && username.All(character =>
+            character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '_' or '-');
+
+    // Only used by old test fixtures and by the database migration's legacy account convention.
+    // It is deterministic, unique and contains no email/local-part data.
+    public static string CreateLegacyUsername(Guid id) => $"legacy-{id:N}";
 }

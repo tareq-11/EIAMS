@@ -82,7 +82,13 @@ internal sealed class AuditEntityRegistry
             [typeof(AssetCurrentStatusView)] =
                 "Read-only database view; never mutated at runtime.",
             [typeof(Permission)] =
-                "Compiled-in reference data seeded by migration; not user-manageable at runtime."
+                "Compiled-in reference data seeded by migration; not user-manageable at runtime.",
+            [typeof(PermissionCodeMapping)] =
+                "Immutable migration/audit evidence; changes are rejected by a database trigger.",
+            [typeof(PermissionAllowedScopeType)] =
+                "Compiled-in permission scope policy seeded by migration; not user-manageable at runtime.",
+            [typeof(AuthorizationPolicyVersion)] =
+                "Migration-controlled authorization marker; changes are controlled by policy cutover, not business CRUD."
         };
 
     public bool TryGet(Type clrType, out Mapping mapping) =>

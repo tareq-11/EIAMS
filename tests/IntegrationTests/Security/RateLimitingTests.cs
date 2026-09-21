@@ -29,7 +29,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         // Act: Single login request
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("auth/login", new
         {
-            email = "nonexistent@example.com",
+            username = "nonexistent@example.com",
             password = "Password123!"
         });
 
@@ -151,7 +151,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         client.BaseAddress = new Uri("http://localhost/api/v1/");
         var credentials = new
         {
-            email = "concurrency-limit-missing@example.com",
+            username = "concurrency-limit-missing@example.com",
             password = "Password123!"
         };
 
@@ -201,7 +201,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
             new AuthenticationHeaderValue("Bearer", administratorTokens.AccessToken);
         var credentials = new
         {
-            email = "global-concurrency-missing@example.com",
+            username = "global-concurrency-missing@example.com",
             password = "Password123!"
         };
         Task<HttpStatusCode> firstRequest = SendLoginAsync(anonymousClient, credentials);
@@ -211,10 +211,11 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         {
             await blockingHasher.Entered.WaitAsync(TimeSpan.FromSeconds(10));
             using HttpResponseMessage rejected = await authenticatedClient.PostAsJsonAsync(
-                "admin/users/register",
+                "admin/recovery/administrator",
                 new
                 {
-                    email = "bootstrap-concurrency@example.com",
+                    email = "recovery-concurrency@example.com",
+                    username = "recovery-concurrency",
                     firstName = "Concurrency",
                     lastName = "Test",
                     password = "Password123!"

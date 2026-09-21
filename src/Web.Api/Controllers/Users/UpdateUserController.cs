@@ -16,12 +16,13 @@ public sealed class UpdateUserController(ICommandHandler<UpdateUserCommand> hand
 {
     public sealed record RequestBody(
         string Email,
+        string Username,
         string FirstName,
         string LastName,
         [property: JsonRequired] UserStatus Status);
 
     [HttpPut("{userId:guid}")]
-    [HasPermission(PermissionCodes.Users.Access)]
+    [HasPermission(PermissionCodes.Users.Manage)]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
@@ -36,6 +37,7 @@ public sealed class UpdateUserController(ICommandHandler<UpdateUserCommand> hand
         var command = new UpdateUserCommand(
             userId,
             request.Email,
+            request.Username,
             request.FirstName,
             request.LastName,
             request.Status);

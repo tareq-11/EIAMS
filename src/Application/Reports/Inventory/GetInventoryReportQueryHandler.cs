@@ -20,7 +20,7 @@ internal sealed class GetInventoryReportQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehousePermissionScope access = await scopeAuthorizationService.GetWarehousePermissionScopeAsync(
-            userContext.UserId, PermissionCodes.Inventory.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         if (!access.HasEnterpriseAccess && access.WarehouseIds.Count == 0)
         {
             return Result.Failure<PagedResult<InventoryReportRow>>(ReportErrors.Forbidden);

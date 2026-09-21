@@ -16,7 +16,7 @@ public sealed class GetInventoryReportController(
     IQueryHandler<GetInventoryReportQuery, PagedResult<InventoryReportRow>> handler) : ControllerBase
 {
     [HttpGet]
-    [HasPermission(PermissionCodes.Inventory.View)]
+    [HasPermission(PermissionCodes.Reports.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<InventoryReportRow>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

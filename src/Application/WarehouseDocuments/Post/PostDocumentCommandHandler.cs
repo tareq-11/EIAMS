@@ -40,7 +40,7 @@ internal sealed class PostDocumentCommandHandler(
 
         bool hasReview = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.Review,
+            PermissionCodes.WarehouseDocuments.Post,
             ScopeType.Warehouse,
             document.WarehouseId,
             cancellationToken);
@@ -63,7 +63,7 @@ internal sealed class PostDocumentCommandHandler(
         {
             bool canReviewDestination = await scopeAuthorizationService.HasPermissionInScopeAsync(
                 userContext.UserId,
-                PermissionCodes.WarehouseDocuments.Review,
+                PermissionCodes.WarehouseDocuments.Post,
                 ScopeType.Warehouse,
                 warehouseId,
                 cancellationToken);

@@ -222,7 +222,7 @@ internal sealed class ApiLoadTestHttpAdapter(
             using var request = new HttpRequestMessage(entry.Method, entry.RelativePath);
             if (entry.Scenario == ApiLoadTestScenario.Login)
             {
-                request.Content = JsonContent.Create(new { email = administratorEmail, password = administratorPassword });
+                request.Content = JsonContent.Create(new { username = administratorEmail, password = administratorPassword });
             }
             else if (entry.Scenario == ApiLoadTestScenario.Post)
             {

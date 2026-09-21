@@ -74,6 +74,8 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
     public DbSet<Permission> Permissions { get; set; }
 
+    public DbSet<PermissionAllowedScopeType> PermissionAllowedScopeTypes { get; set; }
+
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRoleScope> UserRoleScopes { get; set; }
@@ -159,6 +161,9 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
 
         modelBuilder.Entity<RoleAllowedScopeType>()
             .HasKey(allowed => new { allowed.RoleId, allowed.ScopeType });
+
+        modelBuilder.Entity<PermissionAllowedScopeType>()
+            .HasKey(allowed => new { allowed.PermissionId, allowed.ScopeType });
 
         modelBuilder.Entity<User>()
             .HasIndex(user => user.EmployeeId)

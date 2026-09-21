@@ -5,11 +5,13 @@ using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
+using Application.Abstractions.Authorization;
 
 namespace Application.Users.GetSession;
 
 internal sealed class GetUserSessionQueryHandler(
-    IApplicationDbContext context) : IQueryHandler<GetUserSessionQuery, UserSessionResponse>
+    IApplicationDbContext context,
+    IEffectivePermissionService effectivePermissionService) : IQueryHandler<GetUserSessionQuery, UserSessionResponse>
 {
     public async Task<Result<UserSessionResponse>> Handle(
         GetUserSessionQuery query,
@@ -86,14 +88,8 @@ internal sealed class GetUserSessionQueryHandler(
             _ => "Unknown Scope"
         };
 
-        List<string> permissionCodes = await (
-            from rp in context.RolePermissions.AsNoTracking()
-            where rp.RoleId == assignment.Role.Id
-            join p in context.Permissions.AsNoTracking() on rp.PermissionId equals p.Id
-            select p.Code)
-            .Distinct()
-            .OrderBy(code => code)
-            .ToListAsync(cancellationToken);
+        IReadOnlyList<string> permissionCodes = await effectivePermissionService
+            .GetEffectivePermissionCodesAsync(query.UserId, cancellationToken);
 
         return new UserSessionResponse(
             new UserSessionUserDto(

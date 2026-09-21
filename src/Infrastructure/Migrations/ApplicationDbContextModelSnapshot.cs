@@ -2337,6 +2337,84 @@ namespace Infrastructure.Migrations
                     b.ToTable("organizations", "public");
                 });
 
+            modelBuilder.Entity("Domain.Permissions.AuthorizationPolicyVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ActivatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("activated_at_utc");
+
+                    b.Property<string>("ActivatedBy")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("activated_by");
+
+                    b.Property<string>("ActiveVocabulary")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("active_vocabulary");
+
+                    b.Property<long>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("concurrency_token");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<int>("MappingVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("mapping_version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_authorization_policy_versions");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasDatabaseName("ux_authorization_policy_versions_active")
+                        .HasFilter("is_active = true");
+
+                    b.ToTable("authorization_policy_versions", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_authorization_policy_versions_concurrency_token_positive", "concurrency_token > 0");
+
+                            t.HasCheckConstraint("ck_authorization_policy_versions_mapping_version_positive", "mapping_version > 0");
+
+                            t.HasCheckConstraint("ck_authorization_policy_versions_strings_non_empty", "length(trim(active_vocabulary)) > 0 AND length(trim(activated_by)) > 0");
+
+                            t.HasCheckConstraint("ck_authorization_policy_versions_vocabulary_supported", "active_vocabulary IN ('legacy-colon', 'dotted-v1')");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000901"),
+                            ActivatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ActivatedBy = "phase-1-expand",
+                            ActiveVocabulary = "legacy-colon",
+                            ConcurrencyToken = 1L,
+                            IsActive = false,
+                            MappingVersion = 1
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000902"),
+                            ActivatedAtUtc = new DateTime(2026, 9, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            ActivatedBy = "phase-5-cutover",
+                            ActiveVocabulary = "dotted-v1",
+                            ConcurrencyToken = 2L,
+                            IsActive = true,
+                            MappingVersion = 1
+                        });
+                });
+
             modelBuilder.Entity("Domain.Permissions.Permission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2591,6 +2669,1392 @@ namespace Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000138"),
                             Code = "custody:manage",
                             Description = "Assign and manage asset custody."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000201"),
+                            Code = "asset.view",
+                            Description = "View assets."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000202"),
+                            Code = "audit.view",
+                            Description = "View audit history."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000203"),
+                            Code = "custody.assign",
+                            Description = "Assign personal custody."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000204"),
+                            Code = "organization.view",
+                            Description = "View organization structure."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000205"),
+                            Code = "organization.manage",
+                            Description = "Manage organization structure."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000206"),
+                            Code = "admin.role.view",
+                            Description = "View roles and permissions."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000207"),
+                            Code = "admin.role.manage",
+                            Description = "Manage roles and permissions."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000208"),
+                            Code = "catalog.manage",
+                            Description = "Manage the material catalog."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000209"),
+                            Code = "catalog.view",
+                            Description = "View the material catalog."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000210"),
+                            Code = "warehouse.manage",
+                            Description = "Manage warehouses and capabilities."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000211"),
+                            Code = "warehouse.view",
+                            Description = "View warehouses and settings."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000212"),
+                            Code = "inventory.view",
+                            Description = "View inventory."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000213"),
+                            Code = "document.view",
+                            Description = "View warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000214"),
+                            Code = "document.create",
+                            Description = "Create warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000215"),
+                            Code = "document.update",
+                            Description = "Update warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000216"),
+                            Code = "document.submit",
+                            Description = "Submit warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000217"),
+                            Code = "document.post",
+                            Description = "Post warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000218"),
+                            Code = "document.reject",
+                            Description = "Reject warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000219"),
+                            Code = "document.cancel",
+                            Description = "Cancel warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000220"),
+                            Code = "document.reverse",
+                            Description = "Reverse warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000221"),
+                            Code = "count.view",
+                            Description = "View inventory counts."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000222"),
+                            Code = "count.plan",
+                            Description = "Plan inventory counts."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000223"),
+                            Code = "count.enter",
+                            Description = "Enter count actuals."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000224"),
+                            Code = "count.complete",
+                            Description = "Complete inventory counts."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000225"),
+                            Code = "count.close",
+                            Description = "Close inventory counts."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000226"),
+                            Code = "admin.user.view",
+                            Description = "View users."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000227"),
+                            Code = "admin.user.manage",
+                            Description = "Manage users."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000228"),
+                            Code = "document.revise",
+                            Description = "Revise rejected warehouse documents."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000229"),
+                            Code = "report.view",
+                            Description = "View operational reports."
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Permissions.PermissionAllowedScopeType", b =>
+                {
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("permission_id");
+
+                    b.Property<string>("ScopeType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("scope_type");
+
+                    b.HasKey("PermissionId", "ScopeType")
+                        .HasName("pk_permission_allowed_scope_types");
+
+                    b.ToTable("permission_allowed_scope_types", "public");
+
+                    b.HasData(
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000126"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000126"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000126"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000126"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000127"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000127"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000127"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000127"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000128"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000128"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000128"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000128"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000129"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000129"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000129"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000129"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000130"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000130"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000130"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000130"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000132"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000132"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000132"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000132"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000122"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000122"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000122"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000122"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000101"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000102"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000103"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000104"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000105"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000106"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000131"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000107"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000108"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000109"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000110"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000111"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000112"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000113"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000114"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000138"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000116"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000117"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000118"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000119"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000120"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000121"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000123"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000124"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000125"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000202"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000202"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000202"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000202"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229"),
+                            ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000205"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000208"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000210"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000226"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000227"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000206"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000207"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000203"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000214"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000215"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000216"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000217"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000218"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000219"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000220"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000228"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000222"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000223"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000224"),
+                            ScopeType = "Warehouse"
+                        },
+                        new
+                        {
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000225"),
+                            ScopeType = "Warehouse"
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Permissions.PermissionCodeMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at_utc");
+
+                    b.Property<string>("Approver")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("approver");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<int>("MappingVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("mapping_version");
+
+                    b.Property<string>("NewCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("new_code");
+
+                    b.Property<string>("OldCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("old_code");
+
+                    b.Property<string>("Rationale")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("rationale");
+
+                    b.HasKey("Id")
+                        .HasName("pk_permission_code_mappings");
+
+                    b.HasIndex("MappingVersion", "NewCode")
+                        .HasDatabaseName("ix_permission_code_mappings_mapping_version_new_code");
+
+                    b.HasIndex("MappingVersion", "OldCode")
+                        .HasDatabaseName("ix_permission_code_mappings_mapping_version_old_code");
+
+                    b.HasIndex("OldCode", "NewCode", "MappingVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ux_permission_code_mappings_old_new_version");
+
+                    b.ToTable("permission_code_mappings", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_permission_code_mappings_codes_non_empty", "length(trim(old_code)) > 0 AND length(trim(new_code)) > 0 AND length(trim(rationale)) > 0");
+
+                            t.HasCheckConstraint("ck_permission_code_mappings_mapping_version_positive", "mapping_version > 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000001"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "asset.view",
+                            OldCode = "assets:view",
+                            Rationale = "Asset registry, movement, and custody-read intent."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000002"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "audit.view",
+                            OldCode = "audit-logs:view",
+                            Rationale = "Audit-read intent; recipient policy limits the grant to AUDITOR."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000003"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "asset.view",
+                            OldCode = "custody:view",
+                            Rationale = "Asset read includes custody timeline and derived status."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000004"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "custody.assign",
+                            OldCode = "custody:manage",
+                            Rationale = "Scoped custody assignment and transfer operation."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000005"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.view",
+                            OldCode = "organizations:view",
+                            Rationale = "Consolidated organizational reference read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000006"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.view",
+                            OldCode = "sites:view",
+                            Rationale = "Consolidated organizational reference read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000007"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.view",
+                            OldCode = "org-units:view",
+                            Rationale = "Consolidated organizational reference read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000008"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.view",
+                            OldCode = "employees:view",
+                            Rationale = "Consolidated organizational reference read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000009"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.manage",
+                            OldCode = "organizations:manage",
+                            Rationale = "Consolidated structural organizational administration."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000010"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.manage",
+                            OldCode = "sites:manage",
+                            Rationale = "Consolidated structural organizational administration."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000011"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.manage",
+                            OldCode = "org-units:manage",
+                            Rationale = "Consolidated structural organizational administration."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000012"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "organization.manage",
+                            OldCode = "employees:manage",
+                            Rationale = "Consolidated structural organizational administration."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000013"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "admin.role.view",
+                            OldCode = "roles:view",
+                            Rationale = "Role and permission-catalog read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000014"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "admin.role.manage",
+                            OldCode = "roles:manage",
+                            Rationale = "Role and role-permission administration."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000015"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.manage",
+                            OldCode = "material-categories:manage",
+                            Rationale = "Consolidated master-catalog management; target manage includes its read capability."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000016"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.manage",
+                            OldCode = "material-domains:manage",
+                            Rationale = "Consolidated master-catalog management; target manage includes its read capability."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000017"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.manage",
+                            OldCode = "material-families:manage",
+                            Rationale = "Consolidated master-catalog management; target manage includes its read capability."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000018"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.manage",
+                            OldCode = "materials:manage",
+                            Rationale = "Consolidated master-catalog management; target manage includes its read capability."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000019"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.manage",
+                            OldCode = "units-of-measure:manage",
+                            Rationale = "Consolidated master-catalog management; target manage includes its read capability."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000020"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.view",
+                            OldCode = "materials:view",
+                            Rationale = "Consolidated catalog read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000021"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "catalog.view",
+                            OldCode = "units-of-measure:view",
+                            Rationale = "Consolidated catalog read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000022"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "warehouse.manage",
+                            OldCode = "warehouse-capabilities:manage",
+                            Rationale = "Consolidated warehouse structure, capability, and settings management."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000023"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "warehouse.manage",
+                            OldCode = "warehouse-material-settings:manage",
+                            Rationale = "Consolidated warehouse structure, capability, and settings management."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000024"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "warehouse.manage",
+                            OldCode = "warehouses:manage",
+                            Rationale = "Consolidated warehouse structure, capability, and settings management."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000025"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "warehouse.view",
+                            OldCode = "warehouses:view",
+                            Rationale = "Warehouse, capability, and settings read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000026"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "inventory.view",
+                            OldCode = "inventory:view",
+                            Rationale = "Balances and movement-ledger read intent."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000027"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.view",
+                            OldCode = "warehouse-documents:view",
+                            Rationale = "Shared document read including policy, history, and attachments."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000028"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.create",
+                            OldCode = "warehouse-documents:create",
+                            Rationale = "Start a document draft in its warehouse."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000029"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.update",
+                            OldCode = "warehouse-documents:edit",
+                            Rationale = "Change draft content and draft attachments."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000030"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.submit",
+                            OldCode = "warehouse-documents:submit",
+                            Rationale = "Draft to submitted lifecycle transition."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000031"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.cancel",
+                            OldCode = "warehouse-documents:cancel",
+                            Rationale = "Pre-post cancellation with actor and state restrictions."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000032"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.post",
+                            OldCode = "warehouse-documents:review",
+                            Rationale = "Submitted warehouse document posting review action."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000033"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.reject",
+                            OldCode = "warehouse-documents:review",
+                            Rationale = "Submitted warehouse document rejection review action; not revise."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000034"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "document.reverse",
+                            OldCode = "warehouse-documents:reverse",
+                            Rationale = "Governed compensating reversal."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000035"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "count.view",
+                            OldCode = "inventory-counts:view",
+                            Rationale = "Count, session, and variance read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000036"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "count.plan",
+                            OldCode = "inventory-counts:plan",
+                            Rationale = "Count planning and creation."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000037"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "count.enter",
+                            OldCode = "inventory-counts:enter-actual",
+                            Rationale = "Keeper entry of count actuals."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000038"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "count.plan",
+                            OldCode = "inventory-counts:review",
+                            Rationale = "Broad review maps Start to count plan because v1 has no count.start."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000039"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "count.complete",
+                            OldCode = "inventory-counts:review",
+                            Rationale = "Manager count completion lifecycle action."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000040"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "count.close",
+                            OldCode = "inventory-counts:review",
+                            Rationale = "Manager count closure lifecycle action."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000041"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "admin.user.view",
+                            OldCode = "users:access",
+                            Rationale = "Existing user list and detail administration read."
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000042"),
+                            ApprovedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Approver = "human-owner-2026-09-13",
+                            CreatedAtUtc = new DateTime(2026, 9, 13, 0, 0, 0, 0, DateTimeKind.Utc),
+                            MappingVersion = 1,
+                            NewCode = "admin.user.manage",
+                            OldCode = "users:access",
+                            Rationale = "Existing user create and update administration."
                         });
                 });
 
@@ -2735,8 +4199,8 @@ namespace Infrastructure.Migrations
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000001"),
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Full enterprise administrative access. Automatically granted to the first registered user.",
-                            Name = "Administrator"
+                            Description = "Enterprise structural administration. Created only by explicit startup bootstrap configuration.",
+                            Name = "SYSTEM_ADMIN"
                         },
                         new
                         {
@@ -2751,6 +4215,13 @@ namespace Infrastructure.Migrations
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Posts and reverses warehouse documents (D-WF-01). Permissions reserved for M3+.",
                             Name = "WH_MGR"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000004"),
+                            CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "Read-only audit and operational reporting role.",
+                            Name = "AUDITOR"
                         });
                 });
 
@@ -2789,7 +4260,32 @@ namespace Infrastructure.Migrations
                         new
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
                             ScopeType = "OrganizationalUnit"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            ScopeType = "Enterprise"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            ScopeType = "Site"
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            ScopeType = "Warehouse"
                         });
                 });
 
@@ -3126,6 +4622,261 @@ namespace Infrastructure.Migrations
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000137")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000214")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000215")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000217")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000218")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000219")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000220")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000222")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000224")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000225")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000214")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000215")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000216")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000228")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000219")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000223")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000203")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000002"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000202")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000004"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000208")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000205")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000210")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000226")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000227")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000206")
+                        },
+                        new
+                        {
+                            RoleId = new Guid("00000000-0000-0000-0000-000000000001"),
+                            PermissionId = new Guid("00000000-0000-0000-0000-000000000207")
                         });
                 });
 
@@ -4589,6 +6340,16 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_organizational_units_sites_site_id");
+                });
+
+            modelBuilder.Entity("Domain.Permissions.PermissionAllowedScopeType", b =>
+                {
+                    b.HasOne("Domain.Permissions.Permission", null)
+                        .WithMany()
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_permission_allowed_scope_types_permissions_permission_id");
                 });
 
             modelBuilder.Entity("Domain.ReceivingInfos.ReceivingInfo", b =>

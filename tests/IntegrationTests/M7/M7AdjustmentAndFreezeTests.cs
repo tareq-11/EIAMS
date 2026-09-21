@@ -563,9 +563,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M7 freeze viewer {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.InventoryCountsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsReviewId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CountViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentPostId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(),
             userId,
@@ -581,9 +583,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M7 reversal {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsCreateId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsReverseId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentReverseId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();
@@ -595,9 +599,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M7 adjustment {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsCreateId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentUpdateId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();

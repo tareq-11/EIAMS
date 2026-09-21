@@ -28,27 +28,6 @@ public sealed class UsersTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task PublicRegistration_Should_ReturnForbidden_WhenSystemIsInitialized()
-    {
-        // Arrange
-        await AuthenticateAsAdministratorAsync();
-
-        // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "admin/users/register",
-            new
-            {
-                email = UniqueEmail(),
-                firstName = "Self",
-                lastName = "Registered",
-                password = "Password123!"
-            });
-
-        // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
     public async Task RegisterAndLogin_Should_Succeed_WhenOrdinaryUserExistsBeforeFirstAdministratorAuthentication()
     {
         // Arrange
@@ -77,7 +56,8 @@ public sealed class UsersTests : BaseIntegrationTest
     {
         // Arrange
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
 
         // Act
         AccessTokens tokens = await LoginAsync(email);
@@ -92,12 +72,13 @@ public sealed class UsersTests : BaseIntegrationTest
     {
         // Arrange
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
             "auth/login",
-            new { email, password = "WrongPassword1!" });
+            new { username = email, password = "WrongPassword1!" });
 
         // Assert
         response.IsSuccessStatusCode.ShouldBeFalse();
@@ -108,7 +89,8 @@ public sealed class UsersTests : BaseIntegrationTest
     {
         // Arrange
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         AccessTokens tokens = await LoginAsync(email);
 
         // Act
@@ -142,7 +124,8 @@ public sealed class UsersTests : BaseIntegrationTest
     public async Task ConcurrentRefresh_Should_AllowOnlyOneRotation_AndInvalidateTheTokenFamilyAsReplay()
     {
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         AccessTokens originalTokens = await LoginAsync(email);
         HttpClient.DefaultRequestHeaders.Authorization = null;
 
@@ -190,6 +173,7 @@ public sealed class UsersTests : BaseIntegrationTest
     {
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         AccessTokens tokens = await LoginAsync(email);
         HttpClient.DefaultRequestHeaders.Authorization = null;
 
@@ -235,6 +219,7 @@ public sealed class UsersTests : BaseIntegrationTest
     {
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         AccessTokens tokens = await LoginAsync(email);
 
         Task<HttpResponseMessage> refreshRequest;
@@ -251,6 +236,7 @@ public sealed class UsersTests : BaseIntegrationTest
                 new
                 {
                     email,
+                    username = UsernameFor(email),
                     firstName = "Test",
                     lastName = "User",
                     status = "Suspended"
@@ -272,6 +258,7 @@ public sealed class UsersTests : BaseIntegrationTest
     {
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
 
         using HttpClient anonymousClient = factory.CreateClient();
         anonymousClient.BaseAddress = new Uri("http://localhost/api/v1/");
@@ -286,6 +273,7 @@ public sealed class UsersTests : BaseIntegrationTest
                 new
                 {
                     email,
+                    username = UsernameFor(email),
                     firstName = "Test",
                     lastName = "User",
                     status = "Suspended"
@@ -294,7 +282,7 @@ public sealed class UsersTests : BaseIntegrationTest
 #pragma warning disable CA2025 // loginRequest is awaited before anonymousClient leaves this method.
             loginRequest = anonymousClient.PostAsJsonAsync(
                 "auth/login",
-                new { email, password = IntegrationTestWebAppFactory.AdministratorPassword });
+                new { username = email, password = IntegrationTestWebAppFactory.AdministratorPassword });
 #pragma warning restore CA2025
             await barrier.ReleaseAsync();
         }
@@ -312,7 +300,8 @@ public sealed class UsersTests : BaseIntegrationTest
     public async Task Logout_Should_RevokeCurrentSessionButKeepOtherDeviceSessionActive()
     {
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         AccessTokens firstSession = await LoginAsync(email);
         AccessTokens secondSession = await LoginAsync(email);
         HttpClient.DefaultRequestHeaders.Authorization = null;

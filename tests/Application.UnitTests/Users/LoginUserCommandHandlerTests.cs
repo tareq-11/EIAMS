@@ -4,6 +4,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.Users;
+using Application.Users.GetSession;
 using Application.Users.Login;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +31,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -60,7 +62,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -97,7 +100,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             tokenProvider,
             dateTimeProvider,
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         // Act
         Result<AccessTokensResponse> result = await handler.Handle(
@@ -112,6 +116,56 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         RefreshToken refreshToken = await context.RefreshTokens.SingleAsync();
         refreshToken.Token.ShouldBe("hash:refresh-token");
         refreshToken.ExpiresOnUtc.ShouldBeGreaterThan(dateTimeProvider.UtcNow);
+    }
+
+    [Theory]
+    [InlineData("test")]
+    [InlineData("  TEST  ")]
+    [InlineData("  ＴＥＳＴ  ")]
+    [InlineData("TEST@EXAMPLE.COM")]
+    public async Task Handle_Should_AuthenticateByCanonicalUsernameOrEmailCompatibilityFallback(string credential)
+    {
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Password, "hash").Returns(true);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        tokenProvider.Create(Arg.Any<User>()).Returns("access-token");
+        tokenProvider.GenerateRefreshToken().Returns("refresh-token");
+        tokenProvider.HashRefreshToken("refresh-token").Returns("hash:refresh-token");
+        IDateTimeProvider clock = Substitute.For<IDateTimeProvider>();
+        clock.UtcNow.Returns(DateTime.UtcNow);
+        LoginUserCommandHandler handler = new(context, CreateTransaction(), CreateLock(), passwordHasher,
+            tokenProvider, clock, Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(), CreateSessionHandler());
+
+        Result<AccessTokensResponse> result = await handler.Handle(new LoginUserCommand(credential, Password), CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        tokenProvider.Received(1).Create(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotIssueTokens_WhenSessionProjectionFails()
+    {
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Password, "hash").Returns(true);
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler = Substitute.For<Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse>>();
+        sessionHandler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<UserSessionResponse>(UserErrors.NotFound(Guid.NewGuid())));
+
+        LoginUserCommandHandler handler = new(context, CreateTransaction(), CreateLock(), passwordHasher,
+            tokenProvider, Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(), sessionHandler);
+
+        Result<AccessTokensResponse> result = await handler.Handle(new LoginUserCommand(Username, Password), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        context.RefreshTokens.ShouldBeEmpty();
+        tokenProvider.DidNotReceive().Create(Arg.Any<User>());
+        tokenProvider.DidNotReceive().GenerateRefreshToken();
     }
 
     [Fact]
@@ -136,7 +190,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             tokenProvider,
             dateTimeProvider,
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         Result<AccessTokensResponse> result = await handler.Handle(
             new LoginUserCommand(Username, Password),
@@ -171,7 +226,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         Result<AccessTokensResponse> result = await handler.Handle(
             new LoginUserCommand(Username, Password),
@@ -205,7 +261,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         Result<AccessTokensResponse> result = await handler.Handle(
             new LoginUserCommand(Username, Password),
@@ -257,7 +314,8 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
             passwordHasher,
             Substitute.For<ITokenProvider>(),
             Substitute.For<IDateTimeProvider>(),
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            CreateSessionHandler());
 
         await handler.Handle(new LoginUserCommand(Username, Password), CancellationToken.None);
 
@@ -296,5 +354,15 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         return applicationLock;
+    }
+
+    private static Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> CreateSessionHandler()
+    {
+        Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> handler = Substitute.For<Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse>>();
+        handler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>()).Returns(new UserSessionResponse(
+            new UserSessionUserDto(Guid.NewGuid(), Email, "Test", "User", null, null),
+            new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
+            new UserSessionScopeDto("Enterprise", null, "Enterprise"), "Selected", [], []));
+        return handler;
     }
 }

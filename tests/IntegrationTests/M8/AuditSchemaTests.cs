@@ -274,7 +274,7 @@ public sealed class AuditSchemaTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task PermissionSeed_Should_BeIdempotentWithAdministratorMapping_WhenMigrationsApplied()
+    public async Task PermissionSeed_Should_KeepAuditPermissionOutsideStructuralAdministratorRole()
     {
         // Arrange
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -285,13 +285,13 @@ public sealed class AuditSchemaTests : BaseIntegrationTest
             .Where(permission => permission.Code == PermissionCodes.AuditLogs.View)
             .ToListAsync();
         bool administratorMappingExists = await context.RolePermissions.AnyAsync(
-            rolePermission => rolePermission.PermissionId == WellKnownPermissions.AuditLogsViewId &&
+            rolePermission => rolePermission.PermissionId == WellKnownDottedPermissions.AuditViewId &&
                 rolePermission.RoleId == WellKnownRoles.AdministratorId);
 
         // Assert
         Permission permission = viewPermissions.ShouldHaveSingleItem();
-        permission.Id.ShouldBe(WellKnownPermissions.AuditLogsViewId);
-        administratorMappingExists.ShouldBeTrue();
+        permission.Id.ShouldBe(WellKnownDottedPermissions.AuditViewId);
+        administratorMappingExists.ShouldBeFalse();
     }
 
     private static List<string> Sorted(IEnumerable<string> values) =>

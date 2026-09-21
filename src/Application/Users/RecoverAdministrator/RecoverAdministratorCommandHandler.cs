@@ -50,14 +50,21 @@ internal sealed class RecoverAdministratorCommandHandler(
         }
 
         string email = User.NormalizeEmail(command.Email);
+        string username = User.NormalizeUsername(command.Username);
         if (await context.Users.AnyAsync(user => user.Email == email, cancellationToken))
         {
             return Result.Failure<Guid>(UserErrors.EmailNotUnique);
         }
 
+        if (await context.Users.AnyAsync(user => user.Username == username, cancellationToken))
+        {
+            return Result.Failure<Guid>(UserErrors.UsernameNotUnique);
+        }
+
         var administrator = User.Create(
             Guid.NewGuid(),
             email,
+            username,
             command.FirstName,
             command.LastName,
             passwordHasher.Hash(command.Password));

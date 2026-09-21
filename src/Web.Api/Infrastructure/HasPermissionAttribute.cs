@@ -9,3 +9,7 @@ namespace Web.Api.Infrastructure;
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
 public sealed class HasPermissionAttribute(string permission) : AuthorizeAttribute(permission);
+
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
+public sealed class HasAnyPermissionAttribute(params string[] permissions)
+    : AuthorizeAttribute($"any:{string.Join('|', permissions)}");

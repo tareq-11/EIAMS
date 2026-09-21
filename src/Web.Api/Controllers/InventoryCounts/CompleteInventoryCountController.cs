@@ -18,7 +18,7 @@ public sealed class CompleteInventoryCountController(
 
     [HttpPost]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
-    [HasPermission(PermissionCodes.InventoryCounts.Review)]
+    [HasPermission(PermissionCodes.InventoryCounts.Complete)]
     public async Task<IResult> Handle(Guid countId, RequestBody request, CancellationToken cancellationToken)
     {
         Result result = await handler.Handle(new ChangeInventoryCountStatusCommand(

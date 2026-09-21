@@ -47,8 +47,9 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[2]);
         scope.WarehouseIds.ShouldNotContain(seed.OutsideWarehouseId!.Value);
 
-        // Cold authorization is version + grants + recursive descendants + warehouses: no per-level query.
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(4);
+        // Cold authorization is version + policy marker + grants + recursive descendants + warehouses:
+        // no per-level query.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(5);
         IReadOnlyList<string> commands = commandCounter.GetCommandTexts();
         commands.Count(command => command.Contains("WITH RECURSIVE", StringComparison.OrdinalIgnoreCase)).ShouldBe(1);
         commands.Any(command => command.Contains("= ANY", StringComparison.OrdinalIgnoreCase)).ShouldBeTrue();
@@ -224,8 +225,9 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
         context.AddRange(
             user,
             role,
-            RolePermission.Create(roleId, WellKnownPermissions.WarehousesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.OrganizationalUnitsViewId),
+            RoleAllowedScopeType.Create(roleId, scopeType),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationViewId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
         await context.SaveChangesAsync(CancellationToken.None);
 

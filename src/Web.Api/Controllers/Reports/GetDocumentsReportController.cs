@@ -17,7 +17,7 @@ public sealed class GetDocumentsReportController(
     IQueryHandler<GetDocumentsReportQuery, PagedResult<DocumentsReportRow>> handler) : ControllerBase
 {
     [HttpGet]
-    [HasPermission(PermissionCodes.WarehouseDocuments.View)]
+    [HasPermission(PermissionCodes.Reports.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<DocumentsReportRow>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

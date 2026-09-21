@@ -44,9 +44,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         Guid firstAttachmentId = await UploadSignedOriginalAsync(documentId, 1, "signed-v1.pdf", "version-one");
 
@@ -104,9 +104,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
         Guid archivedAttachmentId = await UploadSignedOriginalAsync(documentId, 1, "signed-v1.pdf", "version-one");
         await UploadSignedOriginalAsync(documentId, 2, "signed-v2.pdf", "version-two");
 
@@ -130,9 +130,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
         await UploadSignedOriginalAsync(documentId, 1, "signed-v1.pdf", "version-one");
         int submittedRowVersion = await SubmitDirectlyAsync(documentId);
 
@@ -158,9 +158,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     public async Task UploadSignedOriginal_Should_RejectContentThatDoesNotMatchDeclaredMimeType()
     {
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         HttpResponseMessage response = await SendSignedOriginalAsync(
             documentId,
@@ -254,21 +254,26 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
         return document.RowVersion;
     }
 
-    private async Task GrantEnterpriseAdministratorAsync(Guid userId)
+    private async Task<Guid> GetWarehouseAsync(Guid documentId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        UserRoleScope? assignment = await dbContext.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
+        return await dbContext.WarehouseDocuments.Where(item => item.Id == documentId).Select(item => item.WarehouseId).SingleAsync();
+    }
 
-        if (assignment is not null)
-        {
-            assignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
-            assignment.ScopeType.ShouldBe(ScopeType.Enterprise);
-            return;
-        }
-
-        dbContext.UserRoleScopes.Add(UserRoleScope.Create(
-            Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+    private async Task GrantEnterpriseAdministratorAsync(Guid userId, Guid warehouseId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleId = Guid.NewGuid();
+        dbContext.Roles.Add(Domain.Roles.Role.Create(roleId, $"Attachment editor {roleId:N}", null));
+        dbContext.RoleAllowedScopeTypes.Add(Domain.Roles.RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        dbContext.RolePermissions.AddRange(
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentViewId),
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentCreateId),
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentUpdateId));
+        await dbContext.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        dbContext.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await dbContext.SaveChangesAsync();
     }
 

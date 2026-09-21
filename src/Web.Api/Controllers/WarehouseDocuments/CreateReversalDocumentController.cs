@@ -14,7 +14,7 @@ public sealed class CreateReversalDocumentController(ICommandHandler<CreateRever
     : ControllerBase
 {
     [HttpPost("{documentId:guid}/reversals")]
-    [HasPermission(PermissionCodes.WarehouseDocuments.Create)]
+    [HasPermission(PermissionCodes.WarehouseDocuments.Reverse)]
     [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

@@ -18,6 +18,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
             new
             {
                 email = UniqueEmail(),
+                username = $"contract-{Guid.NewGuid():N}",
                 firstName = "Contract",
                 lastName = "Tester",
                 password = "Password123!"
@@ -44,6 +45,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
             new
             {
                 email = "not-an-email",
+                username = "valid-user",
                 firstName = "",
                 lastName = "",
                 password = "weak"
@@ -154,6 +156,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
             new
             {
                 email,
+                username = UsernameFor(email),
                 firstName = "Duplicate",
                 lastName = "User",
                 password = "Password123!"

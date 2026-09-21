@@ -1,4 +1,5 @@
 using Application.UnitTests.Abstractions;
+using Application.Abstractions.Authorization;
 using Application.Users.GetSession;
 using Domain.Common;
 using Domain.Employees;
@@ -9,17 +10,20 @@ using Domain.Sites;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using SharedKernel;
+using NSubstitute;
 
 namespace Application.UnitTests.Users;
 
 public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
 {
+    private static readonly string[] CreatePermissionCodes = ["document.create"];
+
     [Fact]
     public async Task Handle_Should_ReturnNotFound_WhenUserDoesNotExist()
     {
         await using TestDbContext context = CreateDbContext();
         var missingUserId = Guid.NewGuid();
-        var handler = new GetUserSessionQueryHandler(context);
+        var handler = new GetUserSessionQueryHandler(context, Substitute.For<IEffectivePermissionService>());
 
         Result<UserSessionResponse> result = await handler.Handle(new GetUserSessionQuery(missingUserId), CancellationToken.None);
 
@@ -36,7 +40,7 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         context.Users.Add(user);
         await context.SaveChangesAsync();
 
-        var handler = new GetUserSessionQueryHandler(context);
+        var handler = new GetUserSessionQueryHandler(context, Substitute.For<IEffectivePermissionService>());
 
         Result<UserSessionResponse> result = await handler.Handle(new GetUserSessionQuery(userId), CancellationToken.None);
 
@@ -62,7 +66,7 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         user.LinkToEmployee(employeeId);
 
         var role = Role.Create(roleId, "DirectorateManager", "Manager of Directorate");
-        var permission = Permission.Create(permissionId, "warehouse-documents:create", "Create warehouse documents");
+        var permission = Permission.Create(permissionId, "document.create", "Create warehouse documents");
         var rolePermission = RolePermission.Create(roleId, permissionId);
         var assignment = UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, orgUnitId);
 
@@ -76,7 +80,10 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         context.UserRoleScopes.Add(assignment);
         await context.SaveChangesAsync();
 
-        var handler = new GetUserSessionQueryHandler(context);
+        IEffectivePermissionService effectivePermissions = Substitute.For<IEffectivePermissionService>();
+        effectivePermissions.GetEffectivePermissionCodesAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(CreatePermissionCodes);
+        var handler = new GetUserSessionQueryHandler(context, effectivePermissions);
 
         Result<UserSessionResponse> result = await handler.Handle(new GetUserSessionQuery(userId), CancellationToken.None);
 
@@ -95,6 +102,6 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         result.Value.Scope.ScopeId.ShouldBe(orgUnitId);
         result.Value.Scope.ScopeName.ShouldBe("Finance Directorate");
 
-        result.Value.PermissionCodes.ShouldContain("warehouse-documents:create");
+        result.Value.PermissionCodes.ShouldContain("document.create");
     }
 }

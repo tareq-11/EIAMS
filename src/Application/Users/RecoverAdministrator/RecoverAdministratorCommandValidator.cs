@@ -1,4 +1,5 @@
 using FluentValidation;
+using Application.Users;
 
 namespace Application.Users.RecoverAdministrator;
 
@@ -6,6 +7,7 @@ internal sealed class RecoverAdministratorCommandValidator : AbstractValidator<R
 {
     public RecoverAdministratorCommandValidator()
     {
+        UserNameRules.Apply(RuleFor(command => command.Username));
         RuleFor(command => command.FirstName).NotEmpty().MaximumLength(200);
         RuleFor(command => command.LastName).NotEmpty().MaximumLength(200);
         RuleFor(command => command.Email)

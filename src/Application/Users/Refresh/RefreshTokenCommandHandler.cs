@@ -4,6 +4,7 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.AuditLogs;
 using Domain.Users;
+using Application.Users.GetSession;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -15,7 +16,8 @@ internal sealed class RefreshTokenCommandHandler(
     IApplicationLock applicationLock,
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
-    IAuditOperationContextAccessor auditContext) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
+    IAuditOperationContextAccessor auditContext,
+    IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler) : ICommandHandler<RefreshTokenCommand, AccessTokensResponse>
 {
     public async Task<Result<AccessTokensResponse>> Handle(
         RefreshTokenCommand command,
@@ -107,6 +109,15 @@ internal sealed class RefreshTokenCommandHandler(
             return Result.Failure<AccessTokensResponse>(UserErrors.InvalidRefreshToken);
         }
 
+        // Project before rotating. If authoritative session construction fails, the existing
+        // refresh token remains usable instead of stranding the client after rotation.
+        Result<UserSessionResponse> sessionResult = await sessionHandler
+            .Handle(new GetUserSessionQuery(refreshToken.UserId), cancellationToken);
+        if (sessionResult.IsFailure)
+        {
+            return Result.Failure<AccessTokensResponse>(sessionResult.Error);
+        }
+
         string accessToken = tokenProvider.Create(refreshToken.User);
         string newRefreshToken = tokenProvider.GenerateRefreshToken();
         string newTokenHash = tokenProvider.HashRefreshToken(newRefreshToken);
@@ -134,7 +145,7 @@ internal sealed class RefreshTokenCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return new AccessTokensResponse(accessToken, newRefreshToken, refreshToken.UserId);
+        return new AccessTokensResponse(accessToken, newRefreshToken, refreshToken.UserId, sessionResult.Value);
     }
 
     private const int RefreshTokenExpirationInDays = 7;

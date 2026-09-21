@@ -114,7 +114,9 @@ public sealed class M5TransferAuthorizationTests : BaseIntegrationTest
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var role = Role.Create(Guid.NewGuid(), $"M5 transfer review {Guid.NewGuid():N}", null);
         dbContext.Roles.Add(role);
-        dbContext.RolePermissions.Add(RolePermission.Create(role.Id, WellKnownPermissions.WarehouseDocumentsReviewId));
+        dbContext.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(role.Id, ScopeType.Warehouse));
+        dbContext.RolePermissions.Add(RolePermission.Create(role.Id, WellKnownDottedPermissions.DocumentPostId));
+        await dbContext.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         dbContext.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, role.Id, ScopeType.Warehouse, sourceWarehouseId));
         await dbContext.SaveChangesAsync();

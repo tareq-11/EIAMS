@@ -23,12 +23,13 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
     public async Task Login_Should_IssueRefreshCookieOnlyForAuthPath_WithDefensiveAttributes()
     {
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         HttpClient.DefaultRequestHeaders.Authorization = null;
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("auth/login", new
         {
-            email,
+            username = email,
             password = IntegrationTestWebAppFactory.AdministratorPassword
         });
 
@@ -45,11 +46,12 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
     public async Task CookieRefresh_Should_RejectUntrustedOriginWithoutConsumingToken()
     {
         string email = UniqueEmail();
-        await RegisterUserAsync(email);
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         HttpClient.DefaultRequestHeaders.Authorization = null;
         HttpResponseMessage login = await HttpClient.PostAsJsonAsync("auth/login", new
         {
-            email,
+            username = email,
             password = IntegrationTestWebAppFactory.AdministratorPassword
         });
         login.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -79,7 +81,7 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
 
         HttpResponseMessage login = await cookieClient.PostAsJsonAsync("auth/login", new
         {
-            email = IntegrationTestWebAppFactory.AdministratorEmail,
+            username = IntegrationTestWebAppFactory.AdministratorEmail,
             password = IntegrationTestWebAppFactory.AdministratorPassword
         });
         login.StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -185,7 +187,7 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
         using HttpClient previousKeyClient = CreateVersionedClient(previousKeyFactory);
         HttpResponseMessage loginResponse = await previousKeyClient.PostAsJsonAsync("auth/login", new
         {
-            email = IntegrationTestWebAppFactory.AdministratorEmail,
+            username = IntegrationTestWebAppFactory.AdministratorEmail,
             password = IntegrationTestWebAppFactory.AdministratorPassword
         });
         loginResponse.StatusCode.ShouldBe(HttpStatusCode.OK);

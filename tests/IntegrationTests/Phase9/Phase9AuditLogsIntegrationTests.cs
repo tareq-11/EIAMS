@@ -247,19 +247,13 @@ public sealed class Phase9AuditLogsIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        bool hasScope = await context.UserRoleScopes.AnyAsync(urs => urs.UserId == userId);
-        if (!hasScope)
-        {
-            var roleScope = UserRoleScope.Create(
-                Guid.NewGuid(),
-                userId,
-                WellKnownRoles.AdministratorId,
-                ScopeType.Enterprise,
-                null);
-
-            context.UserRoleScopes.Add(roleScope);
-            await context.SaveChangesAsync();
-        }
+        var roleId = Guid.NewGuid();
+        context.Roles.Add(Role.Create(roleId, $"Audit admin {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.AuditViewId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Enterprise, null));
+        await context.SaveChangesAsync();
     }
 
     private async Task<(Guid AllowedWarehouseId, Guid AllowedDocumentId, Guid OutsideDocumentId)>
@@ -316,7 +310,8 @@ public sealed class Phase9AuditLogsIntegrationTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"WarehouseAuditViewer-{roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.AuditLogsViewId));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.AuditViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)

@@ -644,12 +644,13 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M6 role {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.AssetsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.CustodiesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.CustodiesManageId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentUpdateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CustodyAssignId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();

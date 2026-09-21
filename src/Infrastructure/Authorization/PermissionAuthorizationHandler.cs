@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http;
 namespace Infrastructure.Authorization;
 
 internal sealed class PermissionAuthorizationHandler(
-    IScopeAuthorizationService authorizationService,
+    IEffectivePermissionService authorizationService,
     IHttpContextAccessor httpContextAccessor)
     : AuthorizationHandler<PermissionRequirement>
 {

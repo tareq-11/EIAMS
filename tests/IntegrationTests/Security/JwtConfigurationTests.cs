@@ -4,14 +4,20 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace IntegrationTests.Security;
 
 [Collection(nameof(IntegrationTestCollection))]
 public sealed class JwtConfigurationTests : BaseIntegrationTest
 {
+    private readonly IntegrationTestWebAppFactory factory;
+
     public JwtConfigurationTests(IntegrationTestWebAppFactory factory) : base(factory)
     {
+        this.factory = factory;
     }
 
     [Fact]
@@ -31,7 +37,12 @@ public sealed class JwtConfigurationTests : BaseIntegrationTest
     public async Task ValidToken_Should_Authenticate_ButStillRequirePermission()
     {
         // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        }
         Authenticate(tokens.AccessToken);
 
         // Act

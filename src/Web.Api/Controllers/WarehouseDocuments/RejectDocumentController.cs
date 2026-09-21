@@ -15,7 +15,7 @@ public sealed class RejectDocumentController(ICommandHandler<RejectDocumentComma
     public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion, string? Reason = null);
 
     [HttpPost("{documentId:guid}/reject")]
-    [HasPermission(PermissionCodes.WarehouseDocuments.Review)]
+    [HasPermission(PermissionCodes.WarehouseDocuments.Reject)]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

@@ -8,6 +8,12 @@ namespace ArchitectureTests;
 
 public sealed class OpenApiResponseMetadataTests : BaseTest
 {
+    [Fact]
+    public void Authentication_Response_Contract_Should_Expose_RequiredFields()
+    {
+        typeof(AuthenticationTokensResponse).GetProperty("Session").ShouldNotBeNull();
+        typeof(AuthenticationTokensResponse).GetProperty("ExpiresInSeconds").ShouldNotBeNull();
+    }
     private static readonly HashSet<string> RawResponseAllowlist =
     [
         "Web.Api.Controllers.DocumentAttachments.GetDocumentAttachmentContentController.Handle"

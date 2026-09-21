@@ -49,7 +49,7 @@ internal sealed class CreateReversalDocumentCommandHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.Create,
+            PermissionCodes.WarehouseDocuments.Reverse,
             ScopeType.Warehouse,
             source.WarehouseId,
             cancellationToken);

@@ -49,6 +49,7 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
             var userRole = UserRoleScope.Create(Guid.NewGuid(), userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, seed.WarehouseId);
             context.UserRoleScopes.Add(userRole);
             await context.SaveChangesAsync();
@@ -75,8 +76,9 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var role = Role.Create(roleId, $"Read only {roleId:N}", "Warehouse read-only integration role");
-            var warehouseGrant = RolePermission.Create(roleId, WellKnownPermissions.WarehousesViewId);
-            var inventoryGrant = RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId);
+            var warehouseGrant = RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId);
+            var inventoryGrant = RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId);
+            var allowedScope = RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse);
             var userScope = UserRoleScope.Create(
                 Guid.NewGuid(),
                 userId,
@@ -94,7 +96,8 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
                 .Select(item => item.Id)
                 .SingleAsync();
 
-            context.AddRange(role, warehouseGrant, inventoryGrant, userScope, document);
+            await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+            context.AddRange(role, allowedScope, warehouseGrant, inventoryGrant, userScope, document);
             await context.SaveChangesAsync();
         }
 
@@ -164,14 +167,16 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var role = Role.Create(roleId, $"Roles reader {roleId:N}", "Roles read-only integration role");
-            var permission = RolePermission.Create(roleId, WellKnownPermissions.RolesViewId);
+            var permission = RolePermission.Create(roleId, WellKnownDottedPermissions.AdminRoleViewId);
+            var allowedScope = RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise);
             var userScope = UserRoleScope.Create(
                 Guid.NewGuid(),
                 userId,
                 roleId,
                 ScopeType.Enterprise,
                 null);
-            context.AddRange(role, permission, userScope);
+            await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+            context.AddRange(role, allowedScope, permission, userScope);
             await context.SaveChangesAsync();
         }
 

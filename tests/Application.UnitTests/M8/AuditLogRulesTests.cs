@@ -28,7 +28,7 @@ public sealed class AuditLogRulesTests
             "WarehouseDocument",
             aggregateId,
             AuditActions.Update,
-            "Application.Users.RegisterUserCommand",
+            "Application.Users.CreateUserCommand",
             """{"field":"value"}""",
             "192.168.0.1",
             createdAtUtc);
@@ -45,7 +45,7 @@ public sealed class AuditLogRulesTests
         auditLog.AggregateType.ShouldBe("WarehouseDocument");
         auditLog.AggregateId.ShouldBe(aggregateId);
         auditLog.Action.ShouldBe(AuditActions.Update);
-        auditLog.CommandName.ShouldBe("Application.Users.RegisterUserCommand");
+        auditLog.CommandName.ShouldBe("Application.Users.CreateUserCommand");
         auditLog.Summary.ShouldBe("""{"field":"value"}""");
         auditLog.IpAddress.ShouldBe("192.168.0.1");
         auditLog.CreatedAtUtc.ShouldBe(createdAtUtc);

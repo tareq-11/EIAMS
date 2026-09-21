@@ -74,7 +74,7 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
             permanentlyOutsideWarehouseId,
             ArriveAtBarrier,
             releaseWorkersAfterScopeReplacement.Task,
-            new WarehouseWrite(seed.DestinationWarehouseId, Status.Inactive, 1, HttpStatusCode.OK),
+            new WarehouseWrite(seed.DestinationWarehouseId, Status.Inactive, 1, HttpStatusCode.Forbidden),
             new WarehouseWrite(permanentlyOutsideWarehouseId, Status.Inactive, 1, HttpStatusCode.Forbidden));
         Task<WorkerPhaseResult> secondaryWorker = RunHostWorkloadAsync(
             secondary,
@@ -93,7 +93,7 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         WorkloadResult[] beforeReplacementWrites = await Task.WhenAll(authorizedOldScopeWrite, deniedPermanentOutsideWrite)
             .WaitAsync(WorkloadTimeout);
         beforeReplacementWrites.Select(result => result.StatusCode)
-            .ShouldBe([HttpStatusCode.OK, HttpStatusCode.Forbidden]);
+            .ShouldBe([HttpStatusCode.Forbidden, HttpStatusCode.Forbidden]);
 
         long versionBeforeReplacement = await ReadAuthorizationVersionAsync();
         await ReplaceScopeAsync(userId, roleId, seed.DestinationWarehouseId);
@@ -138,10 +138,11 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.AddRange(
             Role.Create(roleId, $"Mixed workload {roleId:N}", null),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehousesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehousesManageId),
+            RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();
         return roleId;
@@ -237,11 +238,11 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
                            item.Id == permanentlyOutsideWarehouseId)
             .ToArrayAsync();
         warehouses.Single(item => item.Id == oldWarehouseId).ShouldSatisfyAllConditions(
-            warehouse => warehouse.Status.ShouldBe(Status.Inactive),
-            warehouse => warehouse.RowVersion.ShouldBe(2));
+            warehouse => warehouse.Status.ShouldBe(Status.Active),
+            warehouse => warehouse.RowVersion.ShouldBe(1));
         warehouses.Single(item => item.Id == replacementWarehouseId).ShouldSatisfyAllConditions(
-            warehouse => warehouse.Status.ShouldBe(Status.Inactive),
-            warehouse => warehouse.RowVersion.ShouldBe(2));
+            warehouse => warehouse.Status.ShouldBe(Status.Active),
+            warehouse => warehouse.RowVersion.ShouldBe(1));
         warehouses.Single(item => item.Id == permanentlyOutsideWarehouseId).ShouldSatisfyAllConditions(
             warehouse => warehouse.Status.ShouldBe(Status.Active),
             warehouse => warehouse.RowVersion.ShouldBe(1));

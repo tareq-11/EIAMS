@@ -11,6 +11,7 @@ using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
 using Domain.Materials;
+using Domain.Permissions;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Roles;
@@ -53,12 +54,12 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
 
         // Seed data
         Guid siteId = await SeedSiteAsync();
         Guid warehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, warehouseId);
         Guid unitId = await SeedUnitOfMeasureAsync();
         Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
         Guid employeeId = await SeedEmployeeAsync(siteId);
@@ -89,6 +90,9 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         // Act
         SqlCommandCounterInterceptor commandCounter =
             factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        // Warm the same endpoint that is measured below; this removes startup/JIT noise
+        // without turning the returns endpoint into a proxy for custody query cost.
+        await HttpClient.GetAsync("custodies");
         commandCounter.Reset();
         HttpResponseMessage response = await HttpClient.GetAsync("custodies");
 
@@ -100,7 +104,8 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         envelope.ShouldNotBeNull();
         envelope.Data.ShouldNotBeNull();
         envelope.Data.ShouldContain(c => c.MaterialId == materialId && c.IssuedQuantity == 5m);
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
+        // The dotted policy performs one additional warehouse-scope authorization read.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(11);
     }
 
     [Fact]
@@ -108,11 +113,11 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
 
         Guid siteId = await SeedSiteAsync();
         Guid warehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, warehouseId);
         Guid unitId = await SeedUnitOfMeasureAsync();
         Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
         Guid employeeId = await SeedEmployeeAsync(siteId);
@@ -173,15 +178,86 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task TransferCustody_Should_RejectMaterialQuantityOutsideAssignedWarehouse_WithoutMutation()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        Guid siteId = await SeedSiteAsync();
+        Guid assignedWarehouseId = await SeedWarehouseAsync(siteId);
+        Guid sourceWarehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, assignedWarehouseId);
+        Guid unitId = await SeedUnitOfMeasureAsync();
+        Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
+        Guid employeeId = await SeedEmployeeAsync(siteId);
+        Guid issueDocId = await SeedPostedIssueDocumentAsync(sourceWarehouseId, userId);
+        var allocationId = Guid.NewGuid();
+
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            DurableCustodyAllocation allocation = DurableCustodyAllocation.Open(
+                allocationId,
+                materialId,
+                sourceWarehouseId,
+                PartyType.Employee,
+                employeeId,
+                CustodyKind.Personal,
+                issueDocId,
+                10m,
+                DateTime.UtcNow).Value;
+
+            dbContext.DurableCustodyAllocations.Add(allocation);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var transferRequest = new TransferCustodyRequest(
+            CustodySubjectType.MaterialQuantity,
+            PartyType.Site,
+            siteId,
+            CustodyKind.Operational,
+            1,
+            "Cross-warehouse transfer must be denied");
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"custodies/{allocationId}/transfer",
+            transferRequest);
+
+        // Assert
+        string errorContent = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden, errorContent);
+
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            DurableCustodyAllocation? allocation = await dbContext.DurableCustodyAllocations
+                .AsNoTracking()
+                .SingleOrDefaultAsync(item => item.Id == allocationId);
+
+            allocation.ShouldNotBeNull();
+            allocation.HolderType.ShouldBe(PartyType.Employee);
+            allocation.HolderId.ShouldBe(employeeId);
+            allocation.CustodyKind.ShouldBe(CustodyKind.Personal);
+            allocation.RowVersion.ShouldBe(1);
+
+            bool historyExists = await dbContext.DurableCustodyHistories
+                .AnyAsync(history => history.SubjectId == allocationId);
+            historyExists.ShouldBeFalse();
+        }
+    }
+
+    [Fact]
     public async Task GetReturnEligibleItems_Should_ReturnActiveAllocations_ForOriginalIssue()
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
 
         Guid siteId = await SeedSiteAsync();
         Guid warehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, warehouseId);
         Guid unitId = await SeedUnitOfMeasureAsync();
         Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
         Guid employeeId = await SeedEmployeeAsync(siteId);
@@ -241,7 +317,7 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
             data[i].GetProperty("availableQuantity").GetDecimal().ShouldBe(expectedQuantities[i]);
         }
 
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(11);
 
         ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>? envelope =
             await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>>();
@@ -250,25 +326,22 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         envelope.Data.Count.ShouldBe(10);
     }
 
-    private async Task GrantEnterpriseAdministratorAsync(Guid userId)
+    private async Task GrantEnterpriseAdministratorAsync(Guid userId, Guid warehouseId)
     {
         using IServiceScope scope = factory.Services.CreateScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        UserRoleScope? assignment = await dbContext.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
-
-        if (assignment is null)
-        {
-            Role adminRole = await dbContext.Roles.FirstAsync(r => r.Name == "Administrator");
-            dbContext.UserRoleScopes.Add(UserRoleScope.Create(
-                Guid.NewGuid(),
-                userId,
-                adminRole.Id,
-                ScopeType.Enterprise,
-                null));
-
-            await dbContext.SaveChangesAsync();
-        }
+        var roleId = Guid.NewGuid();
+        dbContext.Roles.Add(Role.Create(roleId, $"Durable custody {roleId:N}", null));
+        dbContext.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        dbContext.RolePermissions.AddRange(
+            RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CustodyAssignId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId));
+        await dbContext.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        dbContext.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+        await dbContext.SaveChangesAsync();
     }
 
     private async Task<Guid> SeedSiteAsync()

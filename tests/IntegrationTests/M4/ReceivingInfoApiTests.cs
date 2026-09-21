@@ -16,7 +16,6 @@ namespace IntegrationTests.M4;
 public sealed class ReceivingInfoApiTests : BaseIntegrationTest
 {
     private readonly IntegrationTestWebAppFactory factory;
-    private static readonly Guid AdministratorRoleId = new("00000000-0000-0000-0000-000000000001");
 
     public ReceivingInfoApiTests(IntegrationTestWebAppFactory factory) : base(factory)
     {
@@ -28,9 +27,9 @@ public sealed class ReceivingInfoApiTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDocumentAsync(DocumentType.Receiving, submitted: false);
+        await GrantEnterpriseAdministratorAsync(userId, await GetDocumentWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         // Act
         HttpResponseMessage response = await PutReceivingInfoAsync(documentId, expectedRowVersion: 1);
@@ -52,9 +51,9 @@ public sealed class ReceivingInfoApiTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDocumentAsync(DocumentType.Receiving, submitted: false);
+        await GrantEnterpriseAdministratorAsync(userId, await GetDocumentWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         // Act
         HttpResponseMessage response = await PutReceivingInfoAsync(documentId, expectedRowVersion: 99);
@@ -71,9 +70,9 @@ public sealed class ReceivingInfoApiTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDocumentAsync(DocumentType.Issue, submitted: false);
+        await GrantEnterpriseAdministratorAsync(userId, await GetDocumentWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         // Act
         HttpResponseMessage response = await PutReceivingInfoAsync(documentId, expectedRowVersion: 1);
@@ -90,9 +89,9 @@ public sealed class ReceivingInfoApiTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDocumentAsync(DocumentType.Receiving, submitted: true);
+        await GrantEnterpriseAdministratorAsync(userId, await GetDocumentWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         // Act
         HttpResponseMessage response = await PutReceivingInfoAsync(documentId, expectedRowVersion: 3);
@@ -136,21 +135,26 @@ public sealed class ReceivingInfoApiTests : BaseIntegrationTest
         return document.Id;
     }
 
-    private async Task GrantEnterpriseAdministratorAsync(Guid userId)
+    private async Task<Guid> GetDocumentWarehouseAsync(Guid documentId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await dbContext.WarehouseDocuments.Where(item => item.Id == documentId).Select(item => item.WarehouseId).SingleAsync();
+    }
+
+    private async Task GrantEnterpriseAdministratorAsync(Guid userId, Guid warehouseId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        if (await dbContext.UserRoleScopes.AnyAsync(scope =>
-                scope.UserId == userId &&
-                scope.RoleId == AdministratorRoleId &&
-                scope.ScopeType == ScopeType.Enterprise))
-        {
-            return;
-        }
-
-        dbContext.UserRoleScopes.Add(UserRoleScope.Create(
-            Guid.NewGuid(), userId, AdministratorRoleId, ScopeType.Enterprise, null));
+        var roleId = Guid.NewGuid();
+        dbContext.Roles.Add(Domain.Roles.Role.Create(roleId, $"M4 editor {roleId:N}", null));
+        dbContext.RoleAllowedScopeTypes.Add(Domain.Roles.RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        dbContext.RolePermissions.AddRange(
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentUpdateId),
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentViewId));
+        dbContext.UserRoleScopes.RemoveRange(dbContext.UserRoleScopes.Where(scope => scope.UserId == userId));
+        dbContext.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await dbContext.SaveChangesAsync();
     }
 

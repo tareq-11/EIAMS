@@ -302,6 +302,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
 
         SqlCommandCounterInterceptor commandCounter =
             factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        await HttpClient.GetAsync("reports/dashboard");
         commandCounter.Reset();
 
         // Act
@@ -324,7 +325,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         // One command reads the scoped dashboard metrics. The remaining allowance covers the
         // authorization-version/grant cache on a cold request; it prevents a regression to
         // independently querying each aggregate.
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(4);
+        // The dotted report gate adds bounded policy/scope reads before the aggregate query.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(8);
     }
 
     [Fact]
@@ -368,18 +370,17 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         HttpResponseMessage response = await HttpClient.GetAsync("reports/dashboard");
         string content = await response.Content.ReadAsStringAsync();
 
-        // Assert: inventory metrics are zero for an empty permitted scope; the other metrics
-        // remain null because the caller lacks their respective view permissions.
+        // Assert: report.view exposes the report metrics; an empty permitted scope yields zeros.
         response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
         using var body = JsonDocument.Parse(content);
         JsonElement data = body.RootElement.GetProperty("data");
         data.GetProperty("warehouseCount").GetInt32().ShouldBe(0);
         data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(0);
         data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(0m);
-        data.GetProperty("assetCount").ValueKind.ShouldBe(JsonValueKind.Null);
-        data.GetProperty("activeCustodyCount").ValueKind.ShouldBe(JsonValueKind.Null);
-        data.GetProperty("openDocumentCount").ValueKind.ShouldBe(JsonValueKind.Null);
-        data.GetProperty("activeInventoryCountCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("assetCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeCustodyCount").GetInt32().ShouldBe(0);
+        data.GetProperty("openDocumentCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeInventoryCountCount").GetInt32().ShouldBe(0);
     }
 
     [Fact]
@@ -610,13 +611,15 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"InventoryViewer-{roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.AssetsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.CustodiesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
-            RolePermission.Create(roleId, WellKnownPermissions.InventoryCountsViewId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CustodyAssignId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentUpdateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CountViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.ReportViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)
@@ -638,7 +641,10 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"InventoryOnly-{roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        context.RolePermissions.AddRange(
+            RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.ReportViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)

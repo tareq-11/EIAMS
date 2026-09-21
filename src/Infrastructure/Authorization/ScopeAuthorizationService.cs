@@ -10,7 +10,7 @@ internal sealed class ScopeAuthorizationService(
     ApplicationDbContext context,
     HybridCache hybridCache,
     AuthorizationVersionProvider authorizationVersionProvider,
-    AuthorizationCacheCoalescingTracker coalescingTracker) : IScopeAuthorizationService
+    AuthorizationCacheCoalescingTracker coalescingTracker) : IScopeAuthorizationService, IEffectivePermissionService
 {
     // A corrupt/imported parent graph must not make authorization traversal unbounded.
     // Depth is inclusive of the scoped root (root = 0), so a scope can cover 65 levels.
@@ -51,6 +51,17 @@ internal sealed class ScopeAuthorizationService(
     {
         List<UserPermissionScopeGrant> grants = await GetAllGrantsAsync(userId, cancellationToken);
         return grants.Any(grant => grant.PermissionCode == permission);
+    }
+
+    public async Task<IReadOnlyList<string>> GetEffectivePermissionCodesAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        return (await GetAllGrantsAsync(userId, cancellationToken))
+            .Select(grant => grant.PermissionCode)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
     }
 
     public async Task<bool> HasPermissionInScopeAsync(
@@ -498,19 +509,37 @@ internal sealed class ScopeAuthorizationService(
         CancellationToken cancellationToken)
     {
         long authorizationVersion = await authorizationVersionProvider.GetCurrentAsync(cancellationToken);
+        var policyMarker = await context.AuthorizationPolicyVersions
+            .AsNoTracking()
+            .Where(marker => marker.IsActive)
+            .Select(marker => new { marker.ActiveVocabulary, marker.ConcurrencyToken })
+            .SingleAsync(cancellationToken);
 
         return await GetOrCreateAsync(
-            $"auth:user-grants:{userId}:v{authorizationVersion}",
+            $"auth:user-grants:{userId}:v{authorizationVersion}:p{policyMarker.ConcurrencyToken}:{policyMarker.ActiveVocabulary}",
             "user_grants",
             async ct => await (
                 from user in context.Users.AsNoTracking()
                 where user.Id == userId && user.Status == Domain.Users.UserStatus.Active
                 join assignment in context.UserRoleScopes.AsNoTracking()
                     on user.Id equals assignment.UserId
+                join allowedRoleScope in context.RoleAllowedScopeTypes.AsNoTracking()
+                    on new { assignment.RoleId, assignment.ScopeType }
+                    equals new { allowedRoleScope.RoleId, allowedRoleScope.ScopeType }
                 join rolePermission in context.RolePermissions.AsNoTracking()
                     on assignment.RoleId equals rolePermission.RoleId
                 join permission in context.Permissions.AsNoTracking()
                     on rolePermission.PermissionId equals permission.Id
+                join allowedScope in context.PermissionAllowedScopeTypes.AsNoTracking()
+                    on new { rolePermission.PermissionId, assignment.ScopeType }
+                    equals new { allowedScope.PermissionId, allowedScope.ScopeType }
+                join marker in context.AuthorizationPolicyVersions.AsNoTracking()
+                    on 1 equals 1
+                where marker.IsActive &&
+                      (marker.ActiveVocabulary == "legacy-colon" &&
+                       PermissionVocabulary.LegacyColonCodes.Contains(permission.Code) ||
+                       marker.ActiveVocabulary == "dotted-v1" &&
+                       PermissionVocabulary.DottedV1Codes.Contains(permission.Code))
                 select new UserPermissionScopeGrant(
                     permission.Code,
                     assignment.ScopeType,

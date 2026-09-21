@@ -63,6 +63,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Database", _dbContainer.GetConnectionString());
 
         // Provide deterministic JWT settings so tokens can be issued and validated in tests.
@@ -246,6 +247,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            builder.UseEnvironment("Testing");
             builder.UseSetting("ConnectionStrings:Database", connectionString);
             builder.UseSetting("Jwt:Secret", JwtSecret);
             builder.UseSetting("Jwt:Issuer", JwtIssuer);

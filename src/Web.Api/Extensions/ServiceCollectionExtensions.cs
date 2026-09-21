@@ -10,6 +10,8 @@ internal static class ServiceCollectionExtensions
     {
         services.AddSwaggerGen(static o =>
         {
+            o.SupportNonNullableReferenceTypes();
+            o.NonNullableReferenceTypesAsRequired();
             o.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
             {
                 Title = "EIAMS Backend API",

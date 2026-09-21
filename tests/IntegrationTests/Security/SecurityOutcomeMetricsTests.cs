@@ -36,7 +36,7 @@ public sealed class SecurityOutcomeMetricsTests
         SecurityOutcomeMetricsExtensions.RecordFinalSecurityOutcome(StatusCodes.Status401Unauthorized);
         SecurityOutcomeMetricsExtensions.RecordFinalSecurityOutcome(StatusCodes.Status403Forbidden);
         SecurityOutcomeMetricsExtensions.RecordFinalSecurityOutcome(StatusCodes.Status429TooManyRequests);
-        SecurityOutcomeMetricsExtensions.RecordOperation("administrator_bootstrap", "succeeded");
+        SecurityOutcomeMetricsExtensions.RecordOperation("administrator_user_create", "succeeded");
         SecurityOutcomeMetricsExtensions.RecordOperation("administrator_recovery", "rejected");
         SecurityOutcomeMetricsExtensions.RecordOperation("administrator_role_scope_replace", "failed");
 
@@ -56,7 +56,7 @@ public sealed class SecurityOutcomeMetricsTests
             Tags: [{ Key: "outcome", Value: "rate_limited" }]
         }).ShouldBeTrue();
         measurements.Any(item => item.InstrumentName == "eiam.security.operations" &&
-            item.Tags.SequenceEqual([new("event_type", "administrator_bootstrap"), new("outcome", "succeeded")])).ShouldBeTrue();
+            item.Tags.SequenceEqual([new("event_type", "administrator_user_create"), new("outcome", "succeeded")])).ShouldBeTrue();
         measurements.Any(item => item.InstrumentName == "eiam.security.operations" &&
             item.Tags.SequenceEqual([new("event_type", "administrator_recovery"), new("outcome", "rejected")])).ShouldBeTrue();
         measurements.Any(item => item.InstrumentName == "eiam.security.operations" &&
@@ -190,15 +190,6 @@ public sealed class SecurityOutcomeMetricsPipelineTests(IntegrationTestWebAppFac
         (await client.GetAsync("/api/v1/test/security-outcome/403")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await client.GetAsync("/api/v1/test/security-outcome/429")).StatusCode.ShouldBe((HttpStatusCode)429);
         (await client.GetAsync("/api/v1/test/admin-throws")).StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
-        HttpResponseMessage bootstrap = await client.PostAsJsonAsync("/api/v1/admin/users/register", new
-        {
-            email = "metrics-probe@example.test",
-            firstName = "Metrics",
-            lastName = "Probe",
-            password = "Metrics123!"
-        });
-        bootstrap.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-
         measurements.Any(item => item.InstrumentName == "eiam.security.http.outcomes" &&
             item.Tags.SequenceEqual([new("outcome", "unauthorized")])).ShouldBeTrue();
         measurements.Any(item => item.InstrumentName == "eiam.security.http.outcomes" &&
@@ -207,8 +198,6 @@ public sealed class SecurityOutcomeMetricsPipelineTests(IntegrationTestWebAppFac
             item.Tags.SequenceEqual([new("outcome", "rate_limited")])).ShouldBeTrue();
         measurements.Any(item => item.InstrumentName == "eiam.security.operations" &&
             item.Tags.SequenceEqual([new("event_type", "administrator_user_create"), new("outcome", "failed")])).ShouldBeTrue();
-        measurements.Any(item => item.InstrumentName == "eiam.security.operations" &&
-            item.Tags.SequenceEqual([new("event_type", "administrator_bootstrap"), new("outcome", "rejected")])).ShouldBeTrue();
     }
 
     private sealed record Measurement(string InstrumentName, long Value, KeyValuePair<string, object?>[] Tags);

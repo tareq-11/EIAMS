@@ -61,6 +61,15 @@ public interface IScopeAuthorizationService
         CancellationToken cancellationToken);
 }
 
+public interface IEffectivePermissionService
+{
+    Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<string>> GetEffectivePermissionCodesAsync(
+        Guid userId,
+        CancellationToken cancellationToken);
+}
+
 public sealed record UserAuthorizationAssignment(
     Guid Id,
     Guid UserId,

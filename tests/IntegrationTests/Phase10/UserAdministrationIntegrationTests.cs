@@ -43,6 +43,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("admin/users", new
         {
             email,
+            username = UsernameFor(email),
             firstName = "Managed",
             lastName = "User",
             password = ManagedPassword
@@ -62,6 +63,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"admin/users/{managedUserId}", new
         {
             email,
+            username = UsernameFor(email),
             firstName = "Updated",
             lastName = "Account",
             status = "Suspended"
@@ -73,7 +75,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpClient.DefaultRequestHeaders.Authorization = null;
         HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("auth/login", new
         {
-            email,
+            username = UsernameFor(email),
             password = ManagedPassword
         });
         loginResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
@@ -120,6 +122,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"admin/users/{administratorId}", new
         {
             email = $"self-{Guid.NewGuid():N}@example.com",
+            username = $"self-{Guid.NewGuid():N}",
             firstName = "System",
             lastName = "Administrator",
             status = "Suspended"
@@ -135,6 +138,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         await AuthenticateAsAdministratorAsync();
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
         AccessTokens tokens = await LoginAsync(email);
         await AuthenticateAsAdministratorAsync();
 
@@ -142,6 +146,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         Task<HttpResponseMessage> suspensionRequest = HttpClient.PutAsJsonAsync($"admin/users/{userId}", new
         {
             email,
+            username = UsernameFor(email),
             firstName = "Concurrent",
             lastName = "Suspension",
             status = "Suspended"

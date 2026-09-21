@@ -1,7 +1,6 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Messaging;
 using Application.Users;
-using Application.Users.GetSession;
 using Application.Users.Login;
 using Application.Users.Refresh;
 using Microsoft.AspNetCore.Authorization;
@@ -18,7 +17,6 @@ namespace Web.Api.Controllers.Users;
 [Tags(Tags.Users)]
 public sealed class RefreshTokenController(
     ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler,
-    IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler,
     RefreshTokenTransport refreshTokenTransport)
     : ControllerBase
 {
@@ -70,12 +68,6 @@ public sealed class RefreshTokenController(
             AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
         }
 
-        // Include the authoritative session projection (D-AUTH-01 §13.2).
-        Result<UserSessionResponse> sessionResult = await sessionHandler
-            .Handle(new GetUserSessionQuery(result.Value.UserId), cancellationToken)
-            .ConfigureAwait(continueOnCapturedContext: false);
-
-        UserSessionResponse? session = sessionResult.IsSuccess ? sessionResult.Value : null;
-        return ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(result.Value, session));
+        return ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(result.Value));
     }
 }

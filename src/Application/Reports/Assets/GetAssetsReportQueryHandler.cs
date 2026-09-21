@@ -19,7 +19,7 @@ internal sealed class GetAssetsReportQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehousePermissionScope access = await scopeAuthorizationService.GetWarehousePermissionScopeAsync(
-            userContext.UserId, PermissionCodes.Assets.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         if (!access.HasEnterpriseAccess && access.WarehouseIds.Count == 0)
         {
             return Result.Failure<PagedResult<AssetsReportRow>>(ReportErrors.Forbidden);

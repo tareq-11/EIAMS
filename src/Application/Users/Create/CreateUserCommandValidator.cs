@@ -1,4 +1,5 @@
 using FluentValidation;
+using Application.Users;
 
 namespace Application.Users.Create;
 
@@ -6,6 +7,7 @@ internal sealed class CreateUserCommandValidator : AbstractValidator<CreateUserC
 {
     public CreateUserCommandValidator()
     {
+        UserNameRules.Apply(RuleFor(command => command.Username));
         RuleFor(command => command.FirstName).NotEmpty().MaximumLength(200);
         RuleFor(command => command.LastName).NotEmpty().MaximumLength(200);
         RuleFor(command => command.Email)

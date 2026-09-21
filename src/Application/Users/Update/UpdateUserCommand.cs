@@ -6,6 +6,7 @@ namespace Application.Users.Update;
 public sealed record UpdateUserCommand(
     Guid UserId,
     string Email,
+    string Username,
     string FirstName,
     string LastName,
     UserStatus Status) : ICommand;

@@ -19,7 +19,7 @@ internal sealed class GetDashboardReportQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehousePermissionScope access = await scopeAuthorizationService.GetWarehousePermissionScopeAsync(
-            userContext.UserId, PermissionCodes.Inventory.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         if (!access.HasEnterpriseAccess && access.WarehouseIds.Count == 0)
         {
             return Result.Failure<DashboardReportResponse>(ReportErrors.Forbidden);
@@ -31,13 +31,13 @@ internal sealed class GetDashboardReportQueryHandler(
             .Where(warehouse => query.WarehouseId == null || warehouse.Id == query.WarehouseId)
             .Select(warehouse => warehouse.Id);
         bool canViewAssets = await scopeAuthorizationService.HasPermissionAsync(
-            userContext.UserId, PermissionCodes.Assets.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         bool canViewCustodies = await scopeAuthorizationService.HasPermissionAsync(
-            userContext.UserId, PermissionCodes.Custodies.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         bool canViewDocuments = await scopeAuthorizationService.HasPermissionAsync(
-            userContext.UserId, PermissionCodes.WarehouseDocuments.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         bool canViewCounts = await scopeAuthorizationService.HasPermissionAsync(
-            userContext.UserId, PermissionCodes.InventoryCounts.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
 
         // These aggregates are independent but previously incurred seven sequential database
         // round trips. A single projection keeps the exact same scoped subqueries while making

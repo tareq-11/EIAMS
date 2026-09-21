@@ -395,7 +395,7 @@ public sealed class ApiLatencyBenchmarkTests
             poolCollector,
             lockWaitSampler,
             () => ObserveAsync(
-                () => client.PostAsJsonAsync("auth/login", new { email, password }),
+                () => client.PostAsJsonAsync("auth/login", new { username = email, password }),
                 expectedStatus,
                 getSqlCommands: null));
 

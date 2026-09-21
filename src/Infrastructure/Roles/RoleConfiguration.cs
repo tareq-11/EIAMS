@@ -19,8 +19,8 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
             new
             {
                 Id = WellKnownRoles.AdministratorId,
-                Name = "Administrator",
-                Description = "Full enterprise administrative access. Automatically granted to the first registered user.",
+                Name = "SYSTEM_ADMIN",
+                Description = "Enterprise structural administration. Created only by explicit startup bootstrap configuration.",
                 CreatedAtUtc = SeedConstants.SeedTimestampUtc,
                 UpdatedAtUtc = (DateTime?)null,
                 CreatedBy = (Guid?)null,
@@ -41,6 +41,16 @@ internal sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
                 Id = WellKnownRoles.WarehouseManagerId,
                 Name = "WH_MGR",
                 Description = "Posts and reverses warehouse documents (D-WF-01). Permissions reserved for M3+.",
+                CreatedAtUtc = SeedConstants.SeedTimestampUtc,
+                UpdatedAtUtc = (DateTime?)null,
+                CreatedBy = (Guid?)null,
+                UpdatedBy = (Guid?)null
+            },
+            new
+            {
+                Id = WellKnownRoles.AuditorId,
+                Name = "AUDITOR",
+                Description = "Read-only audit and operational reporting role.",
                 CreatedAtUtc = SeedConstants.SeedTimestampUtc,
                 UpdatedAtUtc = (DateTime?)null,
                 CreatedBy = (Guid?)null,

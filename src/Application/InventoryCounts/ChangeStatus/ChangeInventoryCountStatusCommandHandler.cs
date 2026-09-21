@@ -37,8 +37,16 @@ internal sealed class ChangeInventoryCountStatusCommandHandler(
         InventoryCount? count = await context.InventoryCounts
             .SingleOrDefaultAsync(item => item.Id == command.CountId, cancellationToken);
 
+        string requiredPermission = command.TargetStatus switch
+        {
+            InventoryCountStatus.InProgress => PermissionCodes.InventoryCounts.Plan,
+            InventoryCountStatus.Completed => PermissionCodes.InventoryCounts.Complete,
+            InventoryCountStatus.Closed => PermissionCodes.InventoryCounts.Close,
+            _ => PermissionCodes.InventoryCounts.Complete
+        };
+
         if (count is null || !await scopeAuthorizationService.HasPermissionInScopeAsync(
-            userContext.UserId, PermissionCodes.InventoryCounts.Review,
+            userContext.UserId, requiredPermission,
             ScopeType.Warehouse, count.WarehouseId, cancellationToken))
         {
             return Result.Failure(InventoryCountErrors.NotFound(command.CountId));

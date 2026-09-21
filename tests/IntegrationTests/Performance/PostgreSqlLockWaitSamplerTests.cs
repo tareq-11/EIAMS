@@ -36,10 +36,10 @@ public sealed class PostgreSqlLockWaitSamplerTests(IntegrationTestWebAppFactory 
     {
         await using var sampler = new PostgreSqlLockWaitSampler(factory.DatabaseConnectionString, TimeSpan.FromMilliseconds(10));
         await sampler.StartAsync();
-        await Task.Delay(35);
+        await WaitUntilAsync(() => sampler.Snapshot().SampleCount > 0);
         PostgreSqlLockWaitSnapshot first = await sampler.StopAsync();
         await sampler.StartAsync();
-        await Task.Delay(15);
+        await WaitUntilAsync(() => sampler.Snapshot().SampleCount > 0);
         PostgreSqlLockWaitSnapshot second = await sampler.StopAsync();
 
         first.SampleCount.ShouldBeGreaterThan(0);

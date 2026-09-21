@@ -12,12 +12,12 @@ namespace Web.Api.Controllers.Users;
 [Tags(Tags.Users)]
 public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid> handler) : ControllerBase
 {
-    public sealed record RequestBody(string Email, string FirstName, string LastName, string Password);
+    public sealed record RequestBody(string Email, string Username, string FirstName, string LastName, string Password);
     public sealed record ResponseBody(Guid Id);
 
     [HttpPost]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
-    [HasPermission(PermissionCodes.Users.Access)]
+    [HasPermission(PermissionCodes.Users.Manage)]
     [ProducesResponseType<ApiResponse<ResponseBody>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
@@ -28,6 +28,7 @@ public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid
     {
         var command = new CreateUserCommand(
             request.Email,
+            request.Username,
             request.FirstName,
             request.LastName,
             request.Password);

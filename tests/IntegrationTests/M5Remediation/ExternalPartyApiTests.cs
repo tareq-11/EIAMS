@@ -1,9 +1,11 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Domain.Common;
+using Domain.Permissions;
 using Domain.Roles;
 using Domain.UserRoleScopes;
 using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IntegrationTests.M5Remediation;
@@ -25,8 +27,16 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
+            var roleId = Guid.NewGuid();
+            context.Roles.Add(Role.Create(roleId, $"External party admin {roleId:N}", null));
+            context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
+            context.RolePermissions.AddRange(
+                RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationManageId),
+                RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationViewId),
+                RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId));
             context.UserRoleScopes.Add(UserRoleScope.Create(
-                Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+                Guid.NewGuid(), userId, roleId, ScopeType.Enterprise, null));
             await context.SaveChangesAsync();
         }
 
@@ -112,8 +122,15 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
+            var roleId = Guid.NewGuid();
+            context.Roles.Add(Role.Create(roleId, $"Counterpart reader {roleId:N}", null));
+            context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
+            context.RolePermissions.AddRange(
+                RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationManageId),
+                RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId));
             context.UserRoleScopes.Add(UserRoleScope.Create(
-                Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+                Guid.NewGuid(), userId, roleId, ScopeType.Enterprise, null));
             await context.SaveChangesAsync();
         }
 

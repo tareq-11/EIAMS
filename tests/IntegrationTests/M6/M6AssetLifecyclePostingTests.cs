@@ -645,15 +645,13 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Guid organizationalUnitId = await context.Warehouses
-            .Where(item => item.Id == warehouseId)
-            .Select(item => item.OrganizationalUnitId!.Value)
-            .SingleAsync();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"M6 edit {roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.CustodiesManageId));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.CustodyAssignId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.UserRoleScopes.Add(UserRoleScope.Create(
-            Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, organizationalUnitId));
+            Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();
     }
 

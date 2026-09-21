@@ -1,11 +1,18 @@
 using System.Net;
 using System.Text.Json;
+using Domain.Common;
+using Domain.Permissions;
+using Domain.Roles;
+using Domain.UserRoleScopes;
+using Domain.Users;
+using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IntegrationTests.Performance;
 
 [Collection(nameof(IntegrationTestCollection))]
-public sealed class AuditKeysetPaginationTests : BaseIntegrationTest
+public sealed class AuditKeysetPaginationTests : BaseIntegrationTest, IDisposable
 {
     private readonly IntegrationTestWebAppFactory factory;
 
@@ -19,6 +26,7 @@ public sealed class AuditKeysetPaginationTests : BaseIntegrationTest
     public async Task CursorEndpoint_ShouldReturnStableNonOverlappingPagesWithoutCountQuery()
     {
         await AuthenticateAsAdministratorAsync();
+        await GrantAuditReaderAsync();
 
         SqlCommandCounterInterceptor commandCounter = factory.Services
             .GetRequiredService<SqlCommandCounterInterceptor>();
@@ -50,10 +58,39 @@ public sealed class AuditKeysetPaginationTests : BaseIntegrationTest
     public async Task CursorEndpoint_ShouldRejectIncompleteCursor()
     {
         await AuthenticateAsAdministratorAsync();
+        await GrantAuditReaderAsync();
 
         HttpResponseMessage response = await HttpClient.GetAsync(
             $"audit-logs/cursor?pageSize=20&afterId={Guid.NewGuid()}");
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    private async Task GrantAuditReaderAsync()
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid userId = await context.Users.Where(user => user.Email == IntegrationTestWebAppFactory.AdministratorEmail)
+            .Select(user => user.Id).SingleAsync();
+        await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(),
+            userId,
+            WellKnownRoles.AuditorId,
+            ScopeType.Enterprise,
+            null));
+        await context.SaveChangesAsync();
+    }
+
+    public void Dispose()
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid userId = context.Users.Where(user => user.Email == IntegrationTestWebAppFactory.AdministratorEmail)
+            .Select(user => user.Id).Single();
+        context.UserRoleScopes.RemoveRange(context.UserRoleScopes.Where(assignment => assignment.UserId == userId));
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+        context.SaveChanges();
     }
 }

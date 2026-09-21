@@ -18,7 +18,7 @@ public sealed class PostInventoryAdjustmentController(
     public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion);
 
     [HttpPost("{id:guid}/post")]
-    [HasPermission(PermissionCodes.WarehouseDocuments.Review)]
+    [HasPermission(PermissionCodes.WarehouseDocuments.Post)]
     [ProducesResponseType<ApiResponse<PostDocumentResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
