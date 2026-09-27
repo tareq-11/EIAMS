@@ -44,10 +44,19 @@ expected_db_sections=(
   invalid_document_sequence_facts duplicate_document_sequence_keys
 )
 
-(cd "$root" && rg --files src/Web.Api/Controllers | sort) >"$tmp/routes.txt"
-(cd "$root" && rg --files src/Application | sort) >"$tmp/application-files.txt"
-(cd "$root" && rg --files src/Application src/Web.Api | rg 'Request|Response|Command|Query|Dto|DTO|ApiContracts|ApiResults|OpenApi' | sort -u) >"$tmp/dto-files.txt"
-(cd "$root" && rg -l 'PermissionCodes|HasPermission' src | sort) >"$tmp/permission-files.txt"
+if command -v rg >/dev/null 2>&1; then
+  (cd "$root" && rg --files src/Web.Api/Controllers | sort) >"$tmp/routes.txt"
+  (cd "$root" && rg --files src/Application | sort) >"$tmp/application-files.txt"
+  (cd "$root" && rg --files src/Application src/Web.Api | rg 'Request|Response|Command|Query|Dto|DTO|ApiContracts|ApiResults|OpenApi' | sort -u) >"$tmp/dto-files.txt"
+  (cd "$root" && rg -l 'PermissionCodes|HasPermission' src | sort) >"$tmp/permission-files.txt"
+else
+  # Hosted runners need not include ripgrep. Git lists tracked and non-ignored
+  # untracked sources without accidentally inventorying bin/obj outputs.
+  (cd "$root" && git ls-files -co --exclude-standard -- src/Web.Api/Controllers | sort) >"$tmp/routes.txt"
+  (cd "$root" && git ls-files -co --exclude-standard -- src/Application | sort) >"$tmp/application-files.txt"
+  (cd "$root" && git ls-files -co --exclude-standard -- src/Application src/Web.Api | grep -E 'Request|Response|Command|Query|Dto|DTO|ApiContracts|ApiResults|OpenApi' | sort -u) >"$tmp/dto-files.txt"
+  (cd "$root" && git ls-files -z -co --exclude-standard -- src | xargs -0 -r grep -lE 'PermissionCodes|HasPermission' | sort) >"$tmp/permission-files.txt"
+fi
 
 json_lines() {
   jq -Rn '[inputs | select(length > 0)]' <"$1"
@@ -61,7 +70,11 @@ openapi="$root/contracts/openapi/eiams-backend-v1.openapi.json"
 openapi_routes="$(jq '[.paths // {} | to_entries[] as $path | $path.value | to_entries[] | select(.key|IN("get","post","put","patch","delete","options","head","trace")) | {path:$path.key,method:(.key|ascii_upcase)}] | sort_by(.path,.method)' "$openapi")"
 openapi_schemas="$(jq '[.components.schemas // {} | keys[]] | sort' "$openapi")"
 
-(cd "$root" && rg -o '"[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+"' src/Application/Abstractions/Authorization/PermissionCodes.cs src/Domain/Permissions/WellKnownDottedPermissions.cs 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' | sort -u) >"$tmp/permission-codes.txt"
+if command -v rg >/dev/null 2>&1; then
+  (cd "$root" && rg -o '"[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+"' src/Application/Abstractions/Authorization/PermissionCodes.cs src/Domain/Permissions/WellKnownDottedPermissions.cs 2>/dev/null | sed -E 's/.*"([^"]+)".*/\1/' | sort -u) >"$tmp/permission-codes.txt"
+else
+  (cd "$root" && grep -hEo '"[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+"' src/Application/Abstractions/Authorization/PermissionCodes.cs src/Domain/Permissions/WellKnownDottedPermissions.cs | sed -E 's/.*"([^"]+)".*/\1/' | sort -u) >"$tmp/permission-codes.txt"
+fi
 permission_codes="$(json_lines "$tmp/permission-codes.txt")"
 
 db_rows=''
