@@ -26,7 +26,6 @@ internal sealed class RoleAllowedScopeTypeConfiguration : IEntityTypeConfigurati
             new { RoleId = WellKnownRoles.WarehouseManagerId, ScopeType = ScopeType.Warehouse },
             new { RoleId = WellKnownRoles.WarehouseManagerId, ScopeType = ScopeType.Enterprise },
             new { RoleId = WellKnownRoles.WarehouseManagerId, ScopeType = ScopeType.Site },
-            new { RoleId = WellKnownRoles.WarehouseManagerId, ScopeType = ScopeType.OrganizationalUnit },
             new { RoleId = WellKnownRoles.AuditorId, ScopeType = ScopeType.Enterprise },
             new { RoleId = WellKnownRoles.AuditorId, ScopeType = ScopeType.Site },
             new { RoleId = WellKnownRoles.AuditorId, ScopeType = ScopeType.Warehouse });

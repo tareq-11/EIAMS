@@ -149,6 +149,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
     [InlineData(ScopeType.Enterprise, true, false)]
     [InlineData(ScopeType.Site, false, false)]
     [InlineData(ScopeType.Warehouse, false, false)]
+    [InlineData(ScopeType.OrganizationalUnit, true, false)]
     [InlineData(ScopeType.Enterprise, false, true)]
     [InlineData(ScopeType.Site, true, true)]
     public void GrantUserRoleScopeValidator_Should_EnforceScopeIdContract(

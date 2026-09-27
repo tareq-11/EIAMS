@@ -21,7 +21,7 @@ public sealed class GetAssetCustodyTimelineController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(
-        Guid assetId,
+        [FromRoute] Guid assetId,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

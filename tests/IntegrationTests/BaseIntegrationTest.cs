@@ -38,7 +38,10 @@ public abstract class BaseIntegrationTest
             username = UsernameFor(email),
             firstName = "Test",
             lastName = "User",
-            password = TestPassword
+            password = TestPassword,
+            roleId = WellKnownRoles.AdministratorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null
         };
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("admin/users", request);
@@ -53,9 +56,9 @@ public abstract class BaseIntegrationTest
         return body.Data.Id;
     }
 
-    protected async Task<AccessTokens> LoginAsync(string usernameOrEmail)
+    protected async Task<AccessTokens> LoginAsync(string username)
     {
-        var request = new { username = usernameOrEmail, password = TestPassword };
+        var request = new { username, password = TestPassword };
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("auth/login", request);
         response.EnsureSuccessStatusCode();
@@ -66,7 +69,10 @@ public abstract class BaseIntegrationTest
         body.ShouldNotBeNull();
         body.Success.ShouldBeTrue();
 
-        return body.Data;
+        string refreshToken = Uri.UnescapeDataString(response.Headers.GetValues("Set-Cookie")
+            .Single(value => value.StartsWith("eiams_refresh_token=", StringComparison.Ordinal))
+            .Split(';', 2)[0]["eiams_refresh_token=".Length..]);
+        return body.Data with { RefreshToken = refreshToken };
     }
 
     protected async Task<(Guid UserId, AccessTokens Tokens)> RegisterAndLoginAsync()
@@ -74,19 +80,27 @@ public abstract class BaseIntegrationTest
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         await AssignEnterpriseAdministratorAsync(userId);
-        AccessTokens tokens = await LoginAsync(email);
+        AccessTokens tokens = await LoginAsync(UsernameFor(email));
 
         return (userId, tokens);
     }
 
     protected async Task AssignEnterpriseAdministratorAsync(Guid userId)
     {
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("admin/user-role-scopes", new
+        using (HttpResponseMessage current = await HttpClient.GetAsync($"admin/users/{userId}/role-scope"))
         {
-            userId,
+            if (current.IsSuccessStatusCode)
+            {
+                return;
+            }
+        }
+
+        HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"admin/users/{userId}/role-scope", new
+        {
             roleId = WellKnownRoles.AdministratorId,
             scopeType = "Enterprise",
-            scopeId = (Guid?)null
+            scopeId = (Guid?)null,
+            expectedRowVersion = 0
         });
         response.EnsureSuccessStatusCode();
     }
@@ -96,12 +110,27 @@ public abstract class BaseIntegrationTest
         HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
 
+    protected static HttpRequestMessage RefreshRequestWithCookie(string refreshToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "auth/refresh");
+        request.Headers.Add("Cookie", $"eiams_refresh_token={refreshToken}");
+        return request;
+    }
+
+    protected static HttpRequestMessage LogoutRequestWithCookie(string refreshToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "auth/logout");
+        request.Headers.Add("Cookie", $"eiams_refresh_token={refreshToken}");
+        return request;
+    }
+
+
     protected async Task AuthenticateAsAdministratorAsync()
     {
         if (administratorTokens is null)
         {
             HttpClient.DefaultRequestHeaders.Authorization = null;
-            administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorEmail);
+            administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorUsername);
         }
 
         Authenticate(administratorTokens.AccessToken);

@@ -14,7 +14,31 @@ namespace Application.DocumentLines;
 internal sealed record DocumentLineCatalogContext(
     Material Material,
     MaterialFamily Family,
-    MaterialUnitConversion? Conversion);
+    MaterialUnitConversion? Conversion)
+{
+    /// <summary>
+    /// The one base unit of the material (<c>Material.BaseUnitId</c>, decision 038). The family value
+    /// is never used for quantity semantics.
+    /// </summary>
+    public Guid BaseUnitId => Material.BaseUnitId;
+
+    /// <summary>
+    /// Freezes the catalog state this line is written against, so a later catalog edit cannot
+    /// reinterpret the line (3B provenance). The capture is validated rather than defaulted: a
+    /// material with no base unit or a conversion with no factor fails the line write instead of
+    /// storing a snapshot that cannot be interpreted later.
+    /// </summary>
+    public Result<DocumentLineProvenance> CaptureProvenance() =>
+        DocumentLineProvenance.Create(
+            Material.CatalogVersion,
+            Material.MaterialKind,
+            Material.TrackingType,
+            Material.BaseUnitId,
+            Conversion?.Id,
+            Conversion?.FromUnitId,
+            Conversion?.ToBaseUnitId,
+            Conversion?.Factor);
+}
 
 internal static class DocumentLineCatalogResolver
 {
@@ -33,7 +57,7 @@ internal static class DocumentLineCatalogResolver
             from c in cGroup.DefaultIfEmpty()
             join d in context.MaterialDomains.AsNoTracking() on c.MaterialDomainId equals d.Id into dGroup
             from d in dGroup.DefaultIfEmpty()
-            join bu in context.UnitsOfMeasure.AsNoTracking() on f.BaseUnitId equals bu.Id into buGroup
+            join bu in context.UnitsOfMeasure.AsNoTracking() on m.BaseUnitId equals bu.Id into buGroup
             from bu in buGroup.DefaultIfEmpty()
             select new
             {
@@ -87,12 +111,12 @@ internal static class DocumentLineCatalogResolver
 
         if (!row.BaseUnitExists)
         {
-            return Result.Failure<DocumentLineCatalogContext>(DocumentLineErrors.UnitNotFound(row.Family.BaseUnitId));
+            return Result.Failure<DocumentLineCatalogContext>(DocumentLineErrors.UnitNotFound(row.Material.BaseUnitId));
         }
 
         MaterialUnitConversion? conversion = null;
 
-        if (unitId is not null && unitId != row.Family.BaseUnitId)
+        if (unitId is not null && unitId != row.Material.BaseUnitId)
         {
             if (!await context.UnitsOfMeasure.AsNoTracking().AnyAsync(u => u.Id == unitId, cancellationToken))
             {
@@ -104,7 +128,7 @@ internal static class DocumentLineCatalogResolver
                 .SingleOrDefaultAsync(
                     c => c.MaterialId == materialId &&
                          c.FromUnitId == unitId &&
-                         c.ToBaseUnitId == row.Family.BaseUnitId,
+                         c.ToBaseUnitId == row.Material.BaseUnitId,
                     cancellationToken);
 
             if (conversion is null)

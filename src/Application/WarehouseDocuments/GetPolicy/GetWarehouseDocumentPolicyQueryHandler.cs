@@ -212,7 +212,7 @@ internal sealed class GetWarehouseDocumentPolicyQueryHandler(
             }
         }
 
-        InventoryFreezeEvaluation freeze = await freezePolicyService.EvaluateAsync(scopeResult.Value, cancellationToken);
+        InventoryFreezeEvaluation freeze = await freezePolicyService.EvaluateProvisionalAsync(scopeResult.Value, cancellationToken);
         if (freeze.BlockingError is not null)
         {
             AddBlocker(blockers, Post, freeze.BlockingError);

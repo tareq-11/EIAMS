@@ -167,15 +167,15 @@ public sealed class SyntheticDatasetManifestTests
         // Arrange
         SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(DatasetProfile.Medium, 1729);
         Guid[] siteIds = manifest.Sites.Select(site => site.SiteId).ToArray();
-        Guid[] organizationalUnitIds = manifest.Sites.SelectMany(site => site.OrganizationalUnitIds).ToArray();
         Guid[] warehouseIds = manifest.Sites.SelectMany(site => site.Warehouses).Select(warehouse => warehouse.WarehouseId).ToArray();
 
         // Assert
         manifest.UserScopeAssignments.Count.ShouldBe(manifest.Definition.UserCount);
         manifest.UserScopeAssignments.Select(assignment => assignment.UserId).Distinct().Count()
             .ShouldBe(manifest.Definition.UserCount);
-        Enum.GetValues<ScopeType>().All(scopeType =>
+        new[] { ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse }.All(scopeType =>
             manifest.UserScopeAssignments.Any(assignment => assignment.ScopeType == scopeType)).ShouldBeTrue();
+        manifest.UserScopeAssignments.ShouldAllBe(assignment => assignment.ScopeType != ScopeType.OrganizationalUnit);
         manifest.UserScopeAssignments.All(assignment => assignment.RoleId != Guid.Empty &&
             manifest.RoleIds.Contains(assignment.RoleId)).ShouldBeTrue();
         manifest.UserScopeAssignments.All(assignment => assignment.ScopeType == ScopeType.Enterprise
@@ -183,8 +183,6 @@ public sealed class SyntheticDatasetManifestTests
             : assignment.ScopeId is not null).ShouldBeTrue();
         manifest.UserScopeAssignments.Where(assignment => assignment.ScopeType == ScopeType.Site)
             .All(assignment => siteIds.Contains(assignment.ScopeId!.Value)).ShouldBeTrue();
-        manifest.UserScopeAssignments.Where(assignment => assignment.ScopeType == ScopeType.OrganizationalUnit)
-            .All(assignment => organizationalUnitIds.Contains(assignment.ScopeId!.Value)).ShouldBeTrue();
         manifest.UserScopeAssignments.Where(assignment => assignment.ScopeType == ScopeType.Warehouse)
             .All(assignment => warehouseIds.Contains(assignment.ScopeId!.Value)).ShouldBeTrue();
         manifest.Sites.All(site => site.Warehouses.All(warehouse =>

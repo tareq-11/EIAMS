@@ -21,13 +21,21 @@ public static class UserRoleScopeErrors
         "UserRoleScopes.NoAssignment",
         $"The user with the Id = '{userId}' has no active role or scope assigned");
 
+    public static Error MultipleAssignments(Guid userId) => Error.Conflict(
+        "UserRoleScopes.MultipleAssignments",
+        "The user has multiple active role and scope assignments");
+
     public static readonly Error UserAlreadyAssigned = Error.Conflict(
         "UserRoleScopes.UserAlreadyAssigned",
         "The user already has a role and scope assignment. Replace the assignment instead of granting another one");
 
     public static readonly Error ScopeIdRequired = Error.Problem(
         "UserRoleScopes.ScopeIdRequired",
-        "A scope id is required for Site, OrganizationalUnit, and Warehouse assignments");
+        "A scope id is required for Site and Warehouse assignments");
+
+    public static readonly Error OrganizationalUnitAssignmentNotAllowed = Error.Problem(
+        "UserRoleScopes.OrganizationalUnitAssignmentNotAllowed",
+        "OrganizationalUnit is a business resource and cannot be assigned as a user scope");
 
     public static readonly Error ScopeIdMustBeNull = Error.Problem(
         "UserRoleScopes.ScopeIdMustBeNull",
@@ -52,6 +60,11 @@ public static class UserRoleScopeErrors
     public static readonly Error CannotRemoveLastEnterpriseAdministrator = Error.Conflict(
         "UserRoleScopes.CannotRemoveLastEnterpriseAdministrator",
         "The last Enterprise Administrator assignment cannot be removed");
+
+    public static Error RowVersionMismatch(Guid userId, int expectedRowVersion, int currentRowVersion) => Error.Conflict(
+        "UserRoleScopes.RowVersionMismatch",
+        "The role and scope assignment was modified by another request",
+        new { user_id = userId, expected_row_version = expectedRowVersion, current_row_version = currentRowVersion });
 
     public static readonly Error ResourceOutsideScope = Error.Forbidden(
         "UserRoleScopes.ResourceOutsideScope",

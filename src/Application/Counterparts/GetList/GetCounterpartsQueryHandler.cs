@@ -29,6 +29,7 @@ internal sealed class GetCounterpartsQueryHandler(
         PagedResult<CounterpartResolution> result = await counterpartResolver.SearchActiveAsync(
             userContext.UserId,
             query.Search,
+            query.Operation,
             query.Type,
             query.Page,
             query.PageSize,

@@ -44,11 +44,11 @@ internal static class SyntheticDatasetSeeder
     private const string AdvisoryLockResource = "integration-tests:synthetic-dataset-seeder";
     private static readonly Guid[] SyntheticReadPermissionIds =
     [
-        WellKnownPermissions.WarehousesViewId,
-        WellKnownPermissions.MaterialsViewId,
-        WellKnownPermissions.InventoryViewId,
-        WellKnownPermissions.WarehouseDocumentsViewId,
-        WellKnownPermissions.AuditLogsViewId
+        WellKnownDottedPermissions.WarehouseViewId,
+        WellKnownDottedPermissions.CatalogViewId,
+        WellKnownDottedPermissions.InventoryViewId,
+        WellKnownDottedPermissions.DocumentViewId,
+        WellKnownDottedPermissions.AuditViewId
     ];
     private static readonly string[] IdentityKindLabels =
     [
@@ -213,8 +213,10 @@ internal static class SyntheticDatasetSeeder
             cancellationToken);
         await SaveBoundedAsync(
             context.RoleAllowedScopeTypes,
-            manifest.RoleIds.Select((roleId, index) =>
-                RoleAllowedScopeType.Create(roleId, GetSyntheticRoleScopeType(index))),
+            manifest.UserScopeAssignments
+                .GroupBy(assignment => assignment.RoleId)
+                .SelectMany(group => group.Select(assignment => assignment.ScopeType).Distinct()
+                    .Select(scopeType => RoleAllowedScopeType.Create(group.Key, scopeType))),
             context,
             batchSize,
             cancellationToken);
@@ -246,7 +248,7 @@ internal static class SyntheticDatasetSeeder
         await SaveBoundedAsync(context.UnitsOfMeasure, [UnitOfMeasure.Create(unitId, "Synthetic unit", "syn", "Quantity")], context, batchSize, cancellationToken);
         await SaveBoundedAsync(context.MaterialDomains, [MaterialDomain.Create(materialDomainId, "Synthetic domain", $"{prefix}-domain")], context, batchSize, cancellationToken);
         await SaveBoundedAsync(context.MaterialCategories, [MaterialCategory.Create(materialCategoryId, materialDomainId, null, "Synthetic category", $"{prefix}-category")], context, batchSize, cancellationToken);
-        await SaveBoundedAsync(context.MaterialFamilies, [MaterialFamily.Create(materialFamilyId, materialCategoryId, "Synthetic family", $"{prefix}-family", unitId)], context, batchSize, cancellationToken);
+        await SaveBoundedAsync(context.MaterialFamilies, [MaterialFamily.Create(materialFamilyId, materialCategoryId, "Synthetic family", $"{prefix}-family")], context, batchSize, cancellationToken);
         await SaveBoundedAsync(
             context.Materials,
             Enumerable.Range(0, manifest.Definition.MaterialCount).Select(index => Material.Create(
@@ -337,12 +339,6 @@ internal static class SyntheticDatasetSeeder
 
     private static IEnumerable<int> EnumerateBatch(SyntheticDatasetBatch batch) =>
         Enumerable.Range(batch.StartIndex, batch.Count);
-
-    private static ScopeType GetSyntheticRoleScopeType(int roleIndex)
-    {
-        ScopeType[] scopeTypes = Enum.GetValues<ScopeType>();
-        return scopeTypes[roleIndex % scopeTypes.Length];
-    }
 
     private static WarehouseDocument CreateDocument(SyntheticDatasetManifest manifest, string prefix, SyntheticDatasetWarehouse[] warehouses, int index)
     {

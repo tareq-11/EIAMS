@@ -96,7 +96,8 @@ internal sealed class TransferCustodyCommandHandler(
                     return Result.Failure(CustodyErrors.NotActive);
                 }
 
-                Result closeResult = custody.Close(custody.IssueDocumentId, nowUtc);
+                // This closes the previous holder's period; the transfer is not a stock return.
+                Result closeResult = custody.Close(null, nowUtc);
                 if (closeResult.IsFailure)
                 {
                     return closeResult;
@@ -169,7 +170,7 @@ internal sealed class TransferCustodyCommandHandler(
                     Guid.NewGuid(),
                     CustodySubjectType.TrackedUnit,
                     unit.Id,
-                    "Transferred",
+                    DurableCustodyAction.Transferred,
                     oldUnitHolderType,
                     oldUnitHolderId,
                     command.NewHolderType,
@@ -215,7 +216,7 @@ internal sealed class TransferCustodyCommandHandler(
                     Guid.NewGuid(),
                     CustodySubjectType.MaterialQuantity,
                     allocation.Id,
-                    "Transferred",
+                    DurableCustodyAction.Transferred,
                     oldAllocHolderType,
                     oldAllocHolderId,
                     command.NewHolderType,

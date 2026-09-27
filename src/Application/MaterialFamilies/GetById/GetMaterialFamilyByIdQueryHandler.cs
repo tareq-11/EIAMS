@@ -27,7 +27,6 @@ internal sealed class GetMaterialFamilyByIdQueryHandler(
                     CategoryId = f.CategoryId,
                     Name = f.Name,
                     Code = f.Code,
-                    BaseUnitId = f.BaseUnitId,
                     Status = f.Status.ToString()
                 })
                 .SingleOrDefaultAsync(ct),

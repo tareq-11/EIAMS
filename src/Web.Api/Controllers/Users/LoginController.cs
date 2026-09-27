@@ -28,6 +28,18 @@ public sealed class LoginController(
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
+        // Login also sets a credential cookie, so apply the same origin policy before
+        // invoking the handler. Requests without Origin remain valid for non-browser clients.
+        RefreshTokenResolution origin = refreshTokenTransport.ValidateCookieOrigin(HttpContext);
+        if (!origin.IsAccepted)
+        {
+            return ApiResults.Error(
+                HttpContext,
+                origin.ErrorStatusCode,
+                origin.ErrorCode!,
+                origin.ErrorMessage!);
+        }
+
         var command = new LoginUserCommand(request.Username, request.Password);
 
         Result<AccessTokensResponse> result = await handler.Handle(command, cancellationToken);

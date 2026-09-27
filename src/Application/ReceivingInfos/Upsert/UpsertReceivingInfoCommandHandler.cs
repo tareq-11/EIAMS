@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
+using Domain.ExternalParties;
 using Domain.ReceivingInfos;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,13 @@ internal sealed class UpsertReceivingInfoCommandHandler(
             return Result.Failure(ReceivingInfoErrors.WrongDocumentType(document.Id));
         }
 
+        ExternalParty? supplier = await context.ExternalParties.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == command.SupplierPartyId, cancellationToken);
+        if (supplier is null || supplier.Status != Status.Active)
+        {
+            return Result.Failure(ReceivingInfoErrors.SupplierPartyNotFound);
+        }
+
         ReceivingInfo? info = await context.ReceivingInfos
             .SingleOrDefaultAsync(item => item.Id == document.Id, cancellationToken);
 
@@ -72,9 +80,10 @@ internal sealed class UpsertReceivingInfoCommandHandler(
         {
             Result<ReceivingInfo> createResult = ReceivingInfo.Create(
                 document.Id,
-                command.SupplierRef,
+                supplier.Code ?? supplier.NameAr,
                 command.SupplierInvoiceRef,
-                command.ReceivingType);
+                ReceivingType.Supplier,
+                supplier.Id);
 
             if (createResult.IsFailure)
             {
@@ -87,19 +96,21 @@ internal sealed class UpsertReceivingInfoCommandHandler(
         }
         else
         {
-            string normalizedSupplierRef = command.SupplierRef.Trim();
+            string normalizedSupplierRef = supplier.Code ?? supplier.NameAr;
             string? normalizedInvoiceRef = string.IsNullOrWhiteSpace(command.SupplierInvoiceRef)
                 ? null
                 : command.SupplierInvoiceRef.Trim();
 
             hasChanges = info.SupplierRef != normalizedSupplierRef ||
                 info.SupplierInvoiceRef != normalizedInvoiceRef ||
-                info.ReceivingType != command.ReceivingType;
+                info.ReceivingType != ReceivingType.Supplier ||
+                info.SupplierPartyId != supplier.Id;
 
             infoResult = info.Update(
-                command.SupplierRef,
+                normalizedSupplierRef,
                 command.SupplierInvoiceRef,
-                command.ReceivingType);
+                ReceivingType.Supplier,
+                supplier.Id);
         }
 
         if (infoResult.IsFailure)

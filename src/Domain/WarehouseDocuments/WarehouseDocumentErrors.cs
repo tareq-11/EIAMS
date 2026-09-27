@@ -36,6 +36,21 @@ public static class WarehouseDocumentErrors
         $"The document with the Id = '{documentId}' must have at least one line before it can be submitted.",
         new { document_id = documentId });
 
+    public static Error CompleteDraftUnsupportedType(DocumentType documentType) => Error.Problem(
+        "WarehouseDocuments.CompleteDraftUnsupportedType",
+        $"The complete-draft endpoint does not support document type '{documentType}'.",
+        new { document_type = documentType.ToString() });
+
+    public static Error CompleteDraftDetailsMismatch(DocumentType documentType) => Error.Problem(
+        "WarehouseDocuments.CompleteDraftDetailsMismatch",
+        $"The complete-draft request must include only the type-appropriate details for '{documentType}'.",
+        new { document_type = documentType.ToString() });
+
+    public static Error CompleteDraftAssetSelectionCount(Guid lineId) => Error.Problem(
+        "WarehouseDocuments.CompleteDraftAssetSelectionCount",
+        $"Every serialized asset line must include one asset selection per unit (line '{lineId}').",
+        new { line_id = lineId });
+
     public static Error PaperReferenceRequired(Guid documentId) => Error.Problem(
         "WarehouseDocuments.PaperReferenceRequired",
         $"The document with the Id = '{documentId}' requires a paper document number and year before it can be submitted.",

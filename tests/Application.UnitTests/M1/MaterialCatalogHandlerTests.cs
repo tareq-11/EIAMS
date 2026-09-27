@@ -76,33 +76,36 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task CreateMaterialFamily_Should_RejectMissingBaseUnit()
+    public async Task CreateMaterialFamily_Should_NotRequireBaseUnit()
     {
         await using TestDbContext context = CreateDbContext();
         var domainId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
-        var missingUnitId = Guid.NewGuid();
         context.MaterialDomains.Add(MaterialDomain.Create(domainId, "Domain", "DOM"));
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, "Category", "CAT"));
         await context.SaveChangesAsync();
 
         var handler = new CreateMaterialFamilyCommandHandler(context, CreateUserContext(), CreateAuthorization(true));
-        var command = new CreateMaterialFamilyCommand(categoryId, "Family", "FAM", missingUnitId);
+        var command = new CreateMaterialFamilyCommand(categoryId, "Family", "FAM");
 
         Result<Guid> result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsFailure.ShouldBeTrue();
-        result.Error.ShouldBe(MaterialFamilyErrors.BaseUnitNotFound(missingUnitId));
+        result.IsSuccess.ShouldBeTrue();
+        (await context.MaterialFamilies.CountAsync()).ShouldBe(1);
     }
 
     [Fact]
     public async Task CreateMaterial_Should_RejectDuplicateCode()
     {
         await using TestDbContext context = CreateDbContext();
+        var domainId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
         var familyId = Guid.NewGuid();
         var baseUnitId = Guid.NewGuid();
+        context.MaterialDomains.Add(MaterialDomain.Create(domainId, "Domain", "DOM"));
+        context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, "Category", "CAT"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, Guid.NewGuid(), "Family", "FAM", baseUnitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, "Family", "FAM"));
         context.Materials.Add(Material.Create(
             Guid.NewGuid(),
             familyId,
@@ -156,7 +159,7 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task AddMaterialUnitConversion_Should_RejectUnitThatIsNotFamilyBaseUnit()
+    public async Task AddMaterialUnitConversion_Should_RejectUnitThatIsNotMaterialBaseUnit()
     {
         await using TestDbContext context = CreateDbContext();
         CatalogSeed seed = await SeedCatalogAsync(context);
@@ -244,7 +247,7 @@ public sealed class MaterialCatalogHandlerTests : BaseHandlerTest
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, "Category", "CAT"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(sourceUnitId, "Box", "box", "Count"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, "Family", "FAM", baseUnitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, "Family", "FAM"));
         context.Materials.Add(Material.Create(
             materialId,
             familyId,

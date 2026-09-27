@@ -1,6 +1,5 @@
 using Domain.MaterialCategories;
 using Domain.MaterialFamilies;
-using Domain.UnitsOfMeasure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,6 +19,5 @@ internal sealed class MaterialFamilyConfiguration : IEntityTypeConfiguration<Mat
 
         builder.HasOne<MaterialCategory>().WithMany().HasForeignKey(f => f.CategoryId);
 
-        builder.HasOne<UnitOfMeasure>().WithMany().HasForeignKey(f => f.BaseUnitId);
     }
 }

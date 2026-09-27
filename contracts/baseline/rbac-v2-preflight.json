@@ -1,0 +1,20 @@
+{
+  "version": "phase-2a-v1",
+  "overallStatus": "WARN",
+  "semantics": {
+    "PASS": "dotted-v1 parity is clean",
+    "BLOCK": "cutover is blocked and no cleanup is approved",
+    "WARN": "review required or database unavailable",
+    "UNAVAILABLE": "not safely inferable"
+  },
+  "database": {
+    "status": "UNAVAILABLE",
+    "note": "RBAC_V2_PG* variables were not supplied; database checks were not inferred.",
+    "checks": []
+  },
+  "limitations": [
+    "Read-only counts only; no identifiers, secrets, response bodies, or permission derivation are emitted.",
+    "Permission mappings are audit history and never grant authorization.",
+    "A missing target/schema is unavailable, never PASS."
+  ]
+}

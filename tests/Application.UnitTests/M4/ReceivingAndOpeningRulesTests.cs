@@ -52,6 +52,16 @@ public sealed class ReceivingAndOpeningRulesTests
     }
 
     [Fact]
+    public void ReceivingInfo_Should_RejectLegacyTransferType()
+    {
+        Result<ReceivingInfo> result = ReceivingInfo.Create(
+            Guid.NewGuid(), "Supplier", null, (ReceivingType)1);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(ReceivingInfoErrors.ReceivingTypeInvalid);
+    }
+
+    [Fact]
     public void OpeningLineRules_Should_RequireOpeningTypeForOpeningDocument()
     {
         Result result = OpeningLineRules.Validate(DocumentType.Opening, Guid.NewGuid(), null);

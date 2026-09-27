@@ -134,7 +134,7 @@ public sealed class TrigramSearchIndexTests(IntegrationTestWebAppFactory factory
         var unit = UnitOfMeasure.Create(Guid.NewGuid(), $"Unit {suffix}", $"U{suffix[..6]}", "Quantity");
         var domain = MaterialDomain.Create(Guid.NewGuid(), $"Domain {suffix}", $"D{suffix[..8]}");
         var category = MaterialCategory.Create(Guid.NewGuid(), domain.Id, null, $"Category {suffix}", $"C{suffix[..8]}");
-        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix[..8]}", unit.Id);
+        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix[..8]}");
         context.AddRange(unit, domain, category, family);
 
         for (int index = 0; index < count; index++)

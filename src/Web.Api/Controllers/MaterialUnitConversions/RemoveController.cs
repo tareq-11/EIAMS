@@ -12,15 +12,15 @@ namespace Web.Api.Controllers.MaterialUnitConversions;
 [Tags(Tags.MaterialUnitConversions)]
 public sealed class RemoveController(ICommandHandler<RemoveMaterialUnitConversionCommand> handler) : ControllerBase
 {
-    [HttpDelete("{materialUnitConversionId:guid}")]
+    [HttpDelete("{conversionId:guid}")]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Materials.Manage)]
     public async Task<IResult> Handle(
         Guid materialId,
-        Guid materialUnitConversionId,
+        Guid conversionId,
         CancellationToken cancellationToken)
     {
-        var command = new RemoveMaterialUnitConversionCommand(materialUnitConversionId);
+        var command = new RemoveMaterialUnitConversionCommand(materialId, conversionId);
 
         Result result = await handler.Handle(command, cancellationToken);
 

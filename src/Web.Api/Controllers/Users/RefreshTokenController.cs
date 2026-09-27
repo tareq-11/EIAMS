@@ -20,8 +20,6 @@ public sealed class RefreshTokenController(
     RefreshTokenTransport refreshTokenTransport)
     : ControllerBase
 {
-    public sealed record RequestBody(string? RefreshToken);
-
     [HttpPost("refresh")]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [ProducesResponseType<ApiResponse<AuthenticationTokensResponse>>(StatusCodes.Status200OK)]
@@ -29,10 +27,9 @@ public sealed class RefreshTokenController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RequestBody? request,
         CancellationToken cancellationToken)
     {
-        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext, request?.RefreshToken);
+        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext);
 
         if (!resolution.IsAccepted)
         {
@@ -60,6 +57,10 @@ public sealed class RefreshTokenController(
 
         if (result.IsFailure)
         {
+            // Invalid, replayed, expired, or suspended tokens must not remain in the
+            // browser after the handler has evaluated them. Origin/body rejection above
+            // intentionally occurs before this cleanup and before token consumption.
+            AuthCookies.ClearRefreshTokenCookies(HttpContext);
             return CustomResults.Problem(result, HttpContext);
         }
 

@@ -1,0 +1,38 @@
+Phase 2C baseline (read-only inventory)
+=======================================
+
+Contract invariants
+- ApiResponse<T> remains success/data/pagination/meta; pagination is a sibling of data.
+- Pagination defaults are page=1, page_size=20; accepted page_size is 1..100.
+- PagedResult calculates total_pages=0 for an empty result and retains the requested one-based page for empty/out-of-range pages.
+- No data.pageInfo is present in the checked-in OpenAPI snapshot.
+
+Paged controllers (all use PaginationQueryParameters or an explicit page/page_size pair)
+Assets, AuditLogs (offset and keyset), Counterparts, Custodies, Employees, ExternalParties,
+InventoryAdjustments, InventoryBalances, InventoryCounts, MaterialCategories, MaterialDomains,
+MaterialFamilies, MaterialUnitConversions, Materials, OrganizationalUnits, Organizations,
+Permissions, Reports (assets/count-adjustments/documents/inventory), Returns, Roles, Sites,
+StockMovements, UnitsOfMeasure, Users, WarehouseCapabilities, WarehouseCapabilityOperations,
+WarehouseDocuments, WarehouseMaterialSettings, Warehouses.
+
+Explicit list filters verified in source handlers
+- WarehouseDocuments: warehouseId, siteId, documentType, documentStatus,
+  systemReferenceNumber, paperDocumentNumber, fromDateUtc, toDateUtc.
+- Reports/Documents: warehouseId, documentType, status, fromUtc, toUtc.
+- Materials: familyId, materialDomainId, status.
+- InventoryBalances: warehouseId, materialId, search.
+- Stock/asset/inventory/custody lists expose only filters consumed by their query handlers.
+
+Canonical contextual material conversion routes
+- GET/POST  /api/v1/catalog/materials/{materialId}/unit-conversions
+- GET/PUT/DELETE /api/v1/catalog/materials/{materialId}/unit-conversions/{conversionId}
+- No global or legacy material-unit-conversion operation is retained.
+- DELETE and PUT both carry the semantic parent materialId into the application command;
+  a conversion from another material is treated as not found.
+
+2C checks
+- OpenAPI operation/path uniqueness is checked by OpenApiSnapshotTests.
+- PaginationQueryParameters data annotations reject page<1 and page_size outside bounds
+  through the standard REQUEST_VALIDATION_FAILED envelope.
+- Custody and return eligible-item handlers no longer silently clamp invalid page values;
+  validators enforce the same contract when invoked through the application pipeline.

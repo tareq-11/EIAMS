@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Domain.Common;
 
 namespace Application.Users.GetSession;
 
@@ -12,8 +13,6 @@ public sealed record UserSessionResponse(
     [property: JsonPropertyName("user")] UserSessionUserDto User,
     [property: JsonPropertyName("role")] UserSessionRoleDto Role,
     [property: JsonPropertyName("activeScope")] UserSessionScopeDto Scope,
-    [property: JsonPropertyName("scopeState")] string ScopeState,
-    [property: JsonPropertyName("activeRoles")] IReadOnlyList<UserSessionRoleDto> ActiveRoles,
     [property: JsonPropertyName("permissionCodes")] IReadOnlyList<string> PermissionCodes);
 
 public sealed record UserSessionUserDto(
@@ -30,6 +29,6 @@ public sealed record UserSessionRoleDto(
     [property: JsonPropertyName("description")] string? Description);
 
 public sealed record UserSessionScopeDto(
-    [property: JsonPropertyName("scopeType")] string ScopeType,
+    [property: JsonPropertyName("scopeType")] UserAssignmentScopeType ScopeType,
     [property: JsonPropertyName("scopeId")] Guid? ScopeId,
     [property: JsonPropertyName("scopeName")] string ScopeName);

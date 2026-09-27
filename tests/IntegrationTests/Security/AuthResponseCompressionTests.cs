@@ -15,7 +15,7 @@ public sealed class AuthResponseCompressionTests(IntegrationTestWebAppFactory fa
         {
             Content = JsonContent.Create(new
             {
-                username = $"missing-{Guid.NewGuid():N}@example.com",
+                username = $"missing-{Guid.NewGuid():N}",
                 password = "InvalidPassword1!"
             })
         };

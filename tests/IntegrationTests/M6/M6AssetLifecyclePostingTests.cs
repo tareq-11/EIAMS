@@ -32,7 +32,9 @@ using Domain.Warehouses;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using SharedKernel;
+using Web.Api.Controllers.Custodies;
 
 namespace IntegrationTests.M6;
 
@@ -136,6 +138,28 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         (await context.Custodies.AnyAsync(item => item.IssueDocumentId == issue.Id)).ShouldBeFalse();
         (await context.WarehouseDocuments.SingleAsync(item => item.Id == issue.Id)).DocumentStatus
             .ShouldBe(DocumentStatus.Submitted);
+    }
+
+    [Fact]
+    public async Task AssetIssuePost_Should_RequireIssueRecipientBeforeLedgerOrCustodyEffects()
+    {
+        M6Seed seed = await SeedAsync();
+        SubmittedDocument receiving = await CreateSubmittedReceivingAsync(seed, 1m, 0m);
+        (await PostAsync(receiving.Id, receiving.RowVersion, seed.PostedBy)).IsSuccess.ShouldBeTrue();
+        Guid assetId = await GetAssetIdAsync(receiving.AssetLineId);
+        SubmittedDocument issue = await CreateSubmittedIssueAsync(
+            seed, PartyType.OrganizationalUnit, seed.OrganizationalUnitId,
+            [assetId], assetQuantity: 1m, normalQuantity: 0m, includeIssueTo: false);
+
+        Result<Guid> result = await PostAsync(issue.Id, issue.RowVersion, seed.PostedBy);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe(IssueToErrors.Required(issue.Id).Code);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.StockMovements.AnyAsync(item => item.DocumentId == issue.Id)).ShouldBeFalse();
+        (await context.Custodies.AnyAsync(item => item.IssueDocumentId == issue.Id)).ShouldBeFalse();
+        (await context.AssetMovementHistories.AnyAsync(item => item.DocumentId == issue.Id)).ShouldBeFalse();
     }
 
     [Fact]
@@ -245,14 +269,62 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Custody closed = await context.Custodies.SingleAsync(item => item.Id == operational.Id);
         closed.Status.ShouldBe(CustodyStatus.Closed);
+        closed.ReturnDocumentId.ShouldBeNull();
         Custody personal = await context.Custodies.SingleAsync(item => item.AssetId == assetId && item.Status == CustodyStatus.Active);
         personal.CustodyKind.ShouldBe(CustodyKind.Personal);
         personal.HolderType.ShouldBe(PartyType.Employee);
         personal.HolderId.ShouldBe(seed.EmployeeId);
-        (await context.CustodyHistories.AnyAsync(item => item.CustodyId == operational.Id &&
-            item.FromStatus == CustodyStatus.Active && item.ToStatus == CustodyStatus.Closed)).ShouldBeTrue();
+        CustodyHistory history = await context.CustodyHistories.SingleAsync(item => item.CustodyId == operational.Id &&
+            item.FromStatus == CustodyStatus.Active && item.ToStatus == CustodyStatus.Closed);
+        PostgresException updateError = await Should.ThrowAsync<PostgresException>(async () =>
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE public.custody_history SET note = 'rewritten' WHERE id = {history.Id}"));
+        updateError.SqlState.ShouldBe("55000");
+        PostgresException deleteError = await Should.ThrowAsync<PostgresException>(async () =>
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM public.custody_history WHERE id = {history.Id}"));
+        deleteError.SqlState.ShouldBe("55000");
+        (await context.CustodyHistories.AnyAsync(item => item.Id == history.Id)).ShouldBeTrue();
         (await context.AssetCurrentStatuses.SingleAsync(item => item.AssetId == assetId)).CurrentStatus
             .ShouldBe(AssetCurrentStatus.InCustody);
+    }
+
+    [Fact]
+    public async Task CustodyTransfer_ShouldNotMislabelIssueDocumentAsReturnDocument()
+    {
+        M6Seed seed = await SeedAsync();
+        SubmittedDocument receiving = await CreateSubmittedReceivingAsync(seed, 1m, 0m);
+        (await PostAsync(receiving.Id, receiving.RowVersion, seed.PostedBy)).IsSuccess.ShouldBeTrue();
+        Guid assetId = await GetAssetIdAsync(receiving.AssetLineId);
+        SubmittedDocument issue = await CreateSubmittedIssueAsync(
+            seed, PartyType.OrganizationalUnit, seed.OrganizationalUnitId, [assetId], 1m, 0m);
+        (await PostAsync(issue.Id, issue.RowVersion, seed.PostedBy)).IsSuccess.ShouldBeTrue();
+        Custody originalCustody = await GetActiveCustodyAsync(assetId);
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantEditPermissionAsync(userId, seed.WarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"custodies/{originalCustody.Id}/transfer",
+            new TransferCustodyRequest(
+                CustodySubjectType.Asset,
+                PartyType.Employee,
+                seed.EmployeeId,
+                CustodyKind.Personal,
+                originalCustody.RowVersion,
+                "Transfer to employee"));
+
+        string content = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Custody closed = await context.Custodies.SingleAsync(item => item.Id == originalCustody.Id);
+        closed.Status.ShouldBe(CustodyStatus.Closed);
+        closed.ReturnDocumentId.ShouldBeNull();
+        Custody active = await context.Custodies.SingleAsync(item => item.AssetId == assetId &&
+            item.Status == CustodyStatus.Active);
+        active.HolderType.ShouldBe(PartyType.Employee);
+        active.HolderId.ShouldBe(seed.EmployeeId);
     }
 
     [Fact]
@@ -395,7 +467,7 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, $"Piece {suffix}", $"P{suffix}", "Count"));
         context.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}"));
         context.Materials.Add(Material.Create(
             assetMaterialId, familyId, unitId, $"Asset {suffix}", null, $"A{suffix}", MaterialKind.Asset,
             TrackingType.Serial, false, null));
@@ -424,7 +496,8 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
             Guid.NewGuid(), seed.WarehouseId, DocumentType.Receiving, $"REC-{suffix}");
         Result<DocumentLine> assetLine = DocumentLine.Create(
             Guid.NewGuid(), document.Id, seed.AssetMaterialId, DocumentLineType.Asset, assetQuantity, seed.UnitId,
-            assetQuantity, null, null, null);
+            assetQuantity, null, null, null,
+            provenance: await CaptureProvenanceAsync(context, seed.AssetMaterialId));
         assetLine.IsSuccess.ShouldBeTrue();
         context.WarehouseDocuments.Add(document);
         context.DocumentLines.Add(assetLine.Value);
@@ -433,7 +506,8 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         {
             Result<DocumentLine> normalLine = DocumentLine.Create(
                 Guid.NewGuid(), document.Id, seed.NormalMaterialId, DocumentLineType.Normal, normalQuantity, seed.UnitId,
-                normalQuantity, null, null, null);
+                normalQuantity, null, null, null,
+                provenance: await CaptureProvenanceAsync(context, seed.NormalMaterialId));
             normalLine.IsSuccess.ShouldBeTrue();
             context.DocumentLines.Add(normalLine.Value);
             normalLineId = normalLine.Value.Id;
@@ -455,7 +529,8 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         Guid recipientId,
         IReadOnlyCollection<Guid> assetIds,
         decimal assetQuantity,
-        decimal normalQuantity)
+        decimal normalQuantity,
+        bool includeIssueTo = true)
     {
         // Arrange
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -465,7 +540,8 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
             Guid.NewGuid(), seed.WarehouseId, DocumentType.Issue, $"ISS-{suffix}");
         Result<DocumentLine> assetLine = DocumentLine.Create(
             Guid.NewGuid(), document.Id, seed.AssetMaterialId, DocumentLineType.Asset, assetQuantity, seed.UnitId,
-            assetQuantity, null, null, null);
+            assetQuantity, null, null, null,
+            provenance: await CaptureProvenanceAsync(context, seed.AssetMaterialId));
         assetLine.IsSuccess.ShouldBeTrue();
         context.WarehouseDocuments.Add(document);
         context.DocumentLines.Add(assetLine.Value);
@@ -473,14 +549,18 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         {
             Result<DocumentLine> normalLine = DocumentLine.Create(
                 Guid.NewGuid(), document.Id, seed.NormalMaterialId, DocumentLineType.Normal, normalQuantity, seed.UnitId,
-                normalQuantity, null, null, null);
+                normalQuantity, null, null, null,
+                provenance: await CaptureProvenanceAsync(context, seed.NormalMaterialId));
             normalLine.IsSuccess.ShouldBeTrue();
             context.DocumentLines.Add(normalLine.Value);
         }
 
-        Result<IssueTo> issueTo = IssueTo.Create(document.Id, recipientType, recipientId, "Operational need");
-        issueTo.IsSuccess.ShouldBeTrue();
-        context.IssueTos.Add(issueTo.Value);
+        if (includeIssueTo)
+        {
+            Result<IssueTo> issueTo = IssueTo.Create(document.Id, recipientType, recipientId, "Operational need");
+            issueTo.IsSuccess.ShouldBeTrue();
+            context.IssueTos.Add(issueTo.Value);
+        }
         foreach (Guid assetId in assetIds)
         {
             Result<DocumentLineAssetSelection> selection = DocumentLineAssetSelection.Create(
@@ -509,7 +589,8 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
             Guid.NewGuid(), seed.WarehouseId, DocumentType.Return, $"RET-{suffix}");
         Result<DocumentLine> assetLine = DocumentLine.Create(
             Guid.NewGuid(), document.Id, seed.AssetMaterialId, DocumentLineType.Asset, assetQuantity, seed.UnitId,
-            assetQuantity, null, null, null);
+            assetQuantity, null, null, null,
+            provenance: await CaptureProvenanceAsync(context, seed.AssetMaterialId));
         assetLine.IsSuccess.ShouldBeTrue();
         context.WarehouseDocuments.Add(document);
         context.DocumentLines.Add(assetLine.Value);
@@ -517,7 +598,8 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         {
             Result<DocumentLine> normalLine = DocumentLine.Create(
                 Guid.NewGuid(), document.Id, seed.NormalMaterialId, DocumentLineType.Normal, normalQuantity, seed.UnitId,
-                normalQuantity, null, null, null);
+                normalQuantity, null, null, null,
+                provenance: await CaptureProvenanceAsync(context, seed.NormalMaterialId));
             normalLine.IsSuccess.ShouldBeTrue();
             context.DocumentLines.Add(normalLine.Value);
         }
@@ -557,7 +639,7 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
             Result<DocumentLine> reversalLine = DocumentLine.Create(
                 Guid.NewGuid(), reversal.Id, sourceLine.MaterialId, sourceLine.LineType, sourceLine.Quantity,
                 sourceLine.UnitId, sourceLine.BaseQuantity, sourceLine.UnitPrice, sourceLine.BatchNumber,
-                sourceLine.ExpiryDate, sourceLine.OpeningType, sourceLine.Id);
+                sourceLine.ExpiryDate, sourceLine.OpeningType, sourceLine.Id, sourceLine.Provenance);
             reversalLine.IsSuccess.ShouldBeTrue();
             context.DocumentLines.Add(reversalLine.Value);
         }
@@ -585,6 +667,16 @@ public sealed class M6AssetLifecyclePostingTests : BaseIntegrationTest
         document.UpdatePaperReference($"P-{suffix}", 2026).IsSuccess.ShouldBeTrue();
         document.Submit().IsSuccess.ShouldBeTrue();
         await context.SaveChangesAsync();
+    }
+
+    private static async Task<DocumentLineProvenance> CaptureProvenanceAsync(
+        ApplicationDbContext context,
+        Guid materialId)
+    {
+        Material material = await context.Materials.AsNoTracking()
+            .SingleAsync(item => item.Id == materialId);
+        return DocumentLineProvenance.Create(
+            material.CatalogVersion, material.MaterialKind, material.TrackingType, material.BaseUnitId).Value;
     }
 
     private async Task AssignCustodyDirectlyAsync(Guid assetId, Guid employeeId)

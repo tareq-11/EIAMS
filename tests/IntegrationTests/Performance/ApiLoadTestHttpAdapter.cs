@@ -111,12 +111,12 @@ internal sealed record ApiLoadTestLatencySummary(
 /// </summary>
 internal sealed class ApiLoadTestHttpAdapter(
     HttpClient client,
-    string administratorEmail,
+    string administratorUsername,
     string administratorPassword,
     ApiLoadTestFixtureContext? fixtureContext = null) : IDisposable
 {
     private readonly HttpClient client = client ?? throw new ArgumentNullException(nameof(client));
-    private readonly string administratorEmail = administratorEmail ?? throw new ArgumentNullException(nameof(administratorEmail));
+    private readonly string administratorUsername = administratorUsername ?? throw new ArgumentNullException(nameof(administratorUsername));
     private readonly string administratorPassword = administratorPassword ?? throw new ArgumentNullException(nameof(administratorPassword));
     private readonly ApiLoadTestFixtureContext? fixtureContext = fixtureContext;
     private readonly SemaphoreSlim authenticationLock = new(1, 1);
@@ -222,7 +222,7 @@ internal sealed class ApiLoadTestHttpAdapter(
             using var request = new HttpRequestMessage(entry.Method, entry.RelativePath);
             if (entry.Scenario == ApiLoadTestScenario.Login)
             {
-                request.Content = JsonContent.Create(new { username = administratorEmail, password = administratorPassword });
+                request.Content = JsonContent.Create(new { username = administratorUsername, password = administratorPassword });
             }
             else if (entry.Scenario == ApiLoadTestScenario.Post)
             {

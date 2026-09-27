@@ -21,7 +21,10 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
                 username = $"contract-{Guid.NewGuid():N}",
                 firstName = "Contract",
                 lastName = "Tester",
-                password = "Password123!"
+                password = "Password123!",
+                roleId = Domain.Roles.WellKnownRoles.AdministratorId,
+                scopeType = "Enterprise",
+                scopeId = (Guid?)null
             });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
@@ -48,7 +51,10 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
                 username = "valid-user",
                 firstName = "",
                 lastName = "",
-                password = "weak"
+                password = "weak",
+                roleId = Domain.Roles.WellKnownRoles.AdministratorId,
+                scopeType = "Enterprise",
+                scopeId = (Guid?)null
             });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -159,7 +165,10 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
                 username = UsernameFor(email),
                 firstName = "Duplicate",
                 lastName = "User",
-                password = "Password123!"
+                password = "Password123!",
+                roleId = Domain.Roles.WellKnownRoles.AdministratorId,
+                scopeType = "Enterprise",
+                scopeId = (Guid?)null
             });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);

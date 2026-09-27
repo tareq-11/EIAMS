@@ -19,6 +19,7 @@ namespace IntegrationTests;
 public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     internal const string AdministratorEmail = "integration-admin@example.com";
+    internal const string AdministratorUsername = "integration-admin";
     internal const string AdministratorPassword = "Password123!";
     internal const string JwtSecret = "super-duper-secret-value-that-should-be-in-user-secrets";
     internal const string JwtIssuer = "clean-architecture-template";
@@ -107,6 +108,7 @@ public sealed class IntegrationTestWebAppFactory : WebApplicationFactory<Program
         var administrator = User.Create(
             Guid.NewGuid(),
             AdministratorEmail,
+            AdministratorUsername,
             "Integration",
             "Administrator",
             passwordHasher.Hash(AdministratorPassword));

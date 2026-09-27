@@ -22,8 +22,8 @@ public sealed class GetUsersController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     public async Task<IResult> Handle(
-        string? search,
-        UserStatus? status,
+        [FromQuery] string? search,
+        [FromQuery] UserStatus? status,
         bool? hasRoleScope,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)

@@ -300,7 +300,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, $"Piece {suffix}", $"P{suffix}", "Count"));
         context.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}"));
         context.Materials.Add(Material.Create(
             materialId,
             familyId,
@@ -364,9 +364,15 @@ public sealed class M5IssueTests : BaseIntegrationTest
         string suffix = Guid.NewGuid().ToString("N")[..10];
         var document = WarehouseDocument.CreateDraft(
             Guid.NewGuid(), seed.WarehouseId, documentType, $"{documentType}-{suffix}");
+        Material material = await context.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion,
+            material.MaterialKind,
+            material.TrackingType,
+            material.BaseUnitId).Value;
         Result<DocumentLine> lineResult = DocumentLine.Create(
             Guid.NewGuid(), document.Id, seed.MaterialId, DocumentLineType.Normal, quantity, seed.UnitId,
-            quantity, null, null, null, openingType);
+            quantity, null, null, null, openingType, provenance: provenance);
         lineResult.IsSuccess.ShouldBeTrue();
         context.WarehouseDocuments.Add(document);
         context.DocumentLines.Add(lineResult.Value);

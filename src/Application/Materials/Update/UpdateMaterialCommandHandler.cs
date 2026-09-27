@@ -1,6 +1,7 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
+using Application.Abstractions.Materials;
 using Application.Abstractions.Messaging;
 using Domain.Common;
 using Domain.Materials;
@@ -12,10 +13,19 @@ namespace Application.Materials.Update;
 internal sealed class UpdateMaterialCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService)
+    IScopeAuthorizationService scopeAuthorizationService,
+    IApplicationTransaction transaction,
+    IMaterialOperationLock materialLock)
     : ICommandHandler<UpdateMaterialCommand>
 {
-    public async Task<Result> Handle(UpdateMaterialCommand command, CancellationToken cancellationToken)
+    public Task<Result> Handle(UpdateMaterialCommand command, CancellationToken cancellationToken) =>
+        transaction.ExecuteAsync(
+            ct => UpdateInTransactionAsync(command, ct),
+            cancellationToken);
+
+    private async Task<Result> UpdateInTransactionAsync(
+        UpdateMaterialCommand command,
+        CancellationToken cancellationToken)
     {
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
@@ -29,6 +39,18 @@ internal sealed class UpdateMaterialCommandHandler(
             return Result.Failure(MaterialErrors.Forbidden);
         }
 
+        Result classification = MaterialClassification.Validate(command.MaterialKind, command.TrackingType);
+
+        if (classification.IsFailure)
+        {
+            return classification;
+        }
+
+        // The read, the operational-use guard and the write form one read-check-save sequence: taking
+        // the material's advisory lock first makes them indivisible against a concurrent catalog edit
+        // and against a document submit/post that reads the same material.
+        await materialLock.AcquireAsync([command.MaterialId], cancellationToken);
+
         Material? material = await context.Materials
             .SingleOrDefaultAsync(m => m.Id == command.MaterialId, cancellationToken);
 
@@ -37,14 +59,24 @@ internal sealed class UpdateMaterialCommandHandler(
             return Result.Failure(MaterialErrors.NotFound(command.MaterialId));
         }
 
-        if (command.MaterialKind == MaterialKind.Consumable && command.TrackingType != TrackingType.Quantity)
+        if (material.CatalogVersion != command.ExpectedCatalogVersion)
         {
-            return Result.Failure(MaterialErrors.ConsumableMustBeQuantityTracked);
+            return Result.Failure(MaterialErrors.CatalogVersionMismatch(
+                command.MaterialId,
+                command.ExpectedCatalogVersion,
+                material.CatalogVersion));
         }
 
-        if (command.MaterialKind == MaterialKind.Asset && command.TrackingType != TrackingType.Serial)
+        Result classificationLock = await MaterialOperationalUseGuard.EnsureClassificationMutableAsync(
+            context,
+            material,
+            command.MaterialKind,
+            command.TrackingType,
+            cancellationToken);
+
+        if (classificationLock.IsFailure)
         {
-            return Result.Failure(MaterialErrors.AssetMustBeSerialTracked);
+            return classificationLock;
         }
 
         material.UpdateDetails(
@@ -55,7 +87,26 @@ internal sealed class UpdateMaterialCommandHandler(
             command.HasExpiry,
             command.Attributes);
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // CatalogVersion is the material's EF concurrency token, so a row that moved between the
+            // read above and this write - by another catalog edit or by a concurrent status change -
+            // is reported as a conflict instead of silently overwriting the newer classification.
+            int? currentVersion = await context.Materials
+                .AsNoTracking()
+                .Where(m => m.Id == command.MaterialId)
+                .Select(m => (int?)m.CatalogVersion)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            return Result.Failure(MaterialErrors.CatalogVersionMismatch(
+                command.MaterialId,
+                command.ExpectedCatalogVersion,
+                currentVersion));
+        }
 
         return Result.Success();
     }

@@ -4,8 +4,7 @@ using SharedKernel;
 namespace Domain.MaterialFamilies;
 
 /// <summary>
-/// Mandatory grouping family (fourth catalog level). Carries the base unit for its materials.
-/// Carries no tracking/kind of its own - those are authoritative on Material only (D-CAT-01).
+/// Mandatory grouping family (fourth catalog level). Quantity semantics belong to Material.
 /// </summary>
 public sealed class MaterialFamily : Entity, IAuditableEntity
 {
@@ -14,7 +13,6 @@ public sealed class MaterialFamily : Entity, IAuditableEntity
     public Guid CategoryId { get; private set; }
     public string Name { get; private set; }
     public string Code { get; private set; }
-    public Guid BaseUnitId { get; private set; }
     public Status Status { get; private set; }
 
     public DateTime CreatedAtUtc { get; set; }
@@ -22,7 +20,7 @@ public sealed class MaterialFamily : Entity, IAuditableEntity
     public Guid? CreatedBy { get; set; }
     public Guid? UpdatedBy { get; set; }
 
-    public static MaterialFamily Create(Guid id, Guid categoryId, string name, string code, Guid baseUnitId)
+    public static MaterialFamily Create(Guid id, Guid categoryId, string name, string code)
     {
         var family = new MaterialFamily
         {
@@ -30,7 +28,6 @@ public sealed class MaterialFamily : Entity, IAuditableEntity
             CategoryId = categoryId,
             Name = name,
             Code = code,
-            BaseUnitId = baseUnitId,
             Status = Status.Active
         };
 

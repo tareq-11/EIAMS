@@ -44,7 +44,25 @@ internal sealed class SetMaterialStatusCommandHandler(
             return statusResult;
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // CatalogVersion is the material's EF concurrency token, so a status change that raced a
+            // catalog edit is reported as a conflict instead of a server error.
+            int? currentVersion = await context.Materials
+                .AsNoTracking()
+                .Where(m => m.Id == command.MaterialId)
+                .Select(m => (int?)m.CatalogVersion)
+                .SingleOrDefaultAsync(cancellationToken);
+
+            return Result.Failure(MaterialErrors.CatalogVersionMismatch(
+                command.MaterialId,
+                material.CatalogVersion,
+                currentVersion));
+        }
 
         return Result.Success();
     }

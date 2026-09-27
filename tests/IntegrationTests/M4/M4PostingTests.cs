@@ -489,8 +489,7 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
             familyId,
             categoryId,
             $"Family {suffix}",
-            $"F{suffix}",
-            unitId));
+            $"F{suffix}"));
         dbContext.Materials.Add(Material.Create(
             assetMaterialId,
             familyId,
@@ -561,6 +560,12 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
         {
             var lineId = Guid.NewGuid();
             lineIds.Add(lineId);
+            Material material = await dbContext.Materials.SingleAsync(item => item.Id == lineSpec.MaterialId);
+            DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+                material.CatalogVersion,
+                material.MaterialKind,
+                material.TrackingType,
+                material.BaseUnitId).Value;
             Result<DocumentLine> lineResult = DocumentLine.Create(
                 lineId,
                 document.Id,
@@ -574,7 +579,8 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
                 unitPrice: null,
                 batchNumber: null,
                 expiryDate: null,
-                lineSpec.OpeningType);
+                openingType: lineSpec.OpeningType,
+                provenance: provenance);
             lineResult.IsSuccess.ShouldBeTrue();
             dbContext.DocumentLines.Add(lineResult.Value);
         }
@@ -605,6 +611,12 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
             seed.WarehouseId,
             DocumentType.Issue,
             $"ISS-{Guid.NewGuid():N}");
+        Material material = await dbContext.Materials.SingleAsync(item => item.Id == seed.AssetMaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion,
+            material.MaterialKind,
+            material.TrackingType,
+            material.BaseUnitId).Value;
         Result<DocumentLine> lineResult = DocumentLine.Create(
             Guid.NewGuid(),
             document.Id,
@@ -615,7 +627,8 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
             1m,
             null,
             null,
-            null);
+            null,
+            provenance: provenance);
         lineResult.IsSuccess.ShouldBeTrue();
 
         dbContext.WarehouseDocuments.Add(document);
@@ -681,7 +694,8 @@ public sealed class M4PostingTests(IntegrationTestWebAppFactory factory)
                 sourceLine.BatchNumber,
                 sourceLine.ExpiryDate,
                 sourceLine.OpeningType,
-                sourceLine.Id);
+                sourceLine.Id,
+                sourceLine.Provenance);
             reversalLine.IsSuccess.ShouldBeTrue();
             dbContext.DocumentLines.Add(reversalLine.Value);
         }

@@ -34,12 +34,7 @@ internal sealed class CreateMaterialFamilyCommandHandler(
             return Result.Failure<Guid>(MaterialFamilyErrors.CategoryNotFound(command.CategoryId));
         }
 
-        if (!await context.UnitsOfMeasure.AnyAsync(u => u.Id == command.BaseUnitId, cancellationToken))
-        {
-            return Result.Failure<Guid>(MaterialFamilyErrors.BaseUnitNotFound(command.BaseUnitId));
-        }
-
-        var family = MaterialFamily.Create(Guid.NewGuid(), command.CategoryId, command.Name, command.Code, command.BaseUnitId);
+        var family = MaterialFamily.Create(Guid.NewGuid(), command.CategoryId, command.Name, command.Code);
 
         context.MaterialFamilies.Add(family);
 

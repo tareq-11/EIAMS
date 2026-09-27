@@ -2275,6 +2275,14 @@
             }
           },
           {
+            "name": "operation",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Domain.Common.OperationType"
+            }
+          },
+          {
             "name": "type",
             "in": "query",
             "schema": {
@@ -2863,6 +2871,66 @@
             "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/Web.Api.Controllers.ExternalParties.SetExternalPartyStatusController-RequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory-counts/{countId}/cancel": {
+      "post": {
+        "tags": [
+          "Inventory Counts"
+        ],
+        "operationId": "InventoryCounts_CancelInventoryCount_POST_api_v1_inventory_counts_countId_cancel",
+        "parameters": [
+          {
+            "name": "countId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.InventoryCounts.CancelInventoryCountController-RequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.InventoryCounts.CancelInventoryCountController-RequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.InventoryCounts.CancelInventoryCountController-RequestBody"
               }
             }
           }
@@ -4824,6 +4892,126 @@
         }
       }
     },
+    "/api/v1/inventory/balances/low-stock": {
+      "get": {
+        "tags": [
+          "InventoryLedger"
+        ],
+        "operationId": "InventoryBalances_GetLowStockInventoryBalances_GET_api_v1_inventory_balances_low_stock",
+        "parameters": [
+          {
+            "name": "warehouseId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Page",
+            "in": "query",
+            "schema": {
+              "maximum": 21474836,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.InventoryBalances.GetLowStock.LowStockInventoryBalanceResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.InventoryBalances.GetLowStock.LowStockInventoryBalanceResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.InventoryBalances.GetLowStock.LowStockInventoryBalanceResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalog/categories": {
       "post": {
         "tags": [
@@ -6279,6 +6467,54 @@
           }
         }
       },
+      "delete": {
+        "tags": [
+          "MaterialUnitConversions"
+        ],
+        "operationId": "MaterialUnitConversions_Remove_DELETE_api_v1_catalog_materials_materialId_unit_conversions_conversionId",
+        "parameters": [
+          {
+            "name": "materialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              }
+            }
+          }
+        }
+      },
       "put": {
         "tags": [
           "MaterialUnitConversions"
@@ -6323,56 +6559,6 @@
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/catalog/materials/{materialId}/unit-conversions/{materialUnitConversionId}": {
-      "delete": {
-        "tags": [
-          "MaterialUnitConversions"
-        ],
-        "operationId": "MaterialUnitConversions_Remove_DELETE_api_v1_catalog_materials_materialId_unit_conversions_materialUnitConversionId",
-        "parameters": [
-          {
-            "name": "materialId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "materialUnitConversionId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -7076,17 +7262,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.ReceivingInfos.SupplierSuggestionResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.ReceivingInfos.SupplierSuggestionResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.ReceivingInfos.SupplierSuggestionResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
                 }
               }
             }
@@ -8640,6 +8826,66 @@
         }
       }
     },
+    "/api/v1/catalog/units-of-measure/{unitId}/status": {
+      "put": {
+        "tags": [
+          "UnitsOfMeasure"
+        ],
+        "operationId": "UnitsOfMeasure_SetStatus_PUT_api_v1_catalog_units_of_measure_unitId_status",
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.UnitsOfMeasure.SetStatusController-RequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.UnitsOfMeasure.SetStatusController-RequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.UnitsOfMeasure.SetStatusController-RequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/{userId}/role-scope": {
       "get": {
         "tags": [
@@ -8740,125 +8986,6 @@
           }
         }
       },
-      "delete": {
-        "tags": [
-          "UserRoleScopes"
-        ],
-        "operationId": "UserRoleScopes_RemoveAssignment_DELETE_api_v1_admin_users_userId_role_scope",
-        "parameters": [
-          {
-            "name": "userId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
       "put": {
         "tags": [
           "UserRoleScopes"
@@ -8900,17 +9027,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               }
             }
@@ -9018,177 +9145,6 @@
         }
       }
     },
-    "/api/v1/admin/users/{userId}/role-scopes": {
-      "get": {
-        "tags": [
-          "UserRoleScopes"
-        ],
-        "operationId": "UserRoleScopes_GetByUser_GET_api_v1_admin_users_userId_role_scopes",
-        "parameters": [
-          {
-            "name": "userId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "Page",
-            "in": "query",
-            "schema": {
-              "maximum": 21474836,
-              "minimum": 1,
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
-            "name": "PageSize",
-            "in": "query",
-            "schema": {
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer",
-              "format": "int32"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/user-role-scopes": {
-      "post": {
-        "tags": [
-          "UserRoleScopes"
-        ],
-        "operationId": "UserRoleScopes_Grant_POST_api_v1_admin_user_role_scopes",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.UserRoleScopes.GrantController-RequestBody"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.UserRoleScopes.GrantController-RequestBody"
-              }
-            },
-            "application/*\u002Bjson": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.UserRoleScopes.GrantController-RequestBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/admin/user-role-scopes/{userRoleScopeId}": {
-      "delete": {
-        "tags": [
-          "UserRoleScopes"
-        ],
-        "operationId": "UserRoleScopes_Revoke_DELETE_api_v1_admin_user_role_scopes_userRoleScopeId",
-        "parameters": [
-          {
-            "name": "userRoleScopeId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/admin/users": {
       "post": {
         "tags": [
@@ -9220,17 +9176,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Controllers.Users.CreateUserController-ResponseBody, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.Users.Create.CreateUserResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Controllers.Users.CreateUserController-ResponseBody, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.Users.Create.CreateUserResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Controllers.Users.CreateUserController-ResponseBody, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.Users.Create.CreateUserResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               }
             }
@@ -9913,25 +9869,6 @@
           "Users"
         ],
         "operationId": "Users_Logout_POST_api_v1_auth_logout",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.Users.LogoutController-RequestBody"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.Users.LogoutController-RequestBody"
-              }
-            },
-            "application/*\u002Bjson": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.Users.LogoutController-RequestBody"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "OK",
@@ -10160,25 +10097,6 @@
           "Users"
         ],
         "operationId": "Users_RefreshToken_POST_api_v1_auth_refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.Users.RefreshTokenController-RequestBody"
-              }
-            },
-            "text/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.Users.RefreshTokenController-RequestBody"
-              }
-            },
-            "application/*\u002Bjson": {
-              "schema": {
-                "$ref": "#/components/schemas/Web.Api.Controllers.Users.RefreshTokenController-RequestBody"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "OK",
@@ -11241,6 +11159,125 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/warehouse-documents/complete-draft": {
+      "post": {
+        "tags": [
+          "WarehouseDocuments"
+        ],
+        "operationId": "WarehouseDocuments_CompleteWarehouseDocumentDraft_POST_api_v1_warehouse_documents_complete_draft",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftCommand"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftCommand"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.WarehouseDocuments.GetById.WarehouseDocumentDetailsResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.WarehouseDocuments.GetById.WarehouseDocumentDetailsResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.WarehouseDocuments.GetById.WarehouseDocumentDetailsResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "text/plain": {
                 "schema": {
@@ -15113,17 +15150,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.ResourceIdResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               }
             }
@@ -15311,17 +15348,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
                 }
               }
             }
@@ -17484,6 +17521,40 @@
         },
         "additionalProperties": false
       },
+      "Application.DocumentAttachments.AttachmentMutationResponse": {
+        "required": [
+          "attachment",
+          "attachmentId",
+          "documentRowVersion",
+          "malwareScanClean",
+          "malwareScanPolicy",
+          "removed"
+        ],
+        "type": "object",
+        "properties": {
+          "attachmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "documentRowVersion": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "malwareScanPolicy": {
+            "type": "string"
+          },
+          "malwareScanClean": {
+            "type": "boolean"
+          },
+          "attachment": {
+            "$ref": "#/components/schemas/Application.DocumentAttachments.GetList.DocumentAttachmentResponse"
+          }
+        },
+        "additionalProperties": false
+      },
       "Application.DocumentAttachments.GetList.DocumentAttachmentResponse": {
         "required": [
           "attachmentType",
@@ -18041,6 +18112,65 @@
         },
         "additionalProperties": false
       },
+      "Application.InventoryBalances.GetLowStock.LowStockInventoryBalanceResponse": {
+        "required": [
+          "materialCode",
+          "materialId",
+          "materialNameAr",
+          "maxQuantity",
+          "minQuantity",
+          "quantity",
+          "settingId",
+          "warehouseCode",
+          "warehouseId",
+          "warehouseName"
+        ],
+        "type": "object",
+        "properties": {
+          "settingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseCode": {
+            "type": "string"
+          },
+          "warehouseName": {
+            "type": "string"
+          },
+          "materialId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "materialCode": {
+            "type": "string"
+          },
+          "materialNameAr": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "minQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxQuantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "lastUpdatedUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "Application.InventoryCounts.GetById.InventoryCountDetailsResponse": {
         "required": [
           "countType",
@@ -18103,6 +18233,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "abortedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "summary": {
             "$ref": "#/components/schemas/Application.InventoryCounts.GetById.InventoryCountSummaryResponse"
           }
@@ -18159,6 +18294,7 @@
           "activeCounts",
           "hasSoftFreezeWarning",
           "isPostingBlocked",
+          "isProvisional",
           "warehouseId"
         ],
         "type": "object",
@@ -18168,6 +18304,9 @@
             "format": "uuid"
           },
           "isPostingBlocked": {
+            "type": "boolean"
+          },
+          "isProvisional": {
             "type": "boolean"
           },
           "hasSoftFreezeWarning": {
@@ -18276,6 +18415,11 @@
             "nullable": true
           },
           "closedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "abortedAtUtc": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -18405,7 +18549,6 @@
       },
       "Application.MaterialFamilies.GetById.MaterialFamilyResponse": {
         "required": [
-          "baseUnitId",
           "categoryId",
           "code",
           "id",
@@ -18427,10 +18570,6 @@
           },
           "code": {
             "type": "string"
-          },
-          "baseUnitId": {
-            "type": "string",
-            "format": "uuid"
           },
           "status": {
             "type": "string"
@@ -18440,7 +18579,6 @@
       },
       "Application.MaterialFamilies.GetList.MaterialFamilyResponse": {
         "required": [
-          "baseUnitId",
           "categoryId",
           "code",
           "id",
@@ -18462,10 +18600,6 @@
           },
           "code": {
             "type": "string"
-          },
-          "baseUnitId": {
-            "type": "string",
-            "format": "uuid"
           },
           "status": {
             "type": "string"
@@ -18510,6 +18644,7 @@
         "required": [
           "baseUnitId",
           "baseUnitSymbol",
+          "catalogVersion",
           "code",
           "familyId",
           "hasExpiry",
@@ -18553,6 +18688,10 @@
           },
           "requiresAssetNumber": {
             "type": "boolean"
+          },
+          "catalogVersion": {
+            "type": "integer",
+            "format": "int32"
           },
           "attributes": {
             "type": "string",
@@ -18582,6 +18721,7 @@
         "required": [
           "baseUnitId",
           "baseUnitSymbol",
+          "catalogVersion",
           "code",
           "familyId",
           "hasExpiry",
@@ -18625,6 +18765,10 @@
           },
           "requiresAssetNumber": {
             "type": "boolean"
+          },
+          "catalogVersion": {
+            "type": "integer",
+            "format": "int32"
           },
           "attributes": {
             "type": "string",
@@ -18785,6 +18929,27 @@
             "type": "string"
           },
           "description": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.ReceivingInfos.SupplierSuggestionResponse": {
+        "required": [
+          "id",
+          "nameAr"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nameAr": {
+            "type": "string"
+          },
+          "code": {
             "type": "string",
             "nullable": true
           }
@@ -19398,6 +19563,7 @@
         "required": [
           "id",
           "name",
+          "status",
           "symbol",
           "unitType"
         ],
@@ -19415,6 +19581,9 @@
           },
           "unitType": {
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Domain.Common.Status"
           }
         },
         "additionalProperties": false
@@ -19423,6 +19592,7 @@
         "required": [
           "id",
           "name",
+          "status",
           "symbol",
           "unitType"
         ],
@@ -19440,6 +19610,9 @@
           },
           "unitType": {
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Domain.Common.Status"
           }
         },
         "additionalProperties": false
@@ -19449,6 +19622,7 @@
           "id",
           "roleId",
           "roleName",
+          "rowVersion",
           "scopeType"
         ],
         "type": "object",
@@ -19465,12 +19639,49 @@
             "type": "string"
           },
           "scopeType": {
-            "type": "string"
+            "$ref": "#/components/schemas/Domain.Common.UserAssignmentScopeType"
           },
           "scopeId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.Users.Create.CreateUserResponse": {
+        "required": [
+          "assignment",
+          "email",
+          "firstName",
+          "id",
+          "lastName",
+          "username"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "assignment": {
+            "$ref": "#/components/schemas/Application.UserRoleScopes.GetByUser.UserRoleScopeResponse"
           }
         },
         "additionalProperties": false
@@ -19591,11 +19802,9 @@
       },
       "Application.Users.GetSession.UserSessionResponse": {
         "required": [
-          "activeRoles",
           "activeScope",
           "permissionCodes",
           "role",
-          "scopeState",
           "user"
         ],
         "type": "object",
@@ -19608,15 +19817,6 @@
           },
           "activeScope": {
             "$ref": "#/components/schemas/Application.Users.GetSession.UserSessionScopeDto"
-          },
-          "scopeState": {
-            "type": "string"
-          },
-          "activeRoles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Application.Users.GetSession.UserSessionRoleDto"
-            }
           },
           "permissionCodes": {
             "type": "array",
@@ -19656,7 +19856,7 @@
         "type": "object",
         "properties": {
           "scopeType": {
-            "type": "string"
+            "$ref": "#/components/schemas/Domain.Common.UserAssignmentScopeType"
           },
           "scopeId": {
             "type": "string",
@@ -19755,6 +19955,190 @@
             "format": "uuid"
           },
           "operationType": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.AdjustmentDraftDetails": {
+        "required": [
+          "adjustmentKind",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "adjustmentKind": {
+            "$ref": "#/components/schemas/Domain.Common.AdjustmentKind"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftCommand": {
+        "required": [
+          "documentType",
+          "lines",
+          "warehouseId"
+        ],
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentType": {
+            "$ref": "#/components/schemas/Domain.Common.DocumentType"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftLine"
+            }
+          },
+          "receivingInfo": {
+            "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.ReceivingDraftDetails"
+          },
+          "issueTo": {
+            "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.IssueDraftDetails"
+          },
+          "transferInfo": {
+            "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.TransferDraftDetails"
+          },
+          "returnInfo": {
+            "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.ReturnDraftDetails"
+          },
+          "adjustmentInfo": {
+            "$ref": "#/components/schemas/Application.WarehouseDocuments.CompleteDraft.AdjustmentDraftDetails"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.CompleteWarehouseDocumentDraftLine": {
+        "required": [
+          "materialId"
+        ],
+        "type": "object",
+        "properties": {
+          "materialId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "difference": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "unitId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "unitPrice": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "batchNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "expiryDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "openingType": {
+            "$ref": "#/components/schemas/Domain.Common.OpeningType"
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "adjustmentReason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.IssueDraftDetails": {
+        "required": [
+          "issueReason",
+          "recipientId",
+          "recipientType"
+        ],
+        "type": "object",
+        "properties": {
+          "recipientType": {
+            "$ref": "#/components/schemas/Domain.Common.PartyType"
+          },
+          "recipientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issueReason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.ReceivingDraftDetails": {
+        "required": [
+          "supplierPartyId"
+        ],
+        "type": "object",
+        "properties": {
+          "supplierPartyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supplierInvoiceRef": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.ReturnDraftDetails": {
+        "required": [
+          "originalIssueDocumentId",
+          "returnReason"
+        ],
+        "type": "object",
+        "properties": {
+          "originalIssueDocumentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "returnReason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Application.WarehouseDocuments.CompleteDraft.TransferDraftDetails": {
+        "required": [
+          "destinationWarehouseId",
+          "transferReason"
+        ],
+        "type": "object",
+        "properties": {
+          "destinationWarehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "transferReason": {
             "type": "string"
           }
         },
@@ -20730,7 +21114,8 @@
           "Planned",
           "InProgress",
           "Completed",
-          "Closed"
+          "Closed",
+          "Aborted"
         ],
         "type": "string"
       },
@@ -20783,18 +21168,7 @@
       },
       "Domain.Common.ReceivingType": {
         "enum": [
-          "Supplier",
-          "Transfer",
-          "Return"
-        ],
-        "type": "string"
-      },
-      "Domain.Common.ScopeType": {
-        "enum": [
-          "Enterprise",
-          "Site",
-          "OrganizationalUnit",
-          "Warehouse"
+          "Supplier"
         ],
         "type": "string"
       },
@@ -20805,11 +21179,34 @@
         ],
         "type": "string"
       },
+      "Domain.Common.UserAssignmentScopeType": {
+        "enum": [
+          "Enterprise",
+          "Site",
+          "Warehouse"
+        ],
+        "type": "string"
+      },
+      "Domain.Materials.MaterialKind": {
+        "enum": [
+          "Consumable",
+          "Durable",
+          "Asset"
+        ],
+        "type": "string"
+      },
       "Domain.Materials.MaterialStatus": {
         "enum": [
           "Active",
           "Inactive",
           "Archived"
+        ],
+        "type": "string"
+      },
+      "Domain.Materials.TrackingType": {
+        "enum": [
+          "Quantity",
+          "Serial"
         ],
         "type": "string"
       },
@@ -21218,6 +21615,19 @@
         },
         "additionalProperties": false
       },
+      "Web.Api.Controllers.InventoryCounts.CancelInventoryCountController-RequestBody": {
+        "required": [
+          "expectedRowVersion"
+        ],
+        "type": "object",
+        "properties": {
+          "expectedRowVersion": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "Web.Api.Controllers.InventoryCounts.ChangeInventoryCountStatusController-RequestBody": {
         "required": [
           "expectedRowVersion",
@@ -21520,7 +21930,6 @@
       },
       "Web.Api.Controllers.MaterialFamilies.CreateMaterialFamilyController-RequestBody": {
         "required": [
-          "baseUnitId",
           "categoryId",
           "code",
           "name"
@@ -21536,10 +21945,6 @@
           },
           "code": {
             "type": "string"
-          },
-          "baseUnitId": {
-            "type": "string",
-            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -21640,12 +22045,10 @@
             "type": "string"
           },
           "materialKind": {
-            "type": "integer",
-            "format": "int32"
+            "$ref": "#/components/schemas/Domain.Materials.MaterialKind"
           },
           "trackingType": {
-            "type": "integer",
-            "format": "int32"
+            "$ref": "#/components/schemas/Domain.Materials.TrackingType"
           },
           "hasExpiry": {
             "type": "boolean"
@@ -21672,6 +22075,7 @@
       },
       "Web.Api.Controllers.Materials.UpdateMaterialController-RequestBody": {
         "required": [
+          "expectedCatalogVersion",
           "hasExpiry",
           "materialKind",
           "nameAr",
@@ -21687,12 +22091,10 @@
             "nullable": true
           },
           "materialKind": {
-            "type": "integer",
-            "format": "int32"
+            "$ref": "#/components/schemas/Domain.Materials.MaterialKind"
           },
           "trackingType": {
-            "type": "integer",
-            "format": "int32"
+            "$ref": "#/components/schemas/Domain.Materials.TrackingType"
           },
           "hasExpiry": {
             "type": "boolean"
@@ -21700,6 +22102,10 @@
           "attributes": {
             "type": "string",
             "nullable": true
+          },
+          "expectedCatalogVersion": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -21804,12 +22210,13 @@
         "required": [
           "expectedRowVersion",
           "receivingType",
-          "supplierRef"
+          "supplierPartyId"
         ],
         "type": "object",
         "properties": {
-          "supplierRef": {
-            "type": "string"
+          "supplierPartyId": {
+            "type": "string",
+            "format": "uuid"
           },
           "supplierInvoiceRef": {
             "type": "string",
@@ -21877,7 +22284,7 @@
           "allowedScopeTypes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Domain.Common.ScopeType"
+              "$ref": "#/components/schemas/Domain.Common.UserAssignmentScopeType"
             }
           }
         },
@@ -21900,7 +22307,7 @@
           "allowedScopeTypes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Domain.Common.ScopeType"
+              "$ref": "#/components/schemas/Domain.Common.UserAssignmentScopeType"
             }
           }
         },
@@ -22010,6 +22417,19 @@
         },
         "additionalProperties": false
       },
+      "Web.Api.Controllers.UnitsOfMeasure.SetStatusController-RequestBody": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "Web.Api.Controllers.UnitsOfMeasure.UpdateController-RequestBody": {
         "required": [
           "name",
@@ -22030,35 +22450,9 @@
         },
         "additionalProperties": false
       },
-      "Web.Api.Controllers.UserRoleScopes.GrantController-RequestBody": {
-        "required": [
-          "roleId",
-          "scopeType",
-          "userId"
-        ],
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "roleId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "scopeType": {
-            "$ref": "#/components/schemas/Domain.Common.ScopeType"
-          },
-          "scopeId": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "Web.Api.Controllers.UserRoleScopes.ReplaceAssignmentController-RequestBody": {
         "required": [
+          "expectedRowVersion",
           "roleId",
           "scopeType"
         ],
@@ -22069,12 +22463,16 @@
             "format": "uuid"
           },
           "scopeType": {
-            "$ref": "#/components/schemas/Domain.Common.ScopeType"
+            "$ref": "#/components/schemas/Domain.Common.UserAssignmentScopeType"
           },
           "scopeId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "expectedRowVersion": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -22085,6 +22483,8 @@
           "firstName",
           "lastName",
           "password",
+          "roleId",
+          "scopeType",
           "username"
         ],
         "type": "object",
@@ -22103,19 +22503,18 @@
           },
           "password": {
             "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Web.Api.Controllers.Users.CreateUserController-ResponseBody": {
-        "required": [
-          "id"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
+          },
+          "roleId": {
             "type": "string",
             "format": "uuid"
+          },
+          "scopeType": {
+            "$ref": "#/components/schemas/Domain.Common.UserAssignmentScopeType"
+          },
+          "scopeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -22145,16 +22544,6 @@
           },
           "password": {
             "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Web.Api.Controllers.Users.LogoutController-RequestBody": {
-        "type": "object",
-        "properties": {
-          "refreshToken": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -22196,16 +22585,6 @@
           "id": {
             "type": "string",
             "format": "uuid"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Web.Api.Controllers.Users.RefreshTokenController-RequestBody": {
-        "type": "object",
-        "properties": {
-          "refreshToken": {
-            "type": "string",
-            "nullable": true
           }
         },
         "additionalProperties": false
@@ -22575,10 +22954,14 @@
         "type": "object",
         "properties": {
           "page": {
+            "maximum": 2147483647,
+            "minimum": 1,
             "type": "integer",
             "format": "int32"
           },
           "page_size": {
+            "maximum": 2147483647,
+            "minimum": 1,
             "type": "integer",
             "format": "int32"
           },
@@ -22715,6 +23098,28 @@
           },
           "data": {
             "$ref": "#/components/schemas/Application.AuditLogs.AuditLogDetailsResponse"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Web.Api.Infrastructure.ApiResponse\u00601[[Application.DocumentAttachments.AttachmentMutationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]": {
+        "required": [
+          "meta",
+          "success"
+        ],
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Application.DocumentAttachments.AttachmentMutationResponse"
           },
           "pagination": {
             "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
@@ -23111,6 +23516,28 @@
           },
           "data": {
             "$ref": "#/components/schemas/Application.UserRoleScopes.GetByUser.UserRoleScopeResponse"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Web.Api.Infrastructure.ApiResponse\u00601[[Application.Users.Create.CreateUserResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]": {
+        "required": [
+          "meta",
+          "success"
+        ],
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/Application.Users.Create.CreateUserResponse"
           },
           "pagination": {
             "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
@@ -23613,6 +24040,32 @@
         },
         "additionalProperties": false
       },
+      "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.InventoryBalances.GetLowStock.LowStockInventoryBalanceResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
+        "required": [
+          "meta",
+          "success"
+        ],
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application.InventoryBalances.GetLowStock.LowStockInventoryBalanceResponse"
+            },
+            "nullable": true
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
+          }
+        },
+        "additionalProperties": false
+      },
       "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.InventoryCounts.GetLines.InventoryCountLineResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
         "required": [
           "meta",
@@ -23861,6 +24314,32 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Application.Permissions.GetList.PermissionResponse"
+            },
+            "nullable": true
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.ReceivingInfos.SupplierSuggestionResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
+        "required": [
+          "meta",
+          "success"
+        ],
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application.ReceivingInfos.SupplierSuggestionResponse"
             },
             "nullable": true
           },
@@ -24185,32 +24664,6 @@
         },
         "additionalProperties": false
       },
-      "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.UserRoleScopes.GetByUser.UserRoleScopeResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
-        "required": [
-          "meta",
-          "success"
-        ],
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Application.UserRoleScopes.GetByUser.UserRoleScopeResponse"
-            },
-            "nullable": true
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
-          }
-        },
-        "additionalProperties": false
-      },
       "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[Application.Users.GetList.UserAdministrationResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
         "required": [
           "meta",
@@ -24367,32 +24820,6 @@
         },
         "additionalProperties": false
       },
-      "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.IReadOnlyList\u00601[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
-        "required": [
-          "meta",
-          "success"
-        ],
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
-          }
-        },
-        "additionalProperties": false
-      },
       "Web.Api.Infrastructure.ApiResponse\u00601[[System.Collections.Generic.List\u00601[[Application.DocumentAttachments.GetList.DocumentAttachmentResponse, Application, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]], System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]": {
         "required": [
           "meta",
@@ -24409,28 +24836,6 @@
               "$ref": "#/components/schemas/Application.DocumentAttachments.GetList.DocumentAttachmentResponse"
             },
             "nullable": true
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponseMeta"
-          }
-        },
-        "additionalProperties": false
-      },
-      "Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Controllers.Users.CreateUserController-ResponseBody, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]": {
-        "required": [
-          "meta",
-          "success"
-        ],
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "$ref": "#/components/schemas/Web.Api.Controllers.Users.CreateUserController-ResponseBody"
           },
           "pagination": {
             "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiPagination"
@@ -24539,10 +24944,6 @@
         "properties": {
           "accessToken": {
             "type": "string"
-          },
-          "refreshToken": {
-            "type": "string",
-            "nullable": true
           },
           "session": {
             "$ref": "#/components/schemas/Application.Users.GetSession.UserSessionResponse"

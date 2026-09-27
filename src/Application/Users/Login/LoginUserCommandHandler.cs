@@ -2,9 +2,9 @@ using Application.Abstractions.Audit;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Users.GetSession;
 using Domain.AuditLogs;
 using Domain.Users;
-using Application.Users.GetSession;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -30,12 +30,11 @@ internal sealed class LoginUserCommandHandler(
     {
         string username = User.NormalizeUsername(command.Username);
         long phaseStartedAt = LoginMetrics.Start();
-        // Primary lookup is by canonical username. Canonical email remains a supported
-        // compatibility credential for established clients and legacy accounts.
+        // Username is the sole authentication identifier. Email remains profile/contact data
+        // and is deliberately never consulted by this credential lookup.
         LoginCredentialSnapshot? credentials = await context.Users
             .AsNoTracking()
-            .Where(user => user.Username == username || user.Email == username)
-            .OrderBy(user => user.Username == username ? 0 : 1)
+            .Where(user => user.Username == username)
             .Select(user => new LoginCredentialSnapshot(user.Id, user.PasswordHash))
             .FirstOrDefaultAsync(cancellationToken);
         LoginMetrics.Record("user_lookup", phaseStartedAt);

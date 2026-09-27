@@ -8,6 +8,7 @@ internal sealed class UpdateMaterialCommandValidator : AbstractValidator<UpdateM
     public UpdateMaterialCommandValidator()
     {
         RuleFor(c => c.MaterialId).NotEmpty();
+        RuleFor(c => c.ExpectedCatalogVersion).GreaterThan(0);
         RuleFor(c => c.NameAr).NotEmpty().MaximumLength(500);
         RuleFor(c => c.NameEn).MaximumLength(500);
         RuleFor(c => c.MaterialKind).IsInEnum();

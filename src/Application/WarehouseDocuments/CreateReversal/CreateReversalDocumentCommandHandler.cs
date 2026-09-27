@@ -59,18 +59,6 @@ internal sealed class CreateReversalDocumentCommandHandler(
             return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
         }
 
-        bool canReverse = await scopeAuthorizationService.HasPermissionInScopeAsync(
-            userContext.UserId,
-            PermissionCodes.WarehouseDocuments.Reverse,
-            ScopeType.Warehouse,
-            source.WarehouseId,
-            cancellationToken);
-
-        if (!canReverse)
-        {
-            return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.SourceDocumentId));
-        }
-
         IdempotencyRequest? idempotencyRequest = command.IdempotencyKey.HasValue
             ? IdempotencyRequest.Create(
                 command.IdempotencyKey.Value,
@@ -125,7 +113,7 @@ internal sealed class CreateReversalDocumentCommandHandler(
 
         Warehouse warehouse = await context.Warehouses.SingleAsync(w => w.Id == source.WarehouseId, cancellationToken);
 
-        Result<string> referenceResult = await referenceNumberGenerator.AllocateAsync(
+        Result<AllocatedDocumentReference> referenceResult = await referenceNumberGenerator.AllocateIdentityAsync(
             warehouse.SiteId,
             source.DocumentType,
             cancellationToken);
@@ -139,8 +127,11 @@ internal sealed class CreateReversalDocumentCommandHandler(
             Guid.NewGuid(),
             source.WarehouseId,
             source.DocumentType,
-            referenceResult.Value,
-            source.Id);
+            referenceResult.Value.ReferenceNumber,
+            source.Id,
+            referenceResult.Value.SiteId,
+            referenceResult.Value.Year,
+            referenceResult.Value.Sequence);
 
         context.WarehouseDocuments.Add(reversal);
 
@@ -164,7 +155,8 @@ internal sealed class CreateReversalDocumentCommandHandler(
                 sourceLine.BatchNumber,
                 sourceLine.ExpiryDate,
                 sourceLine.OpeningType,
-                sourceLine.Id);
+                sourceLine.Id,
+                sourceLine.Provenance);
 
             if (lineResult.IsFailure)
             {

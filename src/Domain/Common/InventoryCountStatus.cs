@@ -5,5 +5,6 @@ public enum InventoryCountStatus
     Planned,
     InProgress,
     Completed,
-    Closed
+    Closed,
+    Aborted
 }

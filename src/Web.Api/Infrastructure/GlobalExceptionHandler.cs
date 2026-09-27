@@ -31,15 +31,14 @@ internal sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> log
         }
 
         logger.LogError(
+            exception,
             "Unhandled exception of type {ExceptionType} occurred for request {RequestId}",
             exception.GetType().Name,
             ApiRequestContext.GetRequestId(httpContext));
 
-        IResult result = ApiResults.Error(
+        IResult result = ApiResults.ErrorFromStatusCode(
             httpContext,
-            StatusCodes.Status500InternalServerError,
-            "SERVER_FAILURE",
-            "An unexpected server error occurred.");
+            StatusCodes.Status500InternalServerError);
 
         await result.ExecuteAsync(httpContext);
 

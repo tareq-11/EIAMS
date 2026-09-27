@@ -872,9 +872,44 @@ namespace Infrastructure.Migrations
                         .HasColumnType("numeric(18,3)")
                         .HasColumnName("quantity");
 
+                    b.Property<Guid?>("SourceBaseUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_base_unit_id");
+
+                    b.Property<decimal?>("SourceConversionFactor")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("source_conversion_factor");
+
+                    b.Property<Guid?>("SourceConversionFromUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_conversion_from_unit_id");
+
+                    b.Property<Guid?>("SourceConversionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_conversion_id");
+
+                    b.Property<Guid?>("SourceConversionToUnitId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_conversion_to_unit_id");
+
                     b.Property<Guid?>("SourceLineId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_line_id");
+
+                    b.Property<string>("SourceMaterialKind")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("source_material_kind");
+
+                    b.Property<int?>("SourceMaterialVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_material_version");
+
+                    b.Property<string>("SourceTrackingType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("source_tracking_type");
 
                     b.Property<Guid?>("UnitId")
                         .HasColumnType("uuid")
@@ -911,6 +946,9 @@ namespace Infrastructure.Migrations
                     b.HasIndex("MaterialId")
                         .HasDatabaseName("ix_document_lines_material_id");
 
+                    b.HasIndex("SourceConversionId")
+                        .HasDatabaseName("ix_document_lines_source_conversion_id");
+
                     b.HasIndex("SourceLineId")
                         .IsUnique()
                         .HasDatabaseName("ix_document_lines_source_line_id")
@@ -922,6 +960,9 @@ namespace Infrastructure.Migrations
                     b.HasIndex("DocumentId", "MaterialId")
                         .HasDatabaseName("ix_document_lines_document_id_material_id");
 
+                    b.HasIndex("DocumentId", "SourceMaterialVersion")
+                        .HasDatabaseName("ix_document_lines_document_id_source_material_version");
+
                     b.ToTable("document_lines", "public", t =>
                         {
                             t.HasCheckConstraint("ck_document_lines_base_quantity_positive", "base_quantity > 0");
@@ -931,6 +972,14 @@ namespace Infrastructure.Migrations
                             t.HasCheckConstraint("ck_document_lines_opening_type_valid", "opening_type IS NULL OR opening_type IN ('Initial', 'Correction')");
 
                             t.HasCheckConstraint("ck_document_lines_quantity_positive", "quantity > 0");
+
+                            t.HasCheckConstraint("ck_document_lines_source_conversion_complete", "(source_conversion_id IS NULL AND source_conversion_from_unit_id IS NULL AND source_conversion_to_unit_id IS NULL AND source_conversion_factor IS NULL) OR (source_conversion_id IS NOT NULL AND source_conversion_from_unit_id IS NOT NULL AND source_conversion_to_unit_id IS NOT NULL AND source_conversion_factor IS NOT NULL AND source_conversion_factor > 0)");
+
+                            t.HasCheckConstraint("ck_document_lines_source_conversion_required", "source_material_version IS NULL OR source_base_unit_id IS NULL OR unit_id IS NULL OR unit_id = source_base_unit_id OR source_conversion_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_document_lines_source_material_version_positive", "source_material_version IS NULL OR source_material_version > 0");
+
+                            t.HasCheckConstraint("ck_document_lines_source_provenance_complete", "(source_material_version IS NULL AND source_material_kind IS NULL AND source_tracking_type IS NULL AND source_base_unit_id IS NULL) OR (source_material_version IS NOT NULL AND source_material_version > 0 AND source_material_kind IS NOT NULL AND source_material_kind IN ('Consumable', 'Durable', 'Asset') AND source_tracking_type IS NOT NULL AND source_tracking_type IN ('Quantity', 'Serial') AND source_base_unit_id IS NOT NULL AND source_base_unit_id <> '00000000-0000-0000-0000-000000000000'::uuid)");
 
                             t.HasCheckConstraint("ck_document_lines_unit_price_non_negative", "unit_price >= 0");
                         });
@@ -950,12 +999,6 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<string>("DocumentType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("document_type");
 
                     b.Property<int>("LastSequence")
                         .HasColumnType("integer")
@@ -980,14 +1023,12 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_document_sequences");
 
-                    b.HasIndex("SiteId", "DocumentType", "Year")
+                    b.HasIndex("SiteId", "Year")
                         .IsUnique()
-                        .HasDatabaseName("ix_document_sequences_site_id_document_type_year");
+                        .HasDatabaseName("ix_document_sequences_site_id_year");
 
                     b.ToTable("document_sequences", "public", t =>
                         {
-                            t.HasCheckConstraint("ck_document_sequences_document_type_valid", "document_type IN ('Receiving', 'Issue', 'Transfer', 'Adjustment', 'Opening', 'Return')");
-
                             t.HasCheckConstraint("ck_document_sequences_last_sequence_non_negative", "last_sequence >= 0");
 
                             t.HasCheckConstraint("ck_document_sequences_year_valid", "year >= 2000");
@@ -1609,6 +1650,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTime?>("AbortedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("aborted_at_utc");
+
                     b.Property<DateTime?>("ClosedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("closed_at_utc");
@@ -1701,6 +1746,8 @@ namespace Infrastructure.Migrations
 
                     b.ToTable("inventory_counts", "public", t =>
                         {
+                            t.HasCheckConstraint("ck_inventory_counts_aborted_timestamp", "(status = 'Aborted' AND aborted_at_utc IS NOT NULL AND aborted_at_utc >= COALESCE(started_at_utc, planned_at_utc)) OR (status <> 'Aborted' AND aborted_at_utc IS NULL)");
+
                             t.HasCheckConstraint("ck_inventory_counts_freeze_valid", "freeze_policy IN ('HardFreeze', 'SoftFreeze', 'NoFreeze')");
 
                             t.HasCheckConstraint("ck_inventory_counts_row_version_positive", "row_version > 0");
@@ -1709,7 +1756,7 @@ namespace Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_inventory_counts_scope_valid", "scope_type IN ('EntireWarehouse', 'MaterialDomain', 'SelectedMaterials')");
 
-                            t.HasCheckConstraint("ck_inventory_counts_status_valid", "status IN ('Planned', 'InProgress', 'Completed', 'Closed')");
+                            t.HasCheckConstraint("ck_inventory_counts_status_valid", "status IN ('Planned', 'InProgress', 'Completed', 'Closed', 'Aborted')");
 
                             t.HasCheckConstraint("ck_inventory_counts_timestamps", "(started_at_utc IS NULL OR started_at_utc >= planned_at_utc) AND (completed_at_utc IS NULL OR (started_at_utc IS NOT NULL AND completed_at_utc >= started_at_utc)) AND (closed_at_utc IS NULL OR (completed_at_utc IS NOT NULL AND closed_at_utc >= completed_at_utc))");
 
@@ -2018,10 +2065,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("BaseUnitId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("base_unit_id");
-
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid")
                         .HasColumnName("category_id");
@@ -2062,9 +2105,6 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_material_families");
-
-                    b.HasIndex("BaseUnitId")
-                        .HasDatabaseName("ix_material_families_base_unit_id");
 
                     b.HasIndex("CategoryId")
                         .HasDatabaseName("ix_material_families_category_id");
@@ -2146,6 +2186,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("base_unit_id");
 
+                    b.Property<int>("CatalogVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("catalog_version");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2185,10 +2230,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("name_en");
 
-                    b.Property<bool>("RequiresAssetNumber")
-                        .HasColumnType("boolean")
-                        .HasColumnName("requires_asset_number");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2222,7 +2263,10 @@ namespace Infrastructure.Migrations
                     b.HasIndex("FamilyId")
                         .HasDatabaseName("ix_materials_family_id");
 
-                    b.ToTable("materials", "public");
+                    b.ToTable("materials", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_materials_catalog_version_positive", "catalog_version > 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.OrganizationalUnits.OrganizationalUnit", b =>
@@ -2876,11 +2920,6 @@ namespace Infrastructure.Migrations
                         new
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000126"),
-                            ScopeType = "OrganizationalUnit"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000126"),
                             ScopeType = "Warehouse"
                         },
                         new
@@ -2892,11 +2931,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000127"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000127"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -2916,11 +2950,6 @@ namespace Infrastructure.Migrations
                         new
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000128"),
-                            ScopeType = "OrganizationalUnit"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000128"),
                             ScopeType = "Warehouse"
                         },
                         new
@@ -2932,11 +2961,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000129"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000129"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -2952,11 +2976,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000130"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000130"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -2972,11 +2991,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000132"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000132"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -2992,11 +3006,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000133"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000133"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3012,11 +3021,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000134"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000134"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3032,11 +3036,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000135"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000135"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3052,11 +3051,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000136"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000136"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3072,11 +3066,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000137"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000137"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3092,11 +3081,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000115"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000115"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3112,11 +3096,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000122"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000122"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3261,11 +3240,6 @@ namespace Infrastructure.Migrations
                         new
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000201"),
-                            ScopeType = "OrganizationalUnit"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000201"),
                             ScopeType = "Warehouse"
                         },
                         new
@@ -3277,11 +3251,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000202"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000202"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3301,11 +3270,6 @@ namespace Infrastructure.Migrations
                         new
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000204"),
-                            ScopeType = "OrganizationalUnit"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000204"),
                             ScopeType = "Warehouse"
                         },
                         new
@@ -3317,11 +3281,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000209"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000209"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3337,11 +3296,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000211"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000211"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3357,11 +3311,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000212"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000212"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3377,11 +3326,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000213"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000213"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3397,11 +3341,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000221"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000221"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -3417,11 +3356,6 @@ namespace Infrastructure.Migrations
                         {
                             PermissionId = new Guid("00000000-0000-0000-0000-000000000229"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            PermissionId = new Guid("00000000-0000-0000-0000-000000000229"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -4083,6 +4017,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("supplier_invoice_ref");
 
+                    b.Property<Guid?>("SupplierPartyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supplier_party_id");
+
                     b.Property<string>("SupplierRef")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -4100,9 +4038,12 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_receiving_info");
 
+                    b.HasIndex("SupplierPartyId")
+                        .HasDatabaseName("ix_receiving_info_supplier_party_id");
+
                     b.ToTable("receiving_info", "public", t =>
                         {
-                            t.HasCheckConstraint("ck_receiving_info_receiving_type_valid", "receiving_type IN ('Supplier', 'Transfer', 'Return')");
+                            t.HasCheckConstraint("ck_receiving_info_receiving_type_valid", "receiving_type = 'Supplier'");
 
                             t.HasCheckConstraint("ck_receiving_info_supplier_ref_not_blank", "length(btrim(supplier_ref)) > 0");
                         });
@@ -4266,11 +4207,6 @@ namespace Infrastructure.Migrations
                         {
                             RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
                             ScopeType = "Site"
-                        },
-                        new
-                        {
-                            RoleId = new Guid("00000000-0000-0000-0000-000000000003"),
-                            ScopeType = "OrganizationalUnit"
                         },
                         new
                         {
@@ -5215,6 +5151,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
                     b.Property<string>("Symbol")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -5260,6 +5202,13 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("row_version");
+
                     b.Property<Guid?>("ScopeId")
                         .HasColumnType("uuid")
                         .HasColumnName("scope_id");
@@ -5294,7 +5243,7 @@ namespace Infrastructure.Migrations
 
                     b.ToTable("user_role_scopes", "public", t =>
                         {
-                            t.HasCheckConstraint("ck_user_role_scopes_scope_id", "(scope_type = 'Enterprise' AND scope_id IS NULL) OR (scope_type IN ('Site', 'OrganizationalUnit', 'Warehouse') AND scope_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_user_role_scopes_scope_id", "(scope_type = 'Enterprise' AND scope_id IS NULL) OR (scope_type IN ('Site', 'Warehouse') AND scope_id IS NOT NULL)");
                         });
                 });
 
@@ -5585,6 +5534,18 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("posted_by");
 
+                    b.Property<int?>("ReferenceSequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("reference_sequence");
+
+                    b.Property<Guid?>("ReferenceSiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reference_site_id");
+
+                    b.Property<int?>("ReferenceYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("reference_year");
+
                     b.Property<Guid?>("ReversalOfDocumentId")
                         .HasColumnType("uuid")
                         .HasColumnName("reversal_of_document_id");
@@ -5637,6 +5598,11 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_warehouse_documents_system_reference_number");
 
+                    b.HasIndex("ReferenceSiteId", "ReferenceYear", "ReferenceSequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_warehouse_documents_reference_site_id_reference_year_refere")
+                        .HasFilter("reference_site_id IS NOT NULL AND reference_year IS NOT NULL AND reference_sequence IS NOT NULL");
+
                     b.HasIndex("WarehouseId", "DocumentStatus", "CreatedAtUtc")
                         .HasDatabaseName("ix_warehouse_documents_warehouse_id_document_status_created_at");
 
@@ -5649,6 +5615,12 @@ namespace Infrastructure.Migrations
                             t.HasCheckConstraint("ck_warehouse_documents_paper_document_year_valid", "paper_document_year IS NULL OR paper_document_year BETWEEN 1900 AND 9999");
 
                             t.HasCheckConstraint("ck_warehouse_documents_posted_metadata", "(document_status IN ('Posted', 'Reversed') AND posted_by IS NOT NULL AND posted_at_utc IS NOT NULL AND signed_copy_attachment_id IS NOT NULL) OR (document_status NOT IN ('Posted', 'Reversed') AND posted_by IS NULL AND posted_at_utc IS NULL)");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_reference_identity_complete", "(reference_site_id IS NULL AND reference_year IS NULL AND reference_sequence IS NULL) OR (reference_site_id IS NOT NULL AND reference_year IS NOT NULL AND reference_sequence IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_reference_identity_values_valid", "reference_year IS NULL OR reference_year BETWEEN 2000 AND 9999");
+
+                            t.HasCheckConstraint("ck_warehouse_documents_reference_sequence_positive", "reference_sequence IS NULL OR reference_sequence > 0");
 
                             t.HasCheckConstraint("ck_warehouse_documents_row_version_positive", "row_version > 0");
                         });
@@ -6270,13 +6242,6 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.MaterialFamilies.MaterialFamily", b =>
                 {
-                    b.HasOne("Domain.UnitsOfMeasure.UnitOfMeasure", null)
-                        .WithMany()
-                        .HasForeignKey("BaseUnitId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_material_families_units_of_measure_base_unit_id");
-
                     b.HasOne("Domain.MaterialCategories.MaterialCategory", null)
                         .WithMany()
                         .HasForeignKey("CategoryId")
@@ -6360,6 +6325,12 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_receiving_info_warehouse_documents_document_id");
+
+                    b.HasOne("Domain.ExternalParties.ExternalParty", null)
+                        .WithMany()
+                        .HasForeignKey("SupplierPartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_receiving_info_external_parties_supplier_party_id");
                 });
 
             modelBuilder.Entity("Domain.ReturnInfos.ReturnInfo", b =>
@@ -6579,6 +6550,12 @@ namespace Infrastructure.Migrations
                         .HasForeignKey("PostedBy")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_warehouse_documents_users_posted_by");
+
+                    b.HasOne("Domain.Sites.Site", null)
+                        .WithMany()
+                        .HasForeignKey("ReferenceSiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_warehouse_documents_sites_reference_site_id");
 
                     b.HasOne("Domain.WarehouseDocuments.WarehouseDocument", null)
                         .WithMany()

@@ -5,6 +5,7 @@ using Application.Abstractions.Authorization;
 using Application.Counterparts.GetList;
 using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SharedKernel;
 using Web.Api.Infrastructure;
 
@@ -21,12 +22,13 @@ public sealed class GetCounterpartsController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<CounterpartResolution>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.WarehouseDocuments.View)]
     public async Task<IResult> Handle(
-        string? search,
-        PartyType? type,
+        [FromQuery] string? search,
+        [FromQuery, BindRequired] OperationType operation,
+        [FromQuery] PartyType? type,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {
-        var query = new GetCounterpartsQuery(search, type, pagination.Page, pagination.PageSize);
+        var query = new GetCounterpartsQuery(search, operation, type, pagination.Page, pagination.PageSize);
         Result<PagedResult<CounterpartResolution>> result = await handler.Handle(query, cancellationToken);
         return result.ToPaginatedApiResponse(HttpContext);
     }

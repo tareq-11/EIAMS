@@ -1,28 +1,14 @@
-using System.Text.Json.Serialization;
 using Application.Users;
 using Application.Users.GetSession;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace Web.Api.Infrastructure;
 
-public sealed class RefreshTokenTransportOptions
+public sealed class RefreshTokenTransport
 {
-    internal const string SectionName = "Authentication:RefreshTokenTransport";
-
-    public bool AllowRequestBody { get; init; } = true;
-
-    public bool IncludeInResponseBody { get; init; } = true;
-
-    public string[] AllowedCookieOrigins { get; init; } = [];
-}
-
-public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
-{
-    internal RefreshTokenResolution Resolve(HttpContext context, string? bodyToken)
+    internal RefreshTokenResolution Resolve(HttpContext context)
     {
-        string? normalizedBodyToken = Normalize(bodyToken);
-        string? cookieToken = GetCookieToken(context);
-
-        if (normalizedBodyToken is not null && !options.AllowRequestBody)
+        if (RequestCanHaveBody(context))
         {
             return RefreshTokenResolution.Rejected(
                 StatusCodes.Status400BadRequest,
@@ -30,15 +16,18 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
                 "Refresh tokens must be supplied using the secure cookie.");
         }
 
-        // During the compatibility window, an explicit body token selects that session even if
-        // this HTTP client also holds a cookie for another device/session. Once body transport is
-        // disabled, the branch above rejects it and the cookie becomes the only source.
-        if (normalizedBodyToken is not null)
+        RefreshTokenResolution origin = ValidateCookieOrigin(context);
+        if (!origin.IsAccepted)
         {
-            return RefreshTokenResolution.Accepted(normalizedBodyToken);
+            return origin;
         }
 
-        if (cookieToken is not null && !IsCookieOriginAllowed(context))
+        return RefreshTokenResolution.Accepted(GetCookieToken(context));
+    }
+
+    internal RefreshTokenResolution ValidateCookieOrigin(HttpContext context, bool requireOrigin = false)
+    {
+        if (!IsCookieOriginAllowed(context, requireOrigin))
         {
             return RefreshTokenResolution.Rejected(
                 StatusCodes.Status403Forbidden,
@@ -46,11 +35,20 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
                 "The request origin is not allowed to use the refresh token cookie.");
         }
 
-        return RefreshTokenResolution.Accepted(cookieToken);
+        return RefreshTokenResolution.Accepted(null);
+    }
+
+    private static bool RequestCanHaveBody(HttpContext context)
+    {
+        // Kestrel's body-detection feature accounts for chunked and HTTP/2 DATA frames,
+        // where Content-Length is absent. Fail closed if the feature is unavailable.
+        IHttpRequestBodyDetectionFeature? feature =
+            context.Features.Get<IHttpRequestBodyDetectionFeature>();
+        return feature is null || feature.CanHaveBody;
     }
 
     internal AuthenticationTokensResponse CreateResponse(AccessTokensResponse tokens) =>
-        new(tokens.AccessToken, options.IncludeInResponseBody ? tokens.RefreshToken : null, tokens.Session, GetExpiresInSeconds(tokens.AccessToken));
+        new(tokens.AccessToken, tokens.Session, GetExpiresInSeconds(tokens.AccessToken));
 
     private static int GetExpiresInSeconds(string accessToken)
     {
@@ -75,7 +73,7 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
         catch (System.Text.Json.JsonException) { return 0; }
     }
 
-    private bool IsCookieOriginAllowed(HttpContext context)
+    private static bool IsCookieOriginAllowed(HttpContext context, bool requireOrigin)
     {
         string? fetchSite = context.Request.Headers["Sec-Fetch-Site"].FirstOrDefault();
         if (string.Equals(fetchSite, "cross-site", StringComparison.OrdinalIgnoreCase))
@@ -86,7 +84,7 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
         string? origin = context.Request.Headers.Origin.FirstOrDefault();
         if (string.IsNullOrWhiteSpace(origin))
         {
-            return true;
+            return !requireOrigin;
         }
 
         if (!Uri.TryCreate(origin, UriKind.Absolute, out Uri? originUri) ||
@@ -104,8 +102,7 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
             return true;
         }
 
-        return options.AllowedCookieOrigins.Any(allowed =>
-            string.Equals(allowed.TrimEnd('/'), origin.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
+        return false;
     }
 
     private static string? GetCookieToken(HttpContext context)
@@ -115,9 +112,7 @@ public sealed class RefreshTokenTransport(RefreshTokenTransportOptions options)
             return Normalize(token);
         }
 
-        return context.Request.Cookies.TryGetValue(AuthCookies.LegacyCookieName, out string? legacyToken)
-            ? Normalize(legacyToken)
-            : null;
+        return null;
     }
 
     private static string? Normalize(string? token) =>
@@ -141,6 +136,5 @@ internal sealed record RefreshTokenResolution(
 
 public sealed record AuthenticationTokensResponse(
     string AccessToken,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken,
     UserSessionResponse Session,
     int ExpiresInSeconds);

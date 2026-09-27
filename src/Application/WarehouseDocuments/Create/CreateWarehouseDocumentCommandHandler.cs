@@ -13,7 +13,8 @@ internal sealed class CreateWarehouseDocumentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
-    IWarehouseDocumentDraftFactory draftFactory)
+    IWarehouseDocumentDraftFactory draftFactory,
+    IApplicationTransaction transaction)
     : ICommandHandler<CreateWarehouseDocumentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(CreateWarehouseDocumentCommand command, CancellationToken cancellationToken)
@@ -30,6 +31,13 @@ internal sealed class CreateWarehouseDocumentCommandHandler(
             return Result.Failure<Guid>(WarehouseDocumentErrors.Forbidden);
         }
 
+        return await transaction.ExecuteAsync(ct => CreateInTransactionAsync(command, ct), cancellationToken);
+    }
+
+    private async Task<Result<Guid>> CreateInTransactionAsync(
+        CreateWarehouseDocumentCommand command,
+        CancellationToken cancellationToken)
+    {
         Result<WarehouseDocument> documentResult = await draftFactory.CreateAsync(
             command.WarehouseId, command.DocumentType, cancellationToken);
         if (documentResult.IsFailure)
@@ -38,11 +46,8 @@ internal sealed class CreateWarehouseDocumentCommandHandler(
         }
 
         WarehouseDocument document = documentResult.Value;
-
         context.WarehouseDocuments.Add(document);
-
         await context.SaveChangesAsync(cancellationToken);
-
         return document.Id;
     }
 }

@@ -49,7 +49,8 @@ internal sealed class GetInventoryCountsQueryHandler(
                 item.PlannedAtUtc,
                 item.StartedAtUtc,
                 item.CompletedAtUtc,
-                item.ClosedAtUtc))
+                item.ClosedAtUtc,
+                item.AbortedAtUtc))
             .OrderByDescending(item => item.PlannedAtUtc)
             .ThenBy(item => item.Id)
             .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);

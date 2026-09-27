@@ -89,7 +89,7 @@ internal sealed class AddDocumentLineCommandHandler(
             command.MaterialId,
             command.Quantity,
             command.UnitId,
-            catalog.Family.BaseUnitId,
+            catalog.BaseUnitId,
             catalog.Conversion);
 
         if (baseQuantityResult.IsFailure)
@@ -133,6 +133,13 @@ internal sealed class AddDocumentLineCommandHandler(
             return Result.Failure<Guid>(documentLimitResult.Error);
         }
 
+        Result<DocumentLineProvenance> provenanceResult = catalog.CaptureProvenance();
+
+        if (provenanceResult.IsFailure)
+        {
+            return Result.Failure<Guid>(provenanceResult.Error);
+        }
+
         Result<DocumentLine> lineResult = DocumentLine.Create(
             lineId,
             command.DocumentId,
@@ -144,7 +151,8 @@ internal sealed class AddDocumentLineCommandHandler(
             command.UnitPrice,
             command.BatchNumber,
             command.ExpiryDate,
-            command.OpeningType);
+            command.OpeningType,
+            provenance: provenanceResult.Value);
 
         if (lineResult.IsFailure)
         {

@@ -70,5 +70,9 @@ public sealed class CreateReversalIdempotencyTests : BaseHandlerTest
             Arg.Any<Guid>(),
             Arg.Any<DocumentType>(),
             Arg.Any<CancellationToken>());
+        await numberGenerator.DidNotReceive().AllocateIdentityAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<DocumentType>(),
+            Arg.Any<CancellationToken>());
     }
 }

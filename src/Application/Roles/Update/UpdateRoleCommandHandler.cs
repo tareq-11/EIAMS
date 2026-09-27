@@ -29,6 +29,11 @@ internal sealed class UpdateRoleCommandHandler(
             return Result.Failure(RoleErrors.Forbidden);
         }
 
+        if (command.AllowedScopeTypes?.Any(scopeType => !UserAssignmentScopeTypes.IsAllowed(scopeType)) == true)
+        {
+            return Result.Failure(RoleErrors.OrganizationalUnitAssignmentNotAllowed);
+        }
+
         if (command.RoleId == WellKnownRoles.AdministratorId)
         {
             return Result.Failure(RoleErrors.BuiltInRoleImmutable);

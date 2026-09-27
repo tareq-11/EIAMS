@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.DocumentAttachments.Upload;
+using Application.DocumentAttachments;
 using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -14,7 +15,8 @@ namespace Web.Api.Controllers.DocumentAttachments;
 [ApiController]
 [Route("warehouse-documents/{documentId:guid}/attachments")]
 [Tags(Tags.WarehouseDocuments)]
-public sealed class UploadDocumentAttachmentController(ICommandHandler<UploadDocumentAttachmentCommand, Guid> handler)
+public sealed class UploadDocumentAttachmentController(
+    ICommandHandler<UploadDocumentAttachmentCommand, AttachmentMutationResponse> handler)
     : ControllerBase
 {
     public sealed class RequestForm
@@ -34,7 +36,7 @@ public sealed class UploadDocumentAttachmentController(ICommandHandler<UploadDoc
     [HttpPost]
     [Consumes("multipart/form-data")]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
-    [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ApiResponse<AttachmentMutationResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
@@ -56,10 +58,10 @@ public sealed class UploadDocumentAttachmentController(ICommandHandler<UploadDoc
             request.File.Length,
             request.ExpectedRowVersion);
 
-        Result<Guid> result = await handler.Handle(command, cancellationToken);
+        Result<AttachmentMutationResponse> result = await handler.Handle(command, cancellationToken);
 
         return result.ToCreatedApiResponse(
             HttpContext,
-            attachmentId => $"/api/v1/warehouse-documents/{documentId}/attachments/{attachmentId}/content");
+            response => $"/api/v1/warehouse-documents/{documentId}/attachments/{response.AttachmentId}/content");
     }
 }

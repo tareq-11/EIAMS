@@ -3,6 +3,8 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.UserRoleScopes;
+using Application.UserRoleScopes.GetByUser;
+using Domain.Common;
 using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -15,9 +17,9 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
     IApplicationTransaction transaction,
     IApplicationLock applicationLock,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<ReplaceUserRoleScopeCommand, Guid>
+    IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<ReplaceUserRoleScopeCommand, UserRoleScopeResponse>
 {
-    public Task<Result<Guid>> Handle(
+    public Task<Result<UserRoleScopeResponse>> Handle(
         ReplaceUserRoleScopeCommand command,
         CancellationToken cancellationToken) =>
         transaction.ExecuteAsync(
@@ -28,13 +30,13 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
             },
             cancellationToken);
 
-    private async Task<Result<Guid>> ReplaceAsync(
+    private async Task<Result<UserRoleScopeResponse>> ReplaceAsync(
         ReplaceUserRoleScopeCommand command,
         CancellationToken cancellationToken)
     {
         if (!await context.Users.AsNoTracking().AnyAsync(user => user.Id == command.UserId, cancellationToken))
         {
-            return Result.Failure<Guid>(UserErrors.NotFound(command.UserId));
+            return Result.Failure<UserRoleScopeResponse>(UserErrors.NotFound(command.UserId));
         }
 
         Error validationError = await UserRoleScopeAssignmentRules.ValidateAsync(
@@ -46,7 +48,7 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
 
         if (validationError != Error.None)
         {
-            return Result.Failure<Guid>(validationError);
+            return Result.Failure<UserRoleScopeResponse>(validationError);
         }
 
         UserRoleScope? existingAssignment = await context.UserRoleScopes
@@ -54,6 +56,11 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
 
         if (existingAssignment is not null)
         {
+            if (existingAssignment.RowVersion != command.ExpectedRowVersion)
+            {
+                return Result.Failure<UserRoleScopeResponse>(
+                    UserRoleScopeErrors.RowVersionMismatch(command.UserId, command.ExpectedRowVersion, existingAssignment.RowVersion));
+            }
             bool canManageCurrentAssignment = await scopeAuthorizationService.HasPermissionInScopeAsync(
                 userContext.UserId,
                 PermissionCodes.Roles.Manage,
@@ -63,7 +70,7 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
 
             if (!canManageCurrentAssignment)
             {
-                return Result.Failure<Guid>(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
+                return Result.Failure<UserRoleScopeResponse>(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
             }
 
             bool removesEnterpriseAdministrator =
@@ -80,8 +87,13 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
                     existingAssignment.UserId,
                     cancellationToken))
             {
-                return Result.Failure<Guid>(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
+                return Result.Failure<UserRoleScopeResponse>(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
             }
+        }
+        else if (command.ExpectedRowVersion != 0)
+        {
+            return Result.Failure<UserRoleScopeResponse>(
+                UserRoleScopeErrors.RowVersionMismatch(command.UserId, command.ExpectedRowVersion, 0));
         }
 
         bool canManageRequestedAssignment = await scopeAuthorizationService.HasPermissionInScopeAsync(
@@ -93,7 +105,7 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
 
         if (!canManageRequestedAssignment)
         {
-            return Result.Failure<Guid>(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
+            return Result.Failure<UserRoleScopeResponse>(UserRoleScopeErrors.AssignmentOutsideAdministratorScope);
         }
 
         if (existingAssignment is null)
@@ -114,6 +126,16 @@ internal sealed class ReplaceUserRoleScopeCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        return existingAssignment.Id;
+        string roleName = await context.Roles.Where(role => role.Id == existingAssignment.RoleId)
+            .Select(role => role.Name).SingleAsync(cancellationToken);
+        return new UserRoleScopeResponse
+        {
+            Id = existingAssignment.Id,
+            RoleId = existingAssignment.RoleId,
+            RoleName = roleName,
+            ScopeType = existingAssignment.ScopeType.ToAssignmentScopeType(),
+            ScopeId = existingAssignment.ScopeId,
+            RowVersion = existingAssignment.RowVersion
+        };
     }
 }

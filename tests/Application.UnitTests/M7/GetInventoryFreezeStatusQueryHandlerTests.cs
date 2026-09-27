@@ -39,13 +39,14 @@ public sealed class GetInventoryFreezeStatusQueryHandlerTests : BaseHandlerTest
                 Arg.Any<CancellationToken>())
             .Returns(true);
         IInventoryFreezePolicyService freezeService = Substitute.For<IInventoryFreezePolicyService>();
-        freezeService.EvaluateAsync(
+        freezeService.EvaluateProvisionalAsync(
                 Arg.Any<IReadOnlyCollection<Guid>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new InventoryFreezeEvaluation(
                 [new ActiveInventoryFreeze(countId, warehouseId, FreezePolicy.SoftFreeze)],
                 [new InventoryFreezeWarning("InventoryCounts.SoftFreezeActive", "warning", countId, warehouseId)],
-                null));
+                null,
+                IsProvisional: true));
         var handler = new GetInventoryFreezeStatusQueryHandler(
             context,
             userContext,
@@ -60,6 +61,7 @@ public sealed class GetInventoryFreezeStatusQueryHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         result.Value.IsPostingBlocked.ShouldBeFalse();
+        result.Value.IsProvisional.ShouldBeTrue();
         result.Value.HasSoftFreezeWarning.ShouldBeTrue();
         result.Value.ActiveCounts.ShouldHaveSingleItem().CountId.ShouldBe(countId);
     }
@@ -103,6 +105,6 @@ public sealed class GetInventoryFreezeStatusQueryHandlerTests : BaseHandlerTest
         result.IsFailure.ShouldBeTrue();
         result.Error.ShouldBe(WarehouseErrors.NotFound(warehouseId));
         await freezeService.DidNotReceiveWithAnyArgs()
-            .EvaluateAsync(default!, default);
+            .EvaluateProvisionalAsync(default!, default);
     }
 }

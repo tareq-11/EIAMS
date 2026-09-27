@@ -18,7 +18,7 @@ public sealed class GetInventoryCountLinesController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<InventoryCountLineResponse>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.InventoryCounts.View)]
     public async Task<IResult> Handle(
-        Guid countId,
+        [FromRoute] Guid countId,
         [FromQuery] bool onlyVariance,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)

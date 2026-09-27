@@ -1,5 +1,5 @@
-using Infrastructure.Database;
 using Application.Abstractions.Authorization;
+using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,8 +10,8 @@ namespace Infrastructure.Authorization;
 
 /// <summary>
 /// Validates the persisted authorization marker before the application begins serving requests.
-/// Phase 2 only activates the existing colon vocabulary; a dotted marker fails closed until its
-/// catalog is present and the coordinated cutover is implemented.
+/// Phase 2 requires the single dotted-v1 vocabulary and fails closed on legacy, unknown, or
+/// incomplete catalog state.
 /// </summary>
 internal sealed class AuthorizationPolicyStartupValidator(
     IServiceScopeFactory scopeFactory,
@@ -45,9 +45,9 @@ internal sealed class AuthorizationPolicyStartupValidator(
         }
 
         Domain.Permissions.AuthorizationPolicyVersion marker = markers[0];
-        if (marker.MappingVersion <= 0 || marker.ActiveVocabulary is not ("legacy-colon" or "dotted-v1"))
+        if (marker.MappingVersion <= 0 || marker.ActiveVocabulary != "dotted-v1")
         {
-            throw new InvalidOperationException("The active authorization policy marker is unsupported.");
+            throw new InvalidOperationException("The active authorization policy marker must be dotted-v1.");
         }
 
         string[] codes = await context.Permissions
@@ -55,35 +55,49 @@ internal sealed class AuthorizationPolicyStartupValidator(
             .Select(permission => permission.Code)
             .ToArrayAsync(cancellationToken);
 
-        if (marker.ActiveVocabulary == "legacy-colon")
+        HashSet<string> activeCodes = codes.ToHashSet(StringComparer.Ordinal);
+        if (!activeCodes.SetEquals(PermissionVocabulary.DottedV1Codes))
         {
-            var activeLegacyCodes = codes
-                .Where(code => code.Contains(':', StringComparison.Ordinal))
-                .ToHashSet(StringComparer.Ordinal);
-            if (!activeLegacyCodes.SetEquals(PermissionVocabulary.LegacyColonCodes))
+            if (!environment.IsEnvironment("Testing"))
             {
-                if (!environment.IsEnvironment("Testing"))
-                {
-                    throw new InvalidOperationException("The legacy-colon authorization catalog is incomplete.");
-                }
-
-                logger.LogWarning("Test host started with a partial legacy authorization catalog.");
+                throw new InvalidOperationException("The dotted-v1 authorization catalog must contain exactly the approved dotted codes and no legacy or unknown codes.");
             }
+
+            logger.LogWarning("Test host started with a non-final dotted-only authorization catalog.");
         }
-        else
-        {
-            var activeDottedCodes = codes
-                .Where(code => code.Contains('.', StringComparison.Ordinal))
-                .ToHashSet(StringComparer.Ordinal);
-            if (!activeDottedCodes.SetEquals(PermissionVocabulary.DottedV1Codes))
-            {
-                if (!environment.IsEnvironment("Testing"))
-                {
-                    throw new InvalidOperationException("The dotted authorization catalog is incomplete.");
-                }
 
-                logger.LogWarning("Test host started with a partial dotted authorization catalog.");
+        int usersWithInvalidAssignmentCount = await context.Users
+            .AsNoTracking()
+            .GroupJoin(
+                context.UserRoleScopes.AsNoTracking(),
+                user => user.Id,
+                assignment => assignment.UserId,
+                (user, assignments) => new { user.Id, user.Status, AssignmentCount = assignments.Count() })
+            .CountAsync(item => item.AssignmentCount > 1 || item.Status == Domain.Users.UserStatus.Active && item.AssignmentCount == 0, cancellationToken);
+        bool hasLegacyUserAssignment = await context.UserRoleScopes
+            .AsNoTracking()
+            .AnyAsync(scope => scope.ScopeType == Domain.Common.ScopeType.OrganizationalUnit, cancellationToken);
+        bool hasLegacyAllowedScope = await context.RoleAllowedScopeTypes
+            .AsNoTracking()
+            .AnyAsync(scope => scope.ScopeType == Domain.Common.ScopeType.OrganizationalUnit, cancellationToken)
+            || await context.PermissionAllowedScopeTypes
+                .AsNoTracking()
+                .AnyAsync(scope => scope.ScopeType == Domain.Common.ScopeType.OrganizationalUnit, cancellationToken);
+
+        if (usersWithInvalidAssignmentCount != 0 || hasLegacyUserAssignment || hasLegacyAllowedScope)
+        {
+            const string message = "User assignment cutover invariant failed: active users need one Enterprise, Site, or Warehouse assignment; no user may have multiple assignments; OrganizationalUnit must not remain in assignment/allowed-scope rows.";
+            if (!environment.IsEnvironment("Testing"))
+            {
+                throw new InvalidOperationException(message);
             }
+
+            logger.LogWarning(
+                "{Message} Testing environment continues for fixture compatibility. UsersWithoutExactlyOneAssignment={Count}, LegacyUserAssignment={LegacyUserAssignment}, LegacyAllowedScope={LegacyAllowedScope}.",
+                message,
+                usersWithInvalidAssignmentCount,
+                hasLegacyUserAssignment,
+                hasLegacyAllowedScope);
         }
 
         logger.LogInformation(

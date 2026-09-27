@@ -22,7 +22,7 @@ public sealed class SecurityActorStateMatrixContractTests
         { "editor_cannot_mutate_outside_scope", typeof(M0M1AuthorizationAndDatabaseTests), "UpdateWarehouse_Should_ReturnForbidden_WhenSiteGrantTargetsAnotherSite" },
         { "scoped_editor_cannot_perform_admin_mutation", typeof(M0M1AuthorizationAndDatabaseTests), "ScopedWarehouseEditor_Should_NotPerformAdministratorUserMutation" },
         { "warehouse_scope_denies_outside_resource", typeof(ScopeEnforcementTests), "WarehouseScopedReadPermissions_Should_AuthorizeMatchingReadEndpointsOnly" },
-        { "organizational_unit_scope_mutates_descendant_and_rejects_sibling", typeof(M0M1AuthorizationAndDatabaseTests), "UpdateWarehouse_Should_AuthorizeOrganizationalUnitDescendantsButRejectSibling" },
+        { "legacy_organizational_unit_assignment_denied", typeof(M0M1AuthorizationAndDatabaseTests), "LegacyOrganizationalUnitAssignment_ShouldBeRejectedByCutoverConstraint" },
         { "service_scope_expansion_no_cross_scope_leakage", typeof(HierarchicalScopeQueryIntegrationTests), "WarehousePermissionScope_ExpandsEachSingleAssignmentWithoutCrossScopeLeakage" },
         { "enterprise_administrator_admin_operation", typeof(UserAdministrationIntegrationTests), "AdministrationWorkflow_Should_CreateListSuspendAndBlockAllAuthenticationPaths" },
         { "suspended_user_and_token_rejected", typeof(UserAdministrationIntegrationTests), "AdministrationWorkflow_Should_CreateListSuspendAndBlockAllAuthenticationPaths" },

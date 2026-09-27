@@ -88,7 +88,7 @@ public static class RegressionTestHelper
         var category = MaterialCategory.Create(Guid.NewGuid(), domain.Id, null, "Hardware", $"CAT-{Guid.NewGuid():N}"[..12]);
         context.MaterialCategories.Add(category);
 
-        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, "Laptops", $"FAM-{Guid.NewGuid():N}"[..12], uom.Id);
+        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, "Laptops", $"FAM-{Guid.NewGuid():N}"[..12]);
         context.MaterialFamilies.Add(family);
 
         var normalMat = Material.Create(
@@ -151,13 +151,14 @@ public static class RegressionTestHelper
             ScopeType.Warehouse,
             wh1.Id));
 
-        // One hierarchical assignment covers both warehouses owned by this organizational unit.
+        // Site assignment covers the business resources in this site; OrganizationalUnit remains
+        // a resource/custody concept, not a user-assignment scope.
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(),
             managerUser.Id,
             WellKnownRoles.WarehouseManagerId,
-            ScopeType.OrganizationalUnit,
-            orgUnit.Id));
+            ScopeType.Site,
+            site.Id));
 
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), adminUser.Id, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
 
@@ -204,6 +205,12 @@ public static class RegressionTestHelper
 
         foreach ((Guid MaterialId, DocumentLineType LineType, decimal Quantity) line in lines)
         {
+            Material material = await context.Materials.SingleAsync(item => item.Id == line.MaterialId);
+            DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+                material.CatalogVersion,
+                material.MaterialKind,
+                material.TrackingType,
+                material.BaseUnitId).Value;
             Result<DocumentLine> docLineResult = DocumentLine.Create(
                 Guid.NewGuid(),
                 doc.Id,
@@ -215,7 +222,8 @@ public static class RegressionTestHelper
                 null,
                 null,
                 null,
-                documentType == DocumentType.Opening ? OpeningType.Initial : null);
+                documentType == DocumentType.Opening ? OpeningType.Initial : null,
+                provenance: provenance);
 
             context.DocumentLines.Add(docLineResult.Value);
         }

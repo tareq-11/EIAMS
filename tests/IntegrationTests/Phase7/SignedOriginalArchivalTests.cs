@@ -126,6 +126,41 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task UploadAndRemoveAttachment_ShouldReturnAuthoritativeParentVersionAndSafeAttachmentMetadata()
+    {
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage upload = await SendSignedOriginalAsync(documentId, 1, "signed.pdf", "version-one");
+        upload.StatusCode.ShouldBe(HttpStatusCode.Created);
+        ApiEnvelope<AttachmentMutationDto>? uploaded =
+            await upload.Content.ReadFromJsonAsync<ApiEnvelope<AttachmentMutationDto>>();
+        uploaded.ShouldNotBeNull();
+        uploaded.Data.AttachmentId.ShouldBe(uploaded.Data.Attachment.Id);
+        uploaded.Data.Removed.ShouldBeFalse();
+        uploaded.Data.DocumentRowVersion.ShouldBe(2);
+        uploaded.Data.MalwareScanPolicy.ShouldNotBeNullOrWhiteSpace();
+        uploaded.Data.Attachment.UploadedBy.ShouldBe(userId);
+        uploaded.Data.Attachment.MalwareScanClean.ShouldBeFalse();
+
+        HttpResponseMessage remove = await HttpClient.DeleteAsync(
+            $"warehouse-documents/{documentId}/attachments/{uploaded.Data.AttachmentId}?expectedRowVersion=2");
+        remove.StatusCode.ShouldBe(HttpStatusCode.OK);
+        ApiEnvelope<AttachmentMutationDto>? removed =
+            await remove.Content.ReadFromJsonAsync<ApiEnvelope<AttachmentMutationDto>>();
+        removed.ShouldNotBeNull();
+        removed.Data.AttachmentId.ShouldBe(uploaded.Data.AttachmentId);
+        removed.Data.Removed.ShouldBeTrue();
+        removed.Data.DocumentRowVersion.ShouldBe(3);
+        removed.Data.Attachment.OriginalFilename.ShouldBe("signed.pdf");
+        removed.Data.Attachment.UploadedBy.ShouldBe(userId);
+        removed.Data.Attachment.IsActive.ShouldBeFalse();
+        removed.Data.Attachment.GetType().GetProperty("StorageKey").ShouldBeNull();
+    }
+
+    [Fact]
     public async Task UploadSignedOriginal_Should_ReturnBadRequest_WhenDocumentIsNotDraft()
     {
         // Arrange
@@ -188,10 +223,11 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
             content);
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        ApiEnvelope<ResourceIdDto>? body =
-            await response.Content.ReadFromJsonAsync<ApiEnvelope<ResourceIdDto>>();
+        ApiEnvelope<AttachmentMutationDto>? body =
+            await response.Content.ReadFromJsonAsync<ApiEnvelope<AttachmentMutationDto>>();
         body.ShouldNotBeNull();
-        return body.Data.Id;
+        body.Data.Removed.ShouldBeFalse();
+        return body.Data.AttachmentId;
     }
 
     private async Task<HttpResponseMessage> SendSignedOriginalAsync(
@@ -277,10 +313,19 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
         await dbContext.SaveChangesAsync();
     }
 
-    private sealed record ResourceIdDto(Guid Id);
+    private sealed record AttachmentMutationDto(
+        Guid AttachmentId,
+        bool Removed,
+        int DocumentRowVersion,
+        string MalwareScanPolicy,
+        bool MalwareScanClean,
+        AttachmentDto Attachment);
 
     private sealed record AttachmentDto(
         Guid Id,
+        string OriginalFilename,
+        Guid UploadedBy,
+        bool MalwareScanClean,
         bool IsActive,
         DateTime? ArchivedAtUtc,
         Guid? ArchivedBy,

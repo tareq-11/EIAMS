@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Domain.AssetMovementHistories;
 using Domain.Assets;
@@ -210,6 +211,35 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
             await getAfterRemoveResponse.Content.ReadFromJsonAsync<M6ApiEnvelope<DocumentDetails>>();
         afterRemove.ShouldNotBeNull();
         afterRemove.Data.Lines.Single(line => line.Id == seed.DraftIssueLineId).SelectedAssets.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task CompleteDraftIssue_ShouldPersistEligibleSerializedAssetSelection()
+    {
+        M6Seed seed = await SeedAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantWarehouseDocumentPermissionsAsync(userId, seed.WarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouse-documents/complete-draft", new
+        {
+            warehouseId = seed.WarehouseId,
+            documentType = "Issue",
+            lines = new[]
+            {
+                new { materialId = seed.MaterialId, quantity = 1m, unitId = seed.UnitId, assetIds = new[] { seed.AssetId } }
+            },
+            issueTo = new { recipientType = "Employee", recipientId = seed.EmployeeId, issueReason = "Operational need" }
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        JsonElement line = body.RootElement.GetProperty("data").GetProperty("lines")[0];
+        line.GetProperty("selectedAssets").GetArrayLength().ShouldBe(1);
+        line.GetProperty("selectedAssets")[0].GetProperty("assetId").GetGuid().ShouldBe(seed.AssetId);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.DocumentLineAssetSelections.CountAsync(selection => selection.AssetId == seed.AssetId)).ShouldBe(1);
     }
 
     [Fact]
@@ -473,7 +503,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
             UnitOfMeasure.Create(unitId, $"M6 piece {suffix}", $"M6P{suffix}", "Count"),
             MaterialDomain.Create(domainId, $"M6 domain {suffix}", $"M6D{suffix}"),
             MaterialCategory.Create(categoryId, domainId, null, $"M6 category {suffix}", $"M6C{suffix}"),
-            MaterialFamily.Create(familyId, categoryId, $"M6 family {suffix}", $"M6F{suffix}", unitId),
+            MaterialFamily.Create(familyId, categoryId, $"M6 family {suffix}", $"M6F{suffix}"),
             Material.Create(
                 materialId,
                 familyId,
@@ -646,6 +676,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         context.Roles.Add(Role.Create(roleId, $"M6 role {roleId:N}", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentUpdateId),
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId),
             RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),

@@ -2,7 +2,6 @@ using Application.Abstractions.Messaging;
 using Application.Users.Logout;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -17,8 +16,6 @@ public sealed class LogoutController(
     ICommandHandler<LogoutUserCommand> handler,
     RefreshTokenTransport refreshTokenTransport) : ControllerBase
 {
-    public sealed record RequestBody(string? RefreshToken);
-
     [HttpPost("logout")]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
@@ -26,10 +23,9 @@ public sealed class LogoutController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(
-        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestBody? request,
         CancellationToken cancellationToken)
     {
-        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext, request?.RefreshToken);
+        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext);
 
         if (!resolution.IsAccepted)
         {

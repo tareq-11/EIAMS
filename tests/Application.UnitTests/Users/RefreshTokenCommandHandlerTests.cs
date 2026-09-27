@@ -226,7 +226,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         handler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>()).Returns(new UserSessionResponse(
             new UserSessionUserDto(Guid.NewGuid(), "test@example.com", "Test", "User", null, null),
             new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
-            new UserSessionScopeDto("Enterprise", null, "Enterprise"), "Selected", [], []));
+            new UserSessionScopeDto(Domain.Common.UserAssignmentScopeType.Enterprise, null, "Enterprise"), []));
         return handler;
     }
 }

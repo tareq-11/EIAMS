@@ -1,14 +1,14 @@
-using Domain.Permissions;
-using Domain.Common;
-using Domain.Organizations;
-using Domain.Sites;
-using Domain.OrganizationalUnits;
-using Domain.Roles;
-using Domain.UserRoleScopes;
-using Domain.Users;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Users.GetSession;
+using Domain.Common;
+using Domain.OrganizationalUnits;
+using Domain.Organizations;
+using Domain.Permissions;
+using Domain.Roles;
+using Domain.Sites;
+using Domain.UserRoleScopes;
+using Domain.Users;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +23,6 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
     [Theory]
     [InlineData(ScopeType.Enterprise)]
     [InlineData(ScopeType.Site)]
-    [InlineData(ScopeType.OrganizationalUnit)]
     public async Task EffectivePermissions_ShouldDenyOperationalMutationOutsideWarehouse_WhenAssignmentAndRoleScopeAreValid(
         ScopeType scopeType)
     {
@@ -34,7 +33,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         IEffectivePermissionService effective = scope.ServiceProvider.GetRequiredService<IEffectivePermissionService>();
 
         Guid? scopeId = null;
-        if (scopeType is ScopeType.Site or ScopeType.OrganizationalUnit)
+        if (scopeType is ScopeType.Site)
         {
             var organization = Organization.Create(Guid.NewGuid(), $"Boundary org {Guid.NewGuid():N}", $"B{Guid.NewGuid():N}"[..12]);
             var site = Site.Create(Guid.NewGuid(), organization.Id, "Boundary site", $"S{Guid.NewGuid():N}"[..12], null);
@@ -42,12 +41,6 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
             context.Sites.Add(site);
             scopeId = site.Id;
 
-            if (scopeType == ScopeType.OrganizationalUnit)
-            {
-                var unit = OrganizationalUnit.Create(Guid.NewGuid(), site.Id, null, "Boundary unit", "Department");
-                context.OrganizationalUnits.Add(unit);
-                scopeId = unit.Id;
-            }
         }
 
         var userId = Guid.NewGuid();
@@ -142,62 +135,21 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
     }
 
     [Fact]
-    public async Task PermissionScopeMatrix_ShouldContainOnlyApprovedLegacySemanticPairs()
+    public async Task PermissionScopeMatrix_ShouldContainNoLegacyRowsAfterDottedCutover()
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var rows = await (
-                from item in context.PermissionAllowedScopeTypes.AsNoTracking()
-                join permission in context.Permissions.AsNoTracking() on item.PermissionId equals permission.Id
-                where PermissionVocabulary.LegacyColonCodes.Contains(permission.Code)
-                select new { item.PermissionId, item.ScopeType })
-            .ToListAsync();
-        var actual = rows
-            .Select(item => (item.PermissionId, item.ScopeType))
-            .ToList();
+        (await context.Permissions.AsNoTracking().CountAsync(permission => EF.Functions.Like(permission.Code, "%:%"))).ShouldBe(0);
 
-        Guid[] read =
-        [
-            WellKnownPermissions.AuditLogsViewId, WellKnownPermissions.OrganizationsViewId,
-            WellKnownPermissions.SitesViewId, WellKnownPermissions.OrganizationalUnitsViewId,
-            WellKnownPermissions.EmployeesViewId,
-            WellKnownPermissions.UnitsOfMeasureViewId, WellKnownPermissions.MaterialsViewId,
-            WellKnownPermissions.WarehousesViewId, WellKnownPermissions.InventoryViewId,
-            WellKnownPermissions.AssetsViewId, WellKnownPermissions.CustodiesViewId,
-            WellKnownPermissions.WarehouseDocumentsViewId, WellKnownPermissions.InventoryCountsViewId
-        ];
-        Guid[] structural =
-        [
-            WellKnownPermissions.UsersAccessId, WellKnownPermissions.OrganizationsManageId,
-            WellKnownPermissions.SitesManageId, WellKnownPermissions.OrganizationalUnitsManageId,
-            WellKnownPermissions.EmployeesManageId, WellKnownPermissions.RolesManageId,
-            WellKnownPermissions.RolesViewId,
-            WellKnownPermissions.UnitsOfMeasureManageId, WellKnownPermissions.MaterialDomainsManageId,
-            WellKnownPermissions.MaterialCategoriesManageId, WellKnownPermissions.MaterialFamiliesManageId,
-            WellKnownPermissions.MaterialsManageId, WellKnownPermissions.WarehousesManageId,
-            WellKnownPermissions.WarehouseCapabilitiesManageId, WellKnownPermissions.WarehouseMaterialSettingsManageId
-        ];
-        Guid[] operational =
-        [
-            WellKnownPermissions.CustodiesManageId, WellKnownPermissions.WarehouseDocumentsCreateId,
-            WellKnownPermissions.WarehouseDocumentsEditId, WellKnownPermissions.WarehouseDocumentsSubmitId,
-            WellKnownPermissions.WarehouseDocumentsCancelId, WellKnownPermissions.WarehouseDocumentsReviewId,
-            WellKnownPermissions.WarehouseDocumentsReverseId, WellKnownPermissions.InventoryCountsPlanId,
-            WellKnownPermissions.InventoryCountsEnterActualId, WellKnownPermissions.InventoryCountsReviewId
-        ];
+        string[] codes = await context.Permissions.AsNoTracking().Select(permission => permission.Code).ToArrayAsync();
+        codes.ToHashSet(StringComparer.Ordinal).SetEquals(PermissionVocabulary.DottedV1Codes).ShouldBeTrue();
 
-        HashSet<(Guid PermissionId, ScopeType ScopeType)> expected =
-            read.SelectMany(id => Enum.GetValues<ScopeType>().Select(scopeType => (id, scopeType)))
-                .Concat(structural.Select(id => (id, ScopeType.Enterprise)))
-                .Concat(operational.Select(id => (id, ScopeType.Warehouse)))
-                .ToHashSet();
-
-        actual.ToHashSet().SetEquals(expected).ShouldBeTrue();
-        actual.Count.ShouldBe(77);
-        operational.All(id => new[] { ScopeType.Enterprise, ScopeType.Site, ScopeType.OrganizationalUnit }
-                .All(scopeType => !actual.Contains((id, scopeType))))
-            .ShouldBeTrue();
+        ScopeType[] allowedAssignmentScopes = [ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse];
+        (await context.PermissionAllowedScopeTypes.AsNoTracking().Select(item => item.ScopeType).Distinct().ToListAsync())
+            .ToHashSet().IsSubsetOf(allowedAssignmentScopes).ShouldBeTrue();
+        (await context.RoleAllowedScopeTypes.AsNoTracking().Select(item => item.ScopeType).Distinct().ToListAsync())
+            .ToHashSet().IsSubsetOf(allowedAssignmentScopes).ShouldBeTrue();
     }
 
     [Fact]
@@ -320,7 +272,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
             .ToDictionaryAsync(group => group.Key, group => group.Select(item => item.ScopeType).ToHashSet());
         scopes[WellKnownRoles.AdministratorId].SetEquals([ScopeType.Enterprise]).ShouldBeTrue();
         scopes[WellKnownRoles.WarehouseKeeperId].SetEquals([ScopeType.Warehouse]).ShouldBeTrue();
-        scopes[WellKnownRoles.WarehouseManagerId].SetEquals([ScopeType.Enterprise, ScopeType.Site, ScopeType.OrganizationalUnit, ScopeType.Warehouse]).ShouldBeTrue();
+        scopes[WellKnownRoles.WarehouseManagerId].SetEquals([ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse]).ShouldBeTrue();
         scopes[WellKnownRoles.AuditorId].SetEquals([ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse]).ShouldBeTrue();
         (await context.Roles.AsNoTracking().SingleAsync(role => role.Id == WellKnownRoles.AdministratorId)).Name.ShouldBe("SYSTEM_ADMIN");
     }
@@ -356,7 +308,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
             WellKnownDottedPermissions.CountCompleteId, WellKnownDottedPermissions.CountCloseId
         ];
         HashSet<(Guid PermissionId, ScopeType ScopeType)> expected = reads
-            .SelectMany(id => Enum.GetValues<ScopeType>().Select(scopeType => (id, scopeType)))
+            .SelectMany(id => new[] { ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse }.Select(scopeType => (id, scopeType)))
             .Concat(structural.Select(id => (id, ScopeType.Enterprise)))
             .Concat(operational.Select(id => (id, ScopeType.Warehouse)))
             .ToHashSet();
@@ -368,7 +320,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
             .Select(item => (item.PermissionId, item.ScopeType))
             .ToHashSet();
         actual.SetEquals(expected).ShouldBeTrue();
-        actual.Count.ShouldBe(56);
+        actual.Count.ShouldBe(expected.Count);
     }
 
     [Fact]
@@ -397,12 +349,13 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         var roleId = Guid.NewGuid();
         context.Add(Role.Create(roleId, $"Dotted revise boundary {roleId:N}", null));
         context.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentReviseId));
-        foreach (ScopeType scopeType in Enum.GetValues<ScopeType>())
+        ScopeType[] assignmentScopes = [ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse];
+        foreach (ScopeType scopeType in assignmentScopes)
         {
             context.Add(RoleAllowedScopeType.Create(roleId, scopeType));
         }
 
-        Dictionary<ScopeType, Guid> users = Enum.GetValues<ScopeType>().ToDictionary(scopeType => scopeType, _ => Guid.NewGuid());
+        Dictionary<ScopeType, Guid> users = assignmentScopes.ToDictionary(scopeType => scopeType, _ => Guid.NewGuid());
         foreach ((ScopeType scopeType, Guid userId) in users)
         {
             context.Add(User.Create(userId, $"dotted-revise-{scopeType}-{userId:N}@example.test", "Dotted", scopeType.ToString(), "hash"));

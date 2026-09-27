@@ -37,15 +37,17 @@ internal sealed class GetUserRoleScopesQueryHandler(
 
         PagedResult<UserRoleScopeResponse> scopes = await (
                 from userRoleScope in context.UserRoleScopes
-                where userRoleScope.UserId == query.UserId
+                where userRoleScope.UserId == query.UserId &&
+                      userRoleScope.ScopeType != ScopeType.OrganizationalUnit
                 join role in context.Roles on userRoleScope.RoleId equals role.Id
                 select new UserRoleScopeResponse
                 {
                     Id = userRoleScope.Id,
                     RoleId = role.Id,
                     RoleName = role.Name,
-                    ScopeType = userRoleScope.ScopeType.ToString(),
-                    ScopeId = userRoleScope.ScopeId
+                    ScopeType = (UserAssignmentScopeType)(int)userRoleScope.ScopeType,
+                    ScopeId = userRoleScope.ScopeId,
+                    RowVersion = userRoleScope.RowVersion
                 })
             .OrderBy(s => s.RoleName)
             .ThenBy(s => s.Id)

@@ -1,7 +1,8 @@
+using Application.Users.Create;
 using Application.Users.Login;
 using Application.Users.Logout;
 using Application.Users.Refresh;
-using Application.Users.Create;
+using Domain.Common;
 using Domain.Users;
 
 namespace Application.UnitTests.Users;
@@ -44,9 +45,9 @@ public sealed class AuthenticationCommandValidatorTests
         User.NormalizeUsername("  ＡdMin_01  ").ShouldBe("admin_01");
 
         var validator = new CreateUserCommandValidator();
-        (await validator.ValidateAsync(new CreateUserCommand("user@example.com", "مستخدم", "Test", "User", "Password1!")))
+        (await validator.ValidateAsync(new CreateUserCommand("user@example.com", "مستخدم", "Test", "User", "Password1!", Guid.NewGuid(), UserAssignmentScopeType.Enterprise, null)))
             .IsValid.ShouldBeFalse();
-        (await validator.ValidateAsync(new CreateUserCommand("user@example.com", "invalid space", "Test", "User", "Password1!")))
+        (await validator.ValidateAsync(new CreateUserCommand("user@example.com", "invalid space", "Test", "User", "Password1!", Guid.NewGuid(), UserAssignmentScopeType.Enterprise, null)))
             .IsValid.ShouldBeFalse();
     }
 

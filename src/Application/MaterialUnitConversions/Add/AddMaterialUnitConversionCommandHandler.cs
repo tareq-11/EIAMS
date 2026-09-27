@@ -39,24 +39,32 @@ internal sealed class AddMaterialUnitConversionCommandHandler(
             return Result.Failure<Guid>(MaterialUnitConversionErrors.MaterialNotFound(command.MaterialId));
         }
 
-        string? fromUnitType = await context.UnitsOfMeasure
+        var fromUnit = await context.UnitsOfMeasure
             .Where(unit => unit.Id == command.FromUnitId)
-            .Select(unit => unit.UnitType)
+            .Select(unit => new { unit.UnitType, unit.Status })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (fromUnitType is null)
+        if (fromUnit is null)
         {
             return Result.Failure<Guid>(MaterialUnitConversionErrors.UnitNotFound(command.FromUnitId));
         }
+        if (fromUnit.Status != Status.Active)
+        {
+            return Result.Failure<Guid>(MaterialUnitConversionErrors.UnitNotActive(command.FromUnitId));
+        }
 
-        string? toUnitType = await context.UnitsOfMeasure
+        var toUnit = await context.UnitsOfMeasure
             .Where(unit => unit.Id == command.ToBaseUnitId)
-            .Select(unit => unit.UnitType)
+            .Select(unit => new { unit.UnitType, unit.Status })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (toUnitType is null)
+        if (toUnit is null)
         {
             return Result.Failure<Guid>(MaterialUnitConversionErrors.UnitNotFound(command.ToBaseUnitId));
+        }
+        if (toUnit.Status != Status.Active)
+        {
+            return Result.Failure<Guid>(MaterialUnitConversionErrors.UnitNotActive(command.ToBaseUnitId));
         }
 
         if (command.ToBaseUnitId != baseUnitId.Value)
@@ -69,7 +77,7 @@ internal sealed class AddMaterialUnitConversionCommandHandler(
             return Result.Failure<Guid>(MaterialUnitConversionErrors.SameUnit);
         }
 
-        if (!string.Equals(fromUnitType, toUnitType, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(fromUnit.UnitType, toUnit.UnitType, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure<Guid>(MaterialUnitConversionErrors.UnitTypeMismatch);
         }

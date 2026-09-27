@@ -35,10 +35,17 @@ internal sealed class WarehouseDocumentDraftFactory(
             return Result.Failure<WarehouseDocument>(WarehouseErrors.CannotHoldStock(warehouseId));
         }
 
-        Result<string> reference = await referenceNumberGenerator.AllocateAsync(
+        Result<AllocatedDocumentReference> reference = await referenceNumberGenerator.AllocateIdentityAsync(
             warehouse.SiteId, documentType, cancellationToken);
         return reference.IsFailure
             ? Result.Failure<WarehouseDocument>(reference.Error)
-            : WarehouseDocument.CreateDraft(Guid.NewGuid(), warehouseId, documentType, reference.Value);
+            : WarehouseDocument.CreateDraft(
+                Guid.NewGuid(),
+                warehouseId,
+                documentType,
+                reference.Value.ReferenceNumber,
+                referenceSiteId: reference.Value.SiteId,
+                referenceYear: reference.Value.Year,
+                referenceSequence: reference.Value.Sequence);
     }
 }

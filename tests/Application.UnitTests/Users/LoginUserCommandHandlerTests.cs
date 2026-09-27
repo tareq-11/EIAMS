@@ -122,8 +122,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
     [InlineData("test")]
     [InlineData("  TEST  ")]
     [InlineData("  ＴＥＳＴ  ")]
-    [InlineData("TEST@EXAMPLE.COM")]
-    public async Task Handle_Should_AuthenticateByCanonicalUsernameOrEmailCompatibilityFallback(string credential)
+    public async Task Handle_Should_AuthenticateByCanonicalUsername(string credential)
     {
         await using TestDbContext context = CreateDbContext();
         await SeedUserAsync(context);
@@ -142,6 +141,25 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
 
         result.IsSuccess.ShouldBeTrue();
         tokenProvider.Received(1).Create(Arg.Any<User>());
+    }
+
+    [Fact]
+    public async Task Handle_Should_NotAuthenticateByEmail()
+    {
+        await using TestDbContext context = CreateDbContext();
+        await SeedUserAsync(context);
+        IPasswordHasher passwordHasher = Substitute.For<IPasswordHasher>();
+        passwordHasher.Verify(Password, Arg.Any<string>()).Returns(false);
+        LoginUserCommandHandler handler = new(context, CreateTransaction(), CreateLock(), passwordHasher,
+            Substitute.For<ITokenProvider>(), Substitute.For<IDateTimeProvider>(),
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(), CreateSessionHandler());
+
+        Result<AccessTokensResponse> result = await handler.Handle(
+            new LoginUserCommand(Email, Password), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserErrors.NotFoundByUsername);
+        passwordHasher.Received(1).Verify(Password, Arg.Any<string>());
     }
 
     [Fact]
@@ -362,7 +380,7 @@ public sealed class LoginUserCommandHandlerTests : BaseHandlerTest
         handler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>()).Returns(new UserSessionResponse(
             new UserSessionUserDto(Guid.NewGuid(), Email, "Test", "User", null, null),
             new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
-            new UserSessionScopeDto("Enterprise", null, "Enterprise"), "Selected", [], []));
+            new UserSessionScopeDto(Domain.Common.UserAssignmentScopeType.Enterprise, null, "Enterprise"), []));
         return handler;
     }
 }

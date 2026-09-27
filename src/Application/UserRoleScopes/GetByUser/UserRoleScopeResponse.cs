@@ -1,3 +1,5 @@
+using Domain.Common;
+
 namespace Application.UserRoleScopes.GetByUser;
 
 public sealed class UserRoleScopeResponse
@@ -8,7 +10,9 @@ public sealed class UserRoleScopeResponse
 
     public string RoleName { get; init; }
 
-    public string ScopeType { get; init; }
+    public UserAssignmentScopeType ScopeType { get; init; }
 
     public Guid? ScopeId { get; init; }
+
+    public int RowVersion { get; init; }
 }

@@ -52,9 +52,9 @@ public sealed class BootstrapAndAdministratorSafetyTests
             responses.Count(response => response.StatusCode == HttpStatusCode.Created).ShouldBe(1);
             responses.Count(response => response.StatusCode == HttpStatusCode.Forbidden).ShouldBe(1);
 
-            string administratorEmail = responses.Single(response => response.StatusCode == HttpStatusCode.Created).Email;
             await factory.AssertRecoveryStateAsync();
-            LoginResponse login = await LoginAsync(firstClient, administratorEmail, BootstrapPassword);
+            string recoveredUsername = UsernameFor(responses.Single(response => response.StatusCode == HttpStatusCode.Created).Email);
+            LoginResponse login = await LoginAsync(firstClient, recoveredUsername, BootstrapPassword);
             login.Data.AccessToken.ShouldNotBeNullOrWhiteSpace();
 
             RegistrationAttempt replay = await RecoverAsync(firstClient, "replayed-recovery@example.com");
@@ -237,13 +237,13 @@ public sealed class BootstrapAndAdministratorSafetyTests
             }
 
             (await client.DeleteAsync($"admin/users/{administratorId}/role-scope"))
-                .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+                .StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
             AssignmentResponse? assignment = await client
                 .GetFromJsonAsync<AssignmentResponse>($"admin/users/{administratorId}/role-scope");
             assignment.ShouldNotBeNull();
             (await client.DeleteAsync($"admin/user-role-scopes/{assignment.Data.Id}"))
-                .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+                .StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
             (await client.PutAsJsonAsync(
                 $"admin/roles/{WellKnownRoles.AdministratorId}",
@@ -265,13 +265,15 @@ public sealed class BootstrapAndAdministratorSafetyTests
     }
 
     private static async Task<LoginResponse> LoginAsync(HttpClient client)
-        => await LoginAsync(client, BootstrapEmail, BootstrapPassword);
+        => await LoginAsync(client, BootstrapUsername, BootstrapPassword);
 
-    private static async Task<LoginResponse> LoginAsync(HttpClient client, string email, string password)
+    private static string UsernameFor(string email) => $"recovery-{email[..email.IndexOf('@')]}";
+
+    private static async Task<LoginResponse> LoginAsync(HttpClient client, string username, string password)
     {
         HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new
         {
-            username = email,
+            username,
             password
         });
         response.StatusCode.ShouldBe(HttpStatusCode.OK);

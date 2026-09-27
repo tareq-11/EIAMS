@@ -18,11 +18,15 @@ public static class ReceivingInfoErrors
         "ReceivingInfo.SupplierRefInvalid",
         "Supplier reference is required and must not exceed 200 characters.");
 
+    public static readonly Error SupplierPartyNotFound = Error.NotFound(
+        "ReceivingInfo.SupplierPartyNotFound",
+        "The selected active external supplier was not found.");
+
     public static readonly Error SupplierInvoiceRefTooLong = Error.Problem(
         "ReceivingInfo.SupplierInvoiceRefTooLong",
         "Supplier invoice reference must not exceed 100 characters.");
 
     public static readonly Error ReceivingTypeInvalid = Error.Problem(
         "ReceivingInfo.ReceivingTypeInvalid",
-        "ReceivingType must be a known value.");
+        "Receiving type must be Supplier. Transfers and returns use their own document workflows.");
 }

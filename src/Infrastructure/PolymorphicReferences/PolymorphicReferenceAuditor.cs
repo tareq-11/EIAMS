@@ -68,16 +68,33 @@ internal sealed class PolymorphicReferenceAuditor(
                    custody.status
             FROM public.custodies AS custody
             WHERE custody.status = 'Active'
+            UNION ALL
+            SELECT 'DurableAllocation'::text,
+                   allocation.id,
+                   allocation.holder_type,
+                   allocation.holder_id,
+                   allocation.status
+            FROM public.durable_custody_allocations AS allocation
+            WHERE allocation.status = 'Active'
+            UNION ALL
+            SELECT 'TrackedMaterialUnit'::text,
+                   tracked.id,
+                   tracked.holder_type,
+                   tracked.holder_id,
+                   tracked.status
+            FROM public.tracked_material_units AS tracked
+            WHERE tracked.status = 'Issued'
         ), evaluated AS (
             SELECT reference.*,
                    CASE
-                       WHEN reference.party_type = 'External' THEN 'UnsupportedType'
                        WHEN reference.party_type = 'Employee' AND employee.id IS NULL THEN 'NotFound'
                        WHEN reference.party_type = 'Employee' AND employee.status <> 'Active' THEN 'Inactive'
                        WHEN reference.party_type = 'OrganizationalUnit' AND organizational_unit.id IS NULL THEN 'NotFound'
                        WHEN reference.party_type = 'OrganizationalUnit' AND organizational_unit.status <> 'Active' THEN 'Inactive'
                        WHEN reference.party_type = 'Site' AND site.id IS NULL THEN 'NotFound'
                        WHEN reference.party_type = 'Site' AND site.status <> 'Active' THEN 'Inactive'
+                       WHEN reference.party_type = 'External' AND external_party.id IS NULL THEN 'NotFound'
+                       WHEN reference.party_type = 'External' AND external_party.status <> 'Active' THEN 'Inactive'
                        WHEN reference.party_type NOT IN ('Employee', 'OrganizationalUnit', 'Site', 'External') THEN 'UnsupportedType'
                    END AS reason
             FROM reference_rows AS reference
@@ -87,6 +104,8 @@ internal sealed class PolymorphicReferenceAuditor(
                 ON reference.party_type = 'OrganizationalUnit' AND organizational_unit.id = reference.party_id
             LEFT JOIN public.sites AS site
                 ON reference.party_type = 'Site' AND site.id = reference.party_id
+            LEFT JOIN public.external_parties AS external_party
+                ON reference.party_type = 'External' AND external_party.id = reference.party_id
         ), findings AS (
             SELECT * FROM evaluated WHERE reason IS NOT NULL
         )

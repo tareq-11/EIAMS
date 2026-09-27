@@ -91,6 +91,16 @@ public static class ResultExtensions
             : CustomResults.Problem(result, context);
     }
 
+    public static IResult ToCreatedApiResponse<T>(
+        this Result<T> result,
+        HttpContext context,
+        Func<T, string> locationFactory)
+    {
+        return result.IsSuccess
+            ? ApiResults.Created(context, locationFactory(result.Value), result.Value)
+            : CustomResults.Problem(result, context);
+    }
+
     public static TOut Match<TOut>(
         this Result result,
         Func<TOut> onSuccess,

@@ -46,6 +46,16 @@ internal sealed class UpdateMaterialUnitConversionCommandHandler(
             return Result.Failure(MaterialUnitConversionErrors.NotFound(command.ConversionId));
         }
 
+        Result usage = await MaterialUnitConversionUsageGuard.EnsureMutableAsync(
+            context,
+            conversion.Id,
+            cancellationToken);
+
+        if (usage.IsFailure)
+        {
+            return usage;
+        }
+
         conversion.UpdateFactor(command.Factor);
 
         await context.SaveChangesAsync(cancellationToken);

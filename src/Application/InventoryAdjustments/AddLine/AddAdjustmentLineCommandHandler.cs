@@ -59,7 +59,7 @@ internal sealed class AddAdjustmentLineCommandHandler(
 
         Result<decimal> baseQuantity = BaseQuantityCalculator.Calculate(
             command.MaterialId, Math.Abs(command.Difference), command.UnitId,
-            catalog.Family.BaseUnitId, catalog.Conversion);
+            catalog.BaseUnitId, catalog.Conversion);
         if (baseQuantity.IsFailure)
         {
             return Result.Failure<Guid>(baseQuantity.Error);
@@ -67,10 +67,16 @@ internal sealed class AddAdjustmentLineCommandHandler(
 
         decimal signedBaseDifference = Math.Sign(command.Difference) * baseQuantity.Value;
         var lineId = Guid.NewGuid();
+        Result<DocumentLineProvenance> provenance = catalog.CaptureProvenance();
+        if (provenance.IsFailure)
+        {
+            return Result.Failure<Guid>(provenance.Error);
+        }
+
         Result<DocumentLine> line = DocumentLine.Create(
             lineId, document.Id, command.MaterialId, DocumentLineType.Normal,
             Math.Abs(command.Difference), command.UnitId, baseQuantity.Value,
-            null, null, null);
+            null, null, null, provenance: provenance.Value);
         Result<AdjustmentLine> adjustmentLine = AdjustmentLine.Create(
             lineId, document.Id, signedBaseDifference, command.Reason);
         if (line.IsFailure || adjustmentLine.IsFailure)

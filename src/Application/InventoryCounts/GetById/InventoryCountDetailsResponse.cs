@@ -12,4 +12,5 @@ public sealed record InventoryCountDetailsResponse(
     Guid Id, Guid WarehouseId, InventoryCountType CountType, InventoryCountScopeType ScopeType,
     Guid? MaterialDomainId, FreezePolicy FreezePolicy, InventoryCountStatus Status, int RowVersion,
     DateTime PlannedAtUtc, DateTime? StartedAtUtc, DateTime? CompletedAtUtc, DateTime? ClosedAtUtc,
+    DateTime? AbortedAtUtc,
     InventoryCountSummaryResponse Summary);

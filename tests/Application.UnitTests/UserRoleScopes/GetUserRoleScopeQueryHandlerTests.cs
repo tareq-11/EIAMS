@@ -49,7 +49,7 @@ public sealed class GetUserRoleScopeQueryHandlerTests : BaseHandlerTest
         result.IsSuccess.ShouldBeTrue();
         result.Value.RoleId.ShouldBe(roleId);
         result.Value.RoleName.ShouldBe("Administrator");
-        result.Value.ScopeType.ShouldBe(ScopeType.Enterprise.ToString());
+        result.Value.ScopeType.ShouldBe(UserAssignmentScopeType.Enterprise);
         result.Value.ScopeId.ShouldBeNull();
     }
 

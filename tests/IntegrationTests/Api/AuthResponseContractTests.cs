@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Application.Users;
 using Application.Users.GetSession;
+using Domain.Common;
 using Microsoft.AspNetCore.Hosting;
 using Web.Api.Infrastructure;
 
@@ -24,13 +25,14 @@ public sealed class AuthResponseContractTests
         var session = new UserSessionResponse(
             new UserSessionUserDto(Guid.NewGuid(), "user@example.com", "Test", "User", null, null),
             new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
-            new UserSessionScopeDto("Enterprise", null, "Enterprise"), "Selected", [], []);
-        var transport = new RefreshTokenTransport(new RefreshTokenTransportOptions());
+            new UserSessionScopeDto(UserAssignmentScopeType.Enterprise, null, "Enterprise"), []);
+        var transport = new RefreshTokenTransport();
 
         AuthenticationTokensResponse response = transport.CreateResponse(new AccessTokensResponse(token, "refresh", Guid.NewGuid(), session));
 
         response.Session.ShouldBeSameAs(session);
         response.ExpiresInSeconds.ShouldBeInRange(298, 300);
+        response.GetType().GetProperty("RefreshToken").ShouldBeNull();
     }
 
     [Theory]

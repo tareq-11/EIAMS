@@ -1,5 +1,6 @@
-using FluentValidation;
 using Application.Users;
+using Domain.Common;
+using FluentValidation;
 
 namespace Application.Users.Create;
 
@@ -24,5 +25,10 @@ internal sealed class CreateUserCommandValidator : AbstractValidator<CreateUserC
             .Matches("[a-z]")
             .Matches("[0-9]")
             .Matches("[^a-zA-Z0-9]");
+        RuleFor(command => command.RoleId).NotEmpty();
+        RuleFor(command => command.ScopeType).IsInEnum();
+        RuleFor(command => command.ScopeId)
+            .NotNull()
+            .When(command => command.ScopeType is UserAssignmentScopeType.Site or UserAssignmentScopeType.Warehouse);
     }
 }

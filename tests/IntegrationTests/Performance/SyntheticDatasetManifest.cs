@@ -125,9 +125,9 @@ internal static class SyntheticDatasetManifestFactory
         Guid[] roleIds)
     {
         Guid[] siteIds = sites.Select(site => site.SiteId).ToArray();
-        Guid[] organizationalUnitIds = sites.SelectMany(site => site.OrganizationalUnitIds).ToArray();
         Guid[] warehouseIds = sites.SelectMany(site => site.Warehouses).Select(warehouse => warehouse.WarehouseId).ToArray();
-        ScopeType[] scopeTypes = Enum.GetValues<ScopeType>();
+        ScopeType[] scopeTypes =
+        [ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse];
         var assignments = new List<SyntheticUserScopeAssignment>(definition.UserCount);
 
         for (int userIndex = 0; userIndex < definition.UserCount; userIndex++)
@@ -137,7 +137,6 @@ internal static class SyntheticDatasetManifestFactory
             {
                 ScopeType.Enterprise => null,
                 ScopeType.Site => siteIds[userIndex % siteIds.Length],
-                ScopeType.OrganizationalUnit => organizationalUnitIds[userIndex % organizationalUnitIds.Length],
                 ScopeType.Warehouse => warehouseIds[userIndex % warehouseIds.Length],
                 _ => throw new InvalidOperationException("The generated scope type is not supported.")
             };

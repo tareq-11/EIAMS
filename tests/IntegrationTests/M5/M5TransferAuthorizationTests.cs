@@ -68,7 +68,7 @@ public sealed class M5TransferAuthorizationTests : BaseIntegrationTest
         var unit = UnitOfMeasure.Create(Guid.NewGuid(), $"Piece {suffix}", $"P{suffix}", "Count");
         var domain = MaterialDomain.Create(Guid.NewGuid(), $"Domain {suffix}", $"D{suffix}");
         var category = MaterialCategory.Create(Guid.NewGuid(), domain.Id, null, $"Category {suffix}", $"C{suffix}");
-        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}", unit.Id);
+        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}");
         var material = Material.Create(
             Guid.NewGuid(), family.Id, unit.Id, $"Material {suffix}", null, $"M{suffix}", MaterialKind.Consumable,
             TrackingType.Quantity, false, null);

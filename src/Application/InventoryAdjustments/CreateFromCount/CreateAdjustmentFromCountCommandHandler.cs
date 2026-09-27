@@ -18,10 +18,16 @@ internal sealed class CreateAdjustmentFromCountCommandHandler(
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
     IWarehouseDocumentDraftFactory draftFactory,
-    IDatabaseExceptionClassifier databaseExceptionClassifier)
+    IDatabaseExceptionClassifier databaseExceptionClassifier,
+    IApplicationTransaction transaction)
     : ICommandHandler<CreateAdjustmentFromCountCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(CreateAdjustmentFromCountCommand command, CancellationToken cancellationToken)
+        => await transaction.ExecuteAsync(ct => CreateInTransactionAsync(command, ct), cancellationToken);
+
+    private async Task<Result<Guid>> CreateInTransactionAsync(
+        CreateAdjustmentFromCountCommand command,
+        CancellationToken cancellationToken)
     {
         InventoryCount? count = await context.InventoryCounts.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == command.CountId, cancellationToken);
@@ -46,13 +52,19 @@ internal sealed class CreateAdjustmentFromCountCommandHandler(
         var variances = await (
                 from countLine in context.InventoryCountLines.AsNoTracking()
                 join material in context.Materials.AsNoTracking() on countLine.MaterialId equals material.Id
-                join family in context.MaterialFamilies.AsNoTracking() on material.FamilyId equals family.Id
                 where countLine.CountId == count.Id && countLine.Difference != null && countLine.Difference != 0
-                select new { CountLine = countLine, material.MaterialKind, material.RequiresAssetNumber, family.BaseUnitId })
+                select new
+                {
+                    CountLine = countLine,
+                    material.MaterialKind,
+                    material.CatalogVersion,
+                    material.TrackingType,
+                    material.BaseUnitId
+                })
             .ToListAsync(cancellationToken);
 
-        if (variances.Count == 0 || variances.All(item =>
-                item.MaterialKind == Domain.Materials.MaterialKind.Asset || item.RequiresAssetNumber))
+        if (variances.Count == 0 ||
+            variances.All(item => item.MaterialKind == Domain.Materials.MaterialKind.Asset))
         {
             return Result.Failure<Guid>(InventoryCountErrors.SnapshotEmpty(count.Id));
         }
@@ -69,14 +81,23 @@ internal sealed class CreateAdjustmentFromCountCommandHandler(
         context.WarehouseDocuments.Add(document.Value);
         context.InventoryAdjustments.Add(adjustment.Value);
 
-        foreach (var variance in variances.Where(item =>
-                     item.MaterialKind != Domain.Materials.MaterialKind.Asset && !item.RequiresAssetNumber))
+        foreach (var variance in variances.Where(item => item.MaterialKind != Domain.Materials.MaterialKind.Asset))
         {
             decimal difference = variance.CountLine.Difference!.Value;
             var lineId = Guid.NewGuid();
+            Result<DocumentLineProvenance> provenance = DocumentLineProvenance.Create(
+                variance.CatalogVersion,
+                variance.MaterialKind,
+                variance.TrackingType,
+                variance.BaseUnitId);
+            if (provenance.IsFailure)
+            {
+                return Result.Failure<Guid>(provenance.Error);
+            }
+
             Result<DocumentLine> line = DocumentLine.Create(lineId, document.Value.Id,
                 variance.CountLine.MaterialId, DocumentLineType.Normal, Math.Abs(difference),
-                variance.BaseUnitId, Math.Abs(difference), null, null, null);
+                variance.BaseUnitId, Math.Abs(difference), null, null, null, provenance: provenance.Value);
             Result<AdjustmentLine> adjustmentLine = AdjustmentLine.Create(lineId, document.Value.Id,
                 difference, variance.CountLine.VarianceReason!);
             if (line.IsFailure || adjustmentLine.IsFailure)

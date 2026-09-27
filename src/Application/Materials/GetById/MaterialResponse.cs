@@ -20,6 +20,13 @@ public sealed class MaterialResponse
 
     public bool RequiresAssetNumber { get; init; }
 
+    /// <summary>
+    /// Classification revision the client must echo as <c>expectedCatalogVersion</c> when updating
+    /// this material (3B optimistic concurrency). A stale value is rejected with a conflict instead of
+    /// overwriting a classification change the client never observed.
+    /// </summary>
+    public int CatalogVersion { get; init; }
+
     public string? Attributes { get; init; }
 
     public string Status { get; init; }
@@ -29,7 +36,7 @@ public sealed class MaterialResponse
 
     public string MaterialDomainName { get; init; }
 
-    /// <summary>Resolved via the family's base unit.</summary>
+    /// <summary>The material's own base unit (<c>Material.BaseUnitId</c>, decision 038).</summary>
     public Guid BaseUnitId { get; init; }
 
     public string BaseUnitSymbol { get; init; }

@@ -120,14 +120,17 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
             username = $"scoped-editor-{Guid.NewGuid():N}",
             firstName = "Scoped",
             lastName = "Editor",
-            password = "Password123!"
+            password = "Password123!",
+            roleId = WellKnownRoles.AdministratorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     [Fact]
-    public async Task UpdateWarehouse_Should_AuthorizeOrganizationalUnitDescendantsButRejectSibling()
+    public async Task LegacyOrganizationalUnitAssignment_ShouldBeRejectedByCutoverConstraint()
     {
         WarehouseSeed seed = await SeedWarehouseAsync();
         var descendantWarehouseId = Guid.NewGuid();
@@ -147,29 +150,9 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
             await context.SaveChangesAsync();
         }
 
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownDottedPermissions.WarehouseManageId, ScopeType.OrganizationalUnit, seed.OrganizationalUnitId);
-        Authenticate(tokens.AccessToken);
-
-        HttpResponseMessage descendant = await HttpClient.PutAsJsonAsync($"warehouses/{descendantWarehouseId}", new
-        {
-            organizationalUnitId = descendantUnitId,
-            name = "Descendant updated",
-            warehouseType = "Main",
-            canHoldStock = true,
-            expectedRowVersion = 1
-        });
-        HttpResponseMessage sibling = await HttpClient.PutAsJsonAsync($"warehouses/{siblingWarehouseId}", new
-        {
-            organizationalUnitId = siblingUnitId,
-            name = "Sibling must not update",
-            warehouseType = "Main",
-            canHoldStock = true,
-            expectedRowVersion = 1
-        });
-
-        descendant.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-        sibling.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (Guid userId, _) = await RegisterAndLoginAsync();
+        await Should.ThrowAsync<DbUpdateException>(() =>
+            GrantPermissionAsync(userId, WellKnownDottedPermissions.WarehouseManageId, ScopeType.OrganizationalUnit, seed.OrganizationalUnitId));
     }
 
     [Fact]
@@ -519,7 +502,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category-{categoryId:N}", $"CAT-{categoryId:N}"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(sourceUnitId, "Box", "box", "Count"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family-{familyId:N}", $"FAM-{familyId:N}", baseUnitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family-{familyId:N}", $"FAM-{familyId:N}"));
         context.Materials.Add(Material.Create(
             materialId,
             familyId,

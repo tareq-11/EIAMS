@@ -115,7 +115,6 @@ internal static class PermissionAllowedScopeTypeSeed
             {
                 new { PermissionId = permissionId, ScopeType = ScopeType.Enterprise },
                 new { PermissionId = permissionId, ScopeType = ScopeType.Site },
-                new { PermissionId = permissionId, ScopeType = ScopeType.OrganizationalUnit },
                 new { PermissionId = permissionId, ScopeType = ScopeType.Warehouse }
             })
             .Concat(StructuralManagePermissions.Select(permissionId =>
@@ -126,7 +125,6 @@ internal static class PermissionAllowedScopeTypeSeed
             {
                 new { PermissionId = permissionId, ScopeType = ScopeType.Enterprise },
                 new { PermissionId = permissionId, ScopeType = ScopeType.Site },
-                new { PermissionId = permissionId, ScopeType = ScopeType.OrganizationalUnit },
                 new { PermissionId = permissionId, ScopeType = ScopeType.Warehouse }
             }))
             .Concat(DottedStructuralManage.Select(permissionId =>

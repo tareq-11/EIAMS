@@ -35,14 +35,15 @@ internal sealed class GetInventoryFreezeStatusQueryHandler(
                 WarehouseErrors.NotFound(query.WarehouseId));
         }
 
-        InventoryFreezeEvaluation evaluation = await freezePolicyService.EvaluateAsync(
+        InventoryFreezeEvaluation evaluation = await freezePolicyService.EvaluateProvisionalAsync(
             [query.WarehouseId],
             cancellationToken);
 
         return new InventoryFreezeStatusResponse(
             query.WarehouseId,
             evaluation.BlockingError is not null,
-            evaluation.Warnings.Count > 0,
+            evaluation.IsProvisional,
+            evaluation.Warnings.Any(warning => warning.Code == "InventoryCounts.SoftFreezeActive"),
             evaluation.ActiveCounts
                 .Select(count => new ActiveInventoryFreezeResponse(count.CountId, count.FreezePolicy))
                 .ToList());

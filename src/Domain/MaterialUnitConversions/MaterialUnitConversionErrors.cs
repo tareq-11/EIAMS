@@ -16,6 +16,10 @@ public static class MaterialUnitConversionErrors
         "MaterialUnitConversions.UnitNotFound",
         $"The unit of measure with the Id = '{unitId}' was not found");
 
+    public static Error UnitNotActive(Guid unitId) => Error.Problem(
+        "MaterialUnitConversions.UnitNotActive",
+        $"The unit of measure with the Id = '{unitId}' is inactive.");
+
     public static readonly Error BaseUnitMismatch = Error.Problem(
         "MaterialUnitConversions.BaseUnitMismatch",
         "The target unit must be the material's base unit");
@@ -35,6 +39,11 @@ public static class MaterialUnitConversionErrors
     public static readonly Error AlreadyExists = Error.Conflict(
         "MaterialUnitConversions.AlreadyExists",
         "A conversion from this unit already exists for the material");
+
+    public static Error ProvenanceInUse(Guid conversionId) => Error.Conflict(
+        "MaterialUnitConversions.ProvenanceInUse",
+        $"The material unit conversion with the Id = '{conversionId}' is already part of the provenance of an operational document and can no longer be changed or removed",
+        new { conversion_id = conversionId });
 
     public static readonly Error Forbidden = Error.Forbidden(
         "MaterialUnitConversions.Forbidden",

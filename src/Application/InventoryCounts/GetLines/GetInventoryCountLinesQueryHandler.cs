@@ -37,18 +37,17 @@ internal sealed class GetInventoryCountLinesQueryHandler(
             .AsNoTracking()
             .Where(item => item.CountId == count.Id)
             .Where(item => !query.OnlyVariance || item.Difference != null && item.Difference != 0)
-            .Select(item => new InventoryCountLineResponse(
+            .OrderBy(item => item.MaterialId)
+            .ThenBy(item => item.AssetId)
+            .ThenBy(item => item.Id)
+            .ToPagedResultAsync(item => new InventoryCountLineResponse(
                 item.Id,
                 item.MaterialId,
                 item.AssetId,
                 item.SnapshotQuantity,
                 item.ActualQuantity,
                 item.Difference,
-                item.VarianceReason))
-            .OrderBy(item => item.MaterialId)
-            .ThenBy(item => item.AssetId)
-            .ThenBy(item => item.Id)
-            .ToPagedResultAsync(query.Page, query.PageSize, cancellationToken);
+                item.VarianceReason), query.Page, query.PageSize, cancellationToken);
 
         return result;
     }

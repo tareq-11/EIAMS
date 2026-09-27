@@ -20,9 +20,9 @@ public sealed class GetMaterialsController(IQueryHandler<GetMaterialsQuery, Page
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid? familyId,
-        Guid? materialDomainId,
-        MaterialStatus? status,
+        [FromQuery] Guid? familyId,
+        [FromQuery] Guid? materialDomainId,
+        [FromQuery] MaterialStatus? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

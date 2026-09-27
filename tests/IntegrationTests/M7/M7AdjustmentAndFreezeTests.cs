@@ -94,6 +94,141 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task HardFreeze_Should_AllowPosting_WhenCountMembershipDoesNotOverlap()
+    {
+        M7Seed seed = await SeedAsync();
+        await CreateAndPostOpeningAsync(seed, 5m);
+        SubmittedDocument adjustment = await CreateSubmittedAdjustmentAsync(seed, 1m);
+        Guid unrelatedMaterialId = await CreateSecondMaterialAsync(seed);
+        (Guid countUserId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantInventoryCountPlanAsync(countUserId, seed.WarehouseId);
+        Guid countId = await CreatePlannedSelectedCountAsync(seed, unrelatedMaterialId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage start = await HttpClient.PostAsJsonAsync(
+            $"inventory-counts/{countId}/start", new { expectedRowVersion = 1 });
+        start.StatusCode.ShouldBe(HttpStatusCode.OK, await start.Content.ReadAsStringAsync());
+
+        Result<PostingOutcome> posted = await PostWithOutcomeAsync(
+            adjustment.Id, adjustment.RowVersion, seed.UserId);
+
+        posted.IsSuccess.ShouldBeTrue(posted.IsFailure ? posted.Error.ToString() : null);
+        posted.Value.Warnings.ShouldBeEmpty();
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.StockMovements.AnyAsync(item => item.DocumentId == adjustment.Id)).ShouldBeTrue();
+        (await context.WarehouseDocuments.SingleAsync(item => item.Id == adjustment.Id)).DocumentStatus
+            .ShouldBe(DocumentStatus.Posted);
+    }
+
+    [Fact]
+    public async Task HardFreeze_Should_BlockMultiMaterialPostingOnAnyPartialIntersection()
+    {
+        M7Seed seed = await SeedAsync();
+        Guid unrelatedMaterialId = await CreateSecondMaterialAsync(seed);
+        SubmittedDocument adjustment = await CreateSubmittedMultiMaterialAdjustmentAsync(seed, unrelatedMaterialId);
+        await StartHardFreezeAsync(seed);
+
+        Result<Guid> posted = await PostAsync(adjustment.Id, adjustment.RowVersion, seed.UserId);
+
+        posted.IsFailure.ShouldBeTrue();
+        posted.Error.Code.ShouldBe("InventoryCounts.PostingBlocked");
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.StockMovements.AnyAsync(item => item.DocumentId == adjustment.Id)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ConcurrentCountStartAndPosting_ShouldHonorExactMembershipUnderWarehouseLock()
+    {
+        M7Seed seed = await SeedAsync();
+        await CreateAndPostOpeningAsync(seed, 5m);
+        SubmittedDocument adjustment = await CreateSubmittedAdjustmentAsync(seed, -1m);
+        (Guid countUserId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantInventoryCountPlanAsync(countUserId, seed.WarehouseId);
+        Guid countId = await CreatePlannedSelectedCountAsync(seed, seed.MaterialId);
+        Authenticate(tokens.AccessToken);
+
+        Task<HttpResponseMessage> startTask = HttpClient.PostAsJsonAsync(
+            $"inventory-counts/{countId}/start", new { expectedRowVersion = 1 });
+        Task<Result<PostingOutcome>> postTask = PostWithOutcomeAsync(
+            adjustment.Id, adjustment.RowVersion, seed.UserId);
+        await Task.WhenAll(startTask, postTask);
+        using HttpResponseMessage start = await startTask;
+        Result<PostingOutcome> posted = await postTask;
+        start.StatusCode.ShouldBe(HttpStatusCode.OK, await start.Content.ReadAsStringAsync());
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        decimal finalBalance = await context.InventoryBalances
+            .Where(item => item.WarehouseId == seed.WarehouseId && item.MaterialId == seed.MaterialId)
+            .Select(item => item.Quantity)
+            .SingleAsync();
+        decimal snapshot = await context.InventoryCountLines
+            .Where(item => item.CountId == countId && item.MaterialId == seed.MaterialId)
+            .Select(item => item.SnapshotQuantity)
+            .SingleAsync();
+
+        if (posted.IsSuccess)
+        {
+            // Posting won the warehouse lock first; Start must snapshot its committed result.
+            finalBalance.ShouldBe(4m);
+            snapshot.ShouldBe(finalBalance);
+        }
+        else
+        {
+            // Start won the warehouse lock first; exact membership blocks the intersecting post.
+            posted.Error.Code.ShouldBe("InventoryCounts.PostingBlocked");
+            finalBalance.ShouldBe(5m);
+            snapshot.ShouldBe(finalBalance);
+        }
+    }
+
+    [Fact]
+    public async Task HardFreeze_Should_BlockReversalFromImmutableSourceMovementIntersection()
+    {
+        M7Seed seed = await SeedAsync();
+        await CreateAndPostOpeningAsync(seed, 5m);
+        SubmittedDocument source = await CreateSubmittedAdjustmentAsync(seed, 1m);
+        (await PostAsync(source.Id, source.RowVersion, seed.UserId)).IsSuccess.ShouldBeTrue();
+        await StartHardFreezeAsync(seed);
+
+        (Guid reversalUserId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantWarehouseDocumentCreateAsync(reversalUserId, seed.WarehouseId);
+        Authenticate(tokens.AccessToken);
+        HttpResponseMessage createReversal = await HttpClient.PostAsync(
+            $"warehouse-documents/{source.Id}/reversals", null);
+        createReversal.StatusCode.ShouldBe(HttpStatusCode.Created, await createReversal.Content.ReadAsStringAsync());
+        ApiEnvelope<ResourceIdDto>? reversalEnvelope = await createReversal.Content
+            .ReadFromJsonAsync<ApiEnvelope<ResourceIdDto>>();
+        reversalEnvelope.ShouldNotBeNull();
+        await SubmitReversalAsync(seed, reversalEnvelope.Data.Id);
+
+        int reversalRowVersion;
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            reversalRowVersion = await context.WarehouseDocuments
+                .Where(item => item.Id == reversalEnvelope.Data.Id)
+                .Select(item => item.RowVersion)
+                .SingleAsync();
+        }
+
+        Result<Guid> posted = await PostAsync(reversalEnvelope.Data.Id, reversalRowVersion, seed.UserId);
+
+        posted.IsFailure.ShouldBeTrue();
+        posted.Error.Code.ShouldBe("InventoryCounts.PostingBlocked");
+        await using AsyncServiceScope assertScope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext assertContext = assertScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await assertContext.StockMovements.AnyAsync(item => item.DocumentId == reversalEnvelope.Data.Id))
+            .ShouldBeFalse();
+        (await assertContext.WarehouseDocuments.SingleAsync(item => item.Id == source.Id)).DocumentStatus
+            .ShouldBe(DocumentStatus.Posted);
+        (await assertContext.InventoryBalances.Where(item => item.WarehouseId == seed.WarehouseId &&
+            item.MaterialId == seed.MaterialId).Select(item => item.Quantity).SingleAsync()).ShouldBe(6m);
+    }
+
+    [Fact]
     public async Task NoFreeze_Should_NotBlockPosting()
     {
         // Arrange
@@ -156,8 +291,32 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         envelope.ShouldNotBeNull();
         envelope.Success.ShouldBeTrue();
         envelope.Data.IsPostingBlocked.ShouldBeFalse();
+        envelope.Data.IsProvisional.ShouldBeTrue();
         envelope.Data.HasSoftFreezeWarning.ShouldBeTrue();
         envelope.Data.ActiveCounts.ShouldHaveSingleItem().FreezePolicy.ShouldBe(FreezePolicy.SoftFreeze);
+    }
+
+    [Fact]
+    public async Task FreezeStatus_Should_ExposeHardFreezeAsProvisionalNotDefinitiveBlock()
+    {
+        M7Seed seed = await SeedAsync();
+        await StartHardFreezeAsync(seed);
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantInventoryCountViewAsync(userId, seed.WarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage response = await HttpClient.GetAsync(
+            $"warehouses/{seed.WarehouseId}/inventory-freeze-status");
+
+        response.EnsureSuccessStatusCode();
+        ApiEnvelope<FreezeStatusDto>? envelope =
+            await response.Content.ReadFromJsonAsync<ApiEnvelope<FreezeStatusDto>>();
+        envelope.ShouldNotBeNull();
+        envelope.Success.ShouldBeTrue();
+        envelope.Data.IsPostingBlocked.ShouldBeFalse();
+        envelope.Data.IsProvisional.ShouldBeTrue();
+        envelope.Data.HasSoftFreezeWarning.ShouldBeFalse();
+        envelope.Data.ActiveCounts.ShouldHaveSingleItem().FreezePolicy.ShouldBe(FreezePolicy.HardFreeze);
     }
 
     [Fact]
@@ -401,7 +560,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         dbContext.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, $"Piece {suffix}", $"P{suffix}", "Count"));
         dbContext.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         dbContext.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
-        dbContext.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
+        dbContext.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}"));
         dbContext.Materials.Add(Material.Create(materialId, familyId, unitId, $"Material {suffix}", null,
             $"M{suffix}", assetTracked ? MaterialKind.Asset : MaterialKind.Consumable,
             assetTracked ? TrackingType.Serial : TrackingType.Quantity, false, null));
@@ -420,7 +579,8 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
     {
         SubmittedDocument document = await CreateSubmittedDocumentAsync(
             seed, DocumentType.Opening, quantity, OpeningType.Initial, null);
-        (await PostAsync(document.Id, document.RowVersion, seed.UserId)).IsSuccess.ShouldBeTrue();
+        Result<Guid> result = await PostAsync(document.Id, document.RowVersion, seed.UserId);
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.ToString() : null);
     }
 
     private async Task<SubmittedDocument> CreateSubmittedAdjustmentAsync(M7Seed seed, decimal difference)
@@ -440,9 +600,12 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         string suffix = Guid.NewGuid().ToString("N")[..10];
         var document = WarehouseDocument.CreateDraft(Guid.NewGuid(), seed.WarehouseId, type, $"{type}-{suffix}");
+        Material material = await dbContext.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion, material.MaterialKind, material.TrackingType, material.BaseUnitId).Value;
         Result<DocumentLine> line = DocumentLine.Create(Guid.NewGuid(), document.Id, seed.MaterialId,
             seed.AssetTracked ? DocumentLineType.Asset : DocumentLineType.Normal,
-            quantity, seed.UnitId, quantity, null, null, null, openingType);
+            quantity, seed.UnitId, quantity, null, null, null, openingType, provenance: provenance);
         dbContext.WarehouseDocuments.Add(document);
         dbContext.DocumentLines.Add(line.Value);
         if (difference is decimal adjustmentDifference)
@@ -465,6 +628,45 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         return new SubmittedDocument(document.Id, document.RowVersion);
     }
 
+    private async Task<SubmittedDocument> CreateSubmittedMultiMaterialAdjustmentAsync(
+        M7Seed seed,
+        Guid secondMaterialId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        string suffix = Guid.NewGuid().ToString("N")[..10];
+        var document = WarehouseDocument.CreateDraft(
+            Guid.NewGuid(), seed.WarehouseId, DocumentType.Adjustment, $"ADJ-MULTI-{suffix}");
+        InventoryAdjustment adjustment = InventoryAdjustment.Create(
+            document.Id, null, AdjustmentKind.Quantity, "Two-material variance").Value;
+        context.WarehouseDocuments.Add(document);
+        context.InventoryAdjustments.Add(adjustment);
+
+        foreach (Guid materialId in new[] { seed.MaterialId, secondMaterialId })
+        {
+            Material material = await context.Materials.SingleAsync(item => item.Id == materialId);
+            DocumentLine line = DocumentLine.Create(
+                Guid.NewGuid(), document.Id, materialId, DocumentLineType.Normal, 1m, seed.UnitId, 1m,
+                null, null, null,
+                provenance: DocumentLineProvenance.Create(
+                    material.CatalogVersion, material.MaterialKind, material.TrackingType, material.BaseUnitId).Value).Value;
+            context.DocumentLines.Add(line);
+            context.AdjustmentLines.Add(AdjustmentLine.Create(
+                line.Id, document.Id, 1m, "Surplus").Value);
+        }
+
+        var attachment = DocumentAttachment.Create(
+            Guid.NewGuid(), document.Id, AttachmentType.SignedOriginal, $"m7/{suffix}.pdf", $"{suffix}.pdf",
+            "application/pdf", 1, suffix, seed.UserId, DateTime.UtcNow);
+        context.DocumentAttachments.Add(attachment);
+        await context.SaveChangesAsync();
+        document.SetSignedCopy(attachment.Id).IsSuccess.ShouldBeTrue();
+        document.UpdatePaperReference($"P-{suffix}", DateTime.UtcNow.Year).IsSuccess.ShouldBeTrue();
+        document.Submit().IsSuccess.ShouldBeTrue();
+        await context.SaveChangesAsync();
+        return new SubmittedDocument(document.Id, document.RowVersion);
+    }
+
     private async Task<SubmittedDocument> CreateSubmittedDisposalAsync(M7Seed seed, Guid assetId, decimal difference = -1m)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -472,8 +674,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         string suffix = Guid.NewGuid().ToString("N")[..10];
         var document = WarehouseDocument.CreateDraft(
             Guid.NewGuid(), seed.WarehouseId, DocumentType.Adjustment, $"DIS-{suffix}");
+        Material material = await dbContext.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion, material.MaterialKind, material.TrackingType, material.BaseUnitId).Value;
         Result<DocumentLine> line = DocumentLine.Create(Guid.NewGuid(), document.Id, seed.MaterialId,
-            DocumentLineType.Asset, 1m, seed.UnitId, 1m, null, null, null);
+            DocumentLineType.Asset, 1m, seed.UnitId, 1m, null, null, null, provenance: provenance);
         dbContext.WarehouseDocuments.Add(document);
         dbContext.DocumentLines.Add(line.Value);
         dbContext.InventoryAdjustments.Add(InventoryAdjustment.Create(
@@ -494,6 +699,24 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         return new SubmittedDocument(document.Id, document.RowVersion);
     }
 
+    private async Task SubmitReversalAsync(M7Seed seed, Guid reversalId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        WarehouseDocument reversal = await context.WarehouseDocuments.SingleAsync(item => item.Id == reversalId);
+        string suffix = Guid.NewGuid().ToString("N")[..10];
+        var attachment = DocumentAttachment.Create(
+            Guid.NewGuid(), reversal.Id, AttachmentType.SignedOriginal,
+            $"m7/reversal/{suffix}.pdf", $"{suffix}.pdf", "application/pdf", 1, suffix,
+            seed.UserId, DateTime.UtcNow);
+        context.DocumentAttachments.Add(attachment);
+        await context.SaveChangesAsync();
+        reversal.SetSignedCopy(attachment.Id).IsSuccess.ShouldBeTrue();
+        reversal.UpdatePaperReference($"REV-{suffix}", DateTime.UtcNow.Year).IsSuccess.ShouldBeTrue();
+        reversal.Submit().IsSuccess.ShouldBeTrue();
+        await context.SaveChangesAsync();
+    }
+
     private async Task CreateAndPostAssetIssueAsync(M7Seed seed, Guid assetId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -501,8 +724,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         string suffix = Guid.NewGuid().ToString("N")[..10];
         var document = WarehouseDocument.CreateDraft(
             Guid.NewGuid(), seed.WarehouseId, DocumentType.Issue, $"ISS-{suffix}");
+        Material material = await dbContext.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion, material.MaterialKind, material.TrackingType, material.BaseUnitId).Value;
         Result<DocumentLine> line = DocumentLine.Create(Guid.NewGuid(), document.Id, seed.MaterialId,
-            DocumentLineType.Asset, 1m, seed.UnitId, 1m, null, null, null);
+            DocumentLineType.Asset, 1m, seed.UnitId, 1m, null, null, null, provenance: provenance);
         dbContext.WarehouseDocuments.Add(document);
         dbContext.DocumentLines.Add(line.Value);
         dbContext.IssueTos.Add(IssueTo.Create(
@@ -523,6 +749,62 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
 
     private Task StartHardFreezeAsync(M7Seed seed) => StartCountAsync(seed, FreezePolicy.HardFreeze);
 
+    private async Task<Guid> CreatePlannedSelectedCountAsync(M7Seed seed, Guid materialId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        InventoryCount count = InventoryCount.Plan(
+            Guid.NewGuid(),
+            seed.WarehouseId,
+            seed.UserId,
+            InventoryCountType.Surprise,
+            InventoryCountScopeType.SelectedMaterials,
+            null,
+            FreezePolicy.HardFreeze,
+            DateTime.UtcNow).Value;
+        context.InventoryCounts.Add(count);
+        context.InventoryCountScopeMaterials.Add(
+            InventoryCountScopeMaterial.Create(Guid.NewGuid(), count.Id, materialId));
+        await context.SaveChangesAsync();
+        return count.Id;
+    }
+
+    private async Task<Guid> CreateSecondMaterialAsync(M7Seed seed)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Material existing = await context.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+        string suffix = Guid.NewGuid().ToString("N")[..10];
+        var material = Material.Create(
+            Guid.NewGuid(),
+            existing.FamilyId,
+            seed.UnitId,
+            $"Uncounted material {suffix}",
+            null,
+            $"UM{suffix}",
+            MaterialKind.Consumable,
+            TrackingType.Quantity,
+            false,
+            null);
+        context.Materials.Add(material);
+        await context.SaveChangesAsync();
+        return material.Id;
+    }
+
+    private async Task GrantInventoryCountPlanAsync(Guid userId, Guid warehouseId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleId = Guid.NewGuid();
+        context.Roles.Add(Role.Create(roleId, $"M7 count planner {roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.CountPlanId));
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+        await context.SaveChangesAsync();
+    }
+
     private async Task StartCountAsync(M7Seed seed, FreezePolicy policy)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
@@ -530,8 +812,11 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         InventoryCount count = InventoryCount.Plan(Guid.NewGuid(), seed.WarehouseId, seed.UserId,
             InventoryCountType.Surprise, InventoryCountScopeType.EntireWarehouse,
             null, policy, DateTime.UtcNow).Value;
-        count.Start(DateTime.UtcNow.AddTicks(1)).IsSuccess.ShouldBeTrue();
+        dbContext.InventoryCountLines.Add(InventoryCountLine.Create(
+            Guid.NewGuid(), count.Id, seed.MaterialId, null, seed.AssetTracked ? 1m : 0m).Value);
         dbContext.InventoryCounts.Add(count);
+        await dbContext.SaveChangesAsync();
+        count.Start(DateTime.UtcNow.AddTicks(1)).IsSuccess.ShouldBeTrue();
         await dbContext.SaveChangesAsync();
     }
 
@@ -615,6 +900,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
     private sealed record FreezeStatusDto(
         Guid WarehouseId,
         bool IsPostingBlocked,
+        bool IsProvisional,
         bool HasSoftFreezeWarning,
         IReadOnlyList<ActiveFreezeDto> ActiveCounts);
     private sealed record PostingWarningDto(

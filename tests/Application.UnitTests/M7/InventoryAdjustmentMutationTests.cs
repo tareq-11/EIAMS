@@ -140,7 +140,7 @@ public sealed class InventoryAdjustmentMutationTests : BaseHandlerTest
         var firstAssetId = Guid.NewGuid();
         var secondAssetId = Guid.NewGuid();
         context.MaterialFamilies.Add(MaterialFamily.Create(
-            familyId, Guid.NewGuid(), "Family", "FAMILY", unitId));
+            familyId, Guid.NewGuid(), "Family", "FAMILY"));
         context.Materials.Add(Material.Create(
             materialId, familyId, unitId, "Asset", null, "ASSET", MaterialKind.Asset,
             TrackingType.Serial, false, null));

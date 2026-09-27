@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Application.Abstractions.Authentication;
 using Domain.Users;
 using Infrastructure.Database;
@@ -60,11 +61,45 @@ public sealed class UsersTests : BaseIntegrationTest
         await AssignEnterpriseAdministratorAsync(userId);
 
         // Act
-        AccessTokens tokens = await LoginAsync(email);
+        AccessTokens tokens = await LoginAsync(UsernameFor(email));
 
         // Assert
         tokens.AccessToken.ShouldNotBeNullOrWhiteSpace();
         tokens.RefreshToken.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Login_ShouldUseCanonicalUsernameOnly_AndKeepFailureGeneric()
+    {
+        string email = UniqueEmail();
+        Guid userId = await RegisterUserAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
+        string username = UsernameFor(email);
+
+        HttpResponseMessage canonicalLogin = await HttpClient.PostAsJsonAsync(
+            "auth/login",
+            new { username = $"  {username.ToUpperInvariant()}  ", password = IntegrationTestWebAppFactory.AdministratorPassword });
+        canonicalLogin.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        HttpResponseMessage emailLogin = await HttpClient.PostAsJsonAsync(
+            "auth/login",
+            new { username = email, password = IntegrationTestWebAppFactory.AdministratorPassword });
+        HttpResponseMessage unknownLogin = await HttpClient.PostAsJsonAsync(
+            "auth/login",
+            new { username = "unknown-login-user", password = IntegrationTestWebAppFactory.AdministratorPassword });
+
+        emailLogin.StatusCode.ShouldBe(unknownLogin.StatusCode);
+        using var emailBody = JsonDocument.Parse(await emailLogin.Content.ReadAsStringAsync());
+        using var unknownBody = JsonDocument.Parse(await unknownLogin.Content.ReadAsStringAsync());
+        JsonElement emailError = emailBody.RootElement.GetProperty("error");
+        JsonElement unknownError = unknownBody.RootElement.GetProperty("error");
+        emailBody.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
+        unknownBody.RootElement.GetProperty("success").GetBoolean().ShouldBeFalse();
+        emailError.GetProperty("code").GetString().ShouldBe(unknownError.GetProperty("code").GetString());
+        emailError.GetProperty("message").GetString().ShouldBe(unknownError.GetProperty("message").GetString());
+        emailError.GetProperty("details").ToString().ShouldBe(unknownError.GetProperty("details").ToString());
+        emailError.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
+        unknownError.GetProperty("request_id").GetString().ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -78,7 +113,7 @@ public sealed class UsersTests : BaseIntegrationTest
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
             "auth/login",
-            new { username = email, password = "WrongPassword1!" });
+            new { username = UsernameFor(email), password = "WrongPassword1!" });
 
         // Assert
         response.IsSuccessStatusCode.ShouldBeFalse();
@@ -91,12 +126,10 @@ public sealed class UsersTests : BaseIntegrationTest
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         await AssignEnterpriseAdministratorAsync(userId);
-        AccessTokens tokens = await LoginAsync(email);
+        await LoginAsync(UsernameFor(email));
 
         // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "auth/refresh",
-            new { refreshToken = tokens.RefreshToken });
+        HttpResponseMessage response = await HttpClient.PostAsync("auth/refresh", null);
 
         // Assert
         response.EnsureSuccessStatusCode();
@@ -105,16 +138,16 @@ public sealed class UsersTests : BaseIntegrationTest
         body.ShouldNotBeNull();
         body.Success.ShouldBeTrue();
         body.Data.AccessToken.ShouldNotBeNullOrWhiteSpace();
-        body.Data.RefreshToken.ShouldNotBe(tokens.RefreshToken);
+        response.Headers.GetValues("Set-Cookie").ShouldContain(value => value.StartsWith("eiams_refresh_token=", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task RefreshToken_Should_ReturnProblem_WhenTokenIsInvalid()
     {
         // Act
-        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
-            "auth/refresh",
-            new { refreshToken = "this-token-does-not-exist" });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "auth/refresh");
+        request.Headers.Add("Cookie", "eiams_refresh_token=this-token-does-not-exist");
+        HttpResponseMessage response = await HttpClient.SendAsync(request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -126,33 +159,24 @@ public sealed class UsersTests : BaseIntegrationTest
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         await AssignEnterpriseAdministratorAsync(userId);
-        AccessTokens originalTokens = await LoginAsync(email);
+        AccessTokens originalTokens = await LoginAsync(UsernameFor(email));
         HttpClient.DefaultRequestHeaders.Authorization = null;
-
-        string tokenHash;
-        await using (AsyncServiceScope tokenProviderScope = factory.Services.CreateAsyncScope())
-        {
-            tokenHash = tokenProviderScope.ServiceProvider
-                .GetRequiredService<ITokenProvider>()
-                .HashRefreshToken(originalTokens.RefreshToken);
-        }
-
-        Task<HttpResponseMessage>[] refreshRequests;
+        HttpClient firstClient = CreateCookieOnlyClient();
+        HttpClient replayClient = CreateCookieOnlyClient();
+        string tokenHash = factory.Services.GetRequiredService<ITokenProvider>().HashRefreshToken(originalTokens.RefreshToken);
+        HttpResponseMessage firstResponse;
+        HttpResponseMessage replayResponse;
         await using (IntegrationTestWebAppFactory.PostgresAdvisoryLockLease barrier =
-                     await factory.HoldApplicationLockAsync($"security:refresh-token:{tokenHash}"))
+                         await factory.HoldApplicationLockAsync($"security:refresh-token:{tokenHash}"))
         {
-            Task<HttpResponseMessage> firstRefresh = HttpClient.PostAsJsonAsync(
-                "auth/refresh",
-                new { refreshToken = originalTokens.RefreshToken });
+            Task<HttpResponseMessage> firstTask = SendRefreshWithCookieAsync(firstClient, originalTokens.RefreshToken);
             await barrier.WaitUntilContendedAsync();
-            Task<HttpResponseMessage> replay = HttpClient.PostAsJsonAsync(
-                "auth/refresh",
-                new { refreshToken = originalTokens.RefreshToken });
-            refreshRequests = [firstRefresh, replay];
+            Task<HttpResponseMessage> replayTask = SendRefreshWithCookieAsync(replayClient, originalTokens.RefreshToken);
             await barrier.ReleaseAsync();
+            firstResponse = await firstTask;
+            replayResponse = await replayTask;
         }
-
-        HttpResponseMessage[] responses = await Task.WhenAll(refreshRequests);
+        HttpResponseMessage[] responses = [firstResponse, replayResponse];
 
         responses.Count(response => response.StatusCode == HttpStatusCode.OK).ShouldBe(1);
         responses.Count(response => response.StatusCode == HttpStatusCode.BadRequest).ShouldBe(1);
@@ -162,10 +186,14 @@ public sealed class UsersTests : BaseIntegrationTest
             await successfulResponse.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
         successfulBody.ShouldNotBeNull();
 
-        HttpResponseMessage familyTokenResponse = await HttpClient.PostAsJsonAsync(
-            "auth/refresh",
-            new { refreshToken = successfulBody.Data.RefreshToken });
+        string rotatedToken = Uri.UnescapeDataString(successfulResponse.Headers.GetValues("Set-Cookie")
+            .Single(value => value.StartsWith("eiams_refresh_token=", StringComparison.Ordinal))
+            .Split(';', 2)[0]["eiams_refresh_token=".Length..]);
+        using HttpRequestMessage familyTokenRequest = RefreshRequestWithCookie(rotatedToken);
+        HttpResponseMessage familyTokenResponse = await firstClient.SendAsync(familyTokenRequest);
         familyTokenResponse.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        firstClient.Dispose();
+        replayClient.Dispose();
     }
 
     [Fact]
@@ -174,33 +202,24 @@ public sealed class UsersTests : BaseIntegrationTest
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         await AssignEnterpriseAdministratorAsync(userId);
-        AccessTokens tokens = await LoginAsync(email);
+        AccessTokens tokens = await LoginAsync(UsernameFor(email));
         HttpClient.DefaultRequestHeaders.Authorization = null;
-
-        string tokenHash;
-        await using (AsyncServiceScope tokenProviderScope = factory.Services.CreateAsyncScope())
-        {
-            tokenHash = tokenProviderScope.ServiceProvider
-                .GetRequiredService<ITokenProvider>()
-                .HashRefreshToken(tokens.RefreshToken);
-        }
-
-        Task<HttpResponseMessage> refreshRequest;
-        Task<HttpResponseMessage> logoutRequest;
+        HttpClient refreshClient = CreateCookieOnlyClient();
+        HttpClient logoutClient = CreateCookieOnlyClient();
+        string tokenHash = factory.Services.GetRequiredService<ITokenProvider>().HashRefreshToken(tokens.RefreshToken);
+        HttpResponseMessage refreshResponse;
+        HttpResponseMessage logoutResponse;
         await using (IntegrationTestWebAppFactory.PostgresAdvisoryLockLease barrier =
-                     await factory.HoldApplicationLockAsync($"security:refresh-token:{tokenHash}"))
+                         await factory.HoldApplicationLockAsync($"security:refresh-token:{tokenHash}"))
         {
-            refreshRequest = HttpClient.PostAsJsonAsync(
-                "auth/refresh",
-                new { refreshToken = tokens.RefreshToken });
+            Task<HttpResponseMessage> refreshTask = SendRefreshWithCookieAsync(refreshClient, tokens.RefreshToken);
             await barrier.WaitUntilContendedAsync();
-            logoutRequest = HttpClient.PostAsJsonAsync(
-                "auth/logout",
-                new { refreshToken = tokens.RefreshToken });
+            Task<HttpResponseMessage> logoutTask = SendLogoutWithCookieAsync(logoutClient, tokens.RefreshToken);
             await barrier.ReleaseAsync();
+            refreshResponse = await refreshTask;
+            logoutResponse = await logoutTask;
         }
-
-        HttpResponseMessage[] responses = await Task.WhenAll(refreshRequest, logoutRequest);
+        HttpResponseMessage[] responses = [refreshResponse, logoutResponse];
 
         responses.Single(response => response.RequestMessage?.RequestUri?.AbsolutePath.EndsWith(
             "/auth/logout",
@@ -212,6 +231,8 @@ public sealed class UsersTests : BaseIntegrationTest
             .AnyAsync(token => token.UserId == userId && token.RevokedOnUtc == null);
 
         hasActiveToken.ShouldBeFalse();
+        refreshClient.Dispose();
+        logoutClient.Dispose();
     }
 
     [Fact]
@@ -220,18 +241,16 @@ public sealed class UsersTests : BaseIntegrationTest
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         await AssignEnterpriseAdministratorAsync(userId);
-        AccessTokens tokens = await LoginAsync(email);
-
-        Task<HttpResponseMessage> refreshRequest;
-        Task<HttpResponseMessage> suspendRequest;
+        AccessTokens tokens = await LoginAsync(UsernameFor(email));
+        HttpClient tokenClient = CreateCookieOnlyClient();
+        HttpResponseMessage refreshResponse;
+        Task<HttpResponseMessage> suspendTask;
         await using (IntegrationTestWebAppFactory.PostgresAdvisoryLockLease barrier =
-                     await factory.HoldApplicationLockAsync($"security:user-session:{userId:D}"))
+                         await factory.HoldApplicationLockAsync($"security:user-session:{userId:D}"))
         {
-            refreshRequest = HttpClient.PostAsJsonAsync(
-                "auth/refresh",
-                new { refreshToken = tokens.RefreshToken });
+            Task<HttpResponseMessage> refreshTask = SendRefreshWithCookieAsync(tokenClient, tokens.RefreshToken);
             await barrier.WaitUntilContendedAsync();
-            suspendRequest = HttpClient.PutAsJsonAsync(
+            suspendTask = HttpClient.PutAsJsonAsync(
                 $"admin/users/{userId}",
                 new
                 {
@@ -242,15 +261,18 @@ public sealed class UsersTests : BaseIntegrationTest
                     status = "Suspended"
                 });
             await barrier.ReleaseAsync();
+            refreshResponse = await refreshTask;
         }
+        HttpResponseMessage suspendResponse = await suspendTask;
 
-        (await refreshRequest).StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await suspendRequest).StatusCode.ShouldBe(HttpStatusCode.OK);
+        refreshResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        suspendResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await context.RefreshTokens.AnyAsync(token =>
             token.UserId == userId && token.RevokedOnUtc == null)).ShouldBeFalse();
+        tokenClient.Dispose();
     }
 
     [Fact]
@@ -282,7 +304,7 @@ public sealed class UsersTests : BaseIntegrationTest
 #pragma warning disable CA2025 // loginRequest is awaited before anonymousClient leaves this method.
             loginRequest = anonymousClient.PostAsJsonAsync(
                 "auth/login",
-                new { username = email, password = IntegrationTestWebAppFactory.AdministratorPassword });
+                new { username = UsernameFor(email), password = IntegrationTestWebAppFactory.AdministratorPassword });
 #pragma warning restore CA2025
             await barrier.ReleaseAsync();
         }
@@ -302,22 +324,43 @@ public sealed class UsersTests : BaseIntegrationTest
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
         await AssignEnterpriseAdministratorAsync(userId);
-        AccessTokens firstSession = await LoginAsync(email);
-        AccessTokens secondSession = await LoginAsync(email);
+        AccessTokens firstTokens = await LoginAsync(UsernameFor(email));
         HttpClient.DefaultRequestHeaders.Authorization = null;
+        AccessTokens secondTokens = await LoginAsync(UsernameFor(email));
+        using HttpClient firstClient = CreateCookieOnlyClient();
+        using HttpClient secondClient = CreateCookieOnlyClient();
 
-        HttpResponseMessage logout = await HttpClient.PostAsJsonAsync(
-            "auth/logout",
-            new { refreshToken = firstSession.RefreshToken });
-        HttpResponseMessage secondRefresh = await HttpClient.PostAsJsonAsync(
-            "auth/refresh",
-            new { refreshToken = secondSession.RefreshToken });
-        HttpResponseMessage firstRefresh = await HttpClient.PostAsJsonAsync(
-            "auth/refresh",
-            new { refreshToken = firstSession.RefreshToken });
+        using HttpRequestMessage logoutRequest = LogoutRequestWithCookie(firstTokens.RefreshToken);
+        using HttpRequestMessage otherDeviceRefreshRequest = RefreshRequestWithCookie(secondTokens.RefreshToken);
+        HttpResponseMessage logout = await firstClient.SendAsync(logoutRequest);
+        HttpResponseMessage otherDeviceRefresh = await secondClient.SendAsync(otherDeviceRefreshRequest);
+        using HttpRequestMessage refreshAfterLogoutRequest = RefreshRequestWithCookie(firstTokens.RefreshToken);
+        HttpResponseMessage refreshAfterLogout = await firstClient.SendAsync(refreshAfterLogoutRequest);
 
         logout.StatusCode.ShouldBe(HttpStatusCode.OK);
-        firstRefresh.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        secondRefresh.StatusCode.ShouldBe(HttpStatusCode.OK);
+        refreshAfterLogout.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        otherDeviceRefresh.StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    private HttpClient CreateCookieOnlyClient()
+    {
+        HttpClient client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            HandleCookies = false
+        });
+        client.BaseAddress = new Uri("http://localhost/api/v1/");
+        return client;
+    }
+
+    private static async Task<HttpResponseMessage> SendRefreshWithCookieAsync(HttpClient client, string refreshToken)
+    {
+        using HttpRequestMessage request = RefreshRequestWithCookie(refreshToken);
+        return await client.SendAsync(request);
+    }
+
+    private static async Task<HttpResponseMessage> SendLogoutWithCookieAsync(HttpClient client, string refreshToken)
+    {
+        using HttpRequestMessage request = LogoutRequestWithCookie(refreshToken);
+        return await client.SendAsync(request);
     }
 }

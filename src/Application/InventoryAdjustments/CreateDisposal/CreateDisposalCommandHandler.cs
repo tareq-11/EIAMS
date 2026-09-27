@@ -94,12 +94,36 @@ internal sealed class CreateDisposalCommandHandler(
         }
 
         Guid[] materialIds = assets.Select(item => item.MaterialId).Distinct().ToArray();
-        Dictionary<Guid, Guid> baseUnits = await (
+        var catalogRows = await (
                 from material in context.Materials.AsNoTracking()
-                join family in context.MaterialFamilies.AsNoTracking() on material.FamilyId equals family.Id
                 where materialIds.Contains(material.Id)
-                select new { material.Id, family.BaseUnitId })
-            .ToDictionaryAsync(item => item.Id, item => item.BaseUnitId, cancellationToken);
+                select new
+                {
+                    material.Id,
+                    material.CatalogVersion,
+                    material.MaterialKind,
+                    material.TrackingType,
+                    material.BaseUnitId
+                })
+            .ToListAsync(cancellationToken);
+
+        var provenanceByMaterialId = new Dictionary<Guid, DocumentLineProvenance>();
+
+        foreach (var row in catalogRows)
+        {
+            Result<DocumentLineProvenance> provenance = DocumentLineProvenance.Create(
+                row.CatalogVersion,
+                row.MaterialKind,
+                row.TrackingType,
+                row.BaseUnitId);
+
+            if (provenance.IsFailure)
+            {
+                return Result.Failure<Guid>(provenance.Error);
+            }
+
+            provenanceByMaterialId[row.Id] = provenance.Value;
+        }
 
         Result<WarehouseDocument> documentResult = await draftFactory.CreateAsync(
             command.WarehouseId, DocumentType.Adjustment, cancellationToken);
@@ -121,9 +145,10 @@ internal sealed class CreateDisposalCommandHandler(
         foreach (Asset asset in assets)
         {
             var lineId = Guid.NewGuid();
+            DocumentLineProvenance provenance = provenanceByMaterialId[asset.MaterialId];
             Result<DocumentLine> line = DocumentLine.Create(
                 lineId, document.Id, asset.MaterialId, DocumentLineType.Asset,
-                1m, baseUnits[asset.MaterialId], 1m, null, null, null);
+                1m, provenance.BaseUnitId, 1m, null, null, null, provenance: provenance);
             decimal difference = statusByAsset[asset.Id].CurrentStatus == AssetCurrentStatus.InStock ? -1m : 0m;
             Result<AdjustmentLine> detail = AdjustmentLine.Create(
                 lineId, document.Id, difference, command.Reason, allowZero: true);

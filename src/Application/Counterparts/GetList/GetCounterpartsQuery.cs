@@ -7,6 +7,7 @@ namespace Application.Counterparts.GetList;
 
 public sealed record GetCounterpartsQuery(
     string? Search,
+    OperationType Operation,
     PartyType? Type,
     int Page,
     int PageSize) : IQuery<PagedResult<CounterpartResolution>>;

@@ -23,14 +23,14 @@ public sealed class GetWarehouseDocumentsController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     public async Task<IResult> Handle(
-        Guid? warehouseId,
-        Guid? siteId,
-        DocumentType? documentType,
-        DocumentStatus? documentStatus,
-        string? systemReferenceNumber,
-        string? paperDocumentNumber,
-        DateTime? fromDateUtc,
-        DateTime? toDateUtc,
+        [FromQuery] Guid? warehouseId,
+        [FromQuery] Guid? siteId,
+        [FromQuery] DocumentType? documentType,
+        [FromQuery] DocumentStatus? documentStatus,
+        [FromQuery] string? systemReferenceNumber,
+        [FromQuery] string? paperDocumentNumber,
+        [FromQuery] DateTime? fromDateUtc,
+        [FromQuery] DateTime? toDateUtc,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

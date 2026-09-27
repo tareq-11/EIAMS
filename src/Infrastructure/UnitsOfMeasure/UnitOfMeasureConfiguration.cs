@@ -15,5 +15,7 @@ internal sealed class UnitOfMeasureConfiguration : IEntityTypeConfiguration<Unit
         builder.Property(u => u.Symbol).HasMaxLength(20);
 
         builder.Property(u => u.UnitType).HasMaxLength(50);
+
+        builder.Property(u => u.Status).HasConversion<string>().HasMaxLength(20);
     }
 }

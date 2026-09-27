@@ -20,10 +20,10 @@ public sealed class GetMaterialCategoriesController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialCategoryResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid? materialDomainId,
-        Guid? parentCategoryId,
+        [FromQuery] Guid? materialDomainId,
+        [FromQuery] Guid? parentCategoryId,
         bool rootOnly,
-        Status? status,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

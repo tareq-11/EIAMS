@@ -16,7 +16,7 @@ public sealed class UpdateRoleController(ICommandHandler<UpdateRoleCommand> hand
     public sealed record RequestBody(
         string Name,
         string? Description,
-        [property: JsonRequired] IReadOnlyCollection<ScopeType> AllowedScopeTypes);
+        [property: JsonRequired] IReadOnlyCollection<UserAssignmentScopeType> AllowedScopeTypes);
 
     [HttpPut("{roleId:guid}")]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
@@ -27,7 +27,7 @@ public sealed class UpdateRoleController(ICommandHandler<UpdateRoleCommand> hand
             roleId,
             request.Name,
             request.Description,
-            request.AllowedScopeTypes);
+            request.AllowedScopeTypes.Select(scopeType => scopeType.ToPersistedScopeType()).ToArray());
 
         Result result = await handler.Handle(command, cancellationToken);
 

@@ -8,6 +8,7 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Idempotency;
 using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Ledger;
+using Application.Abstractions.Materials;
 using Application.Abstractions.Numbering;
 using Application.Abstractions.Policies;
 using Application.Abstractions.PolymorphicReferences;
@@ -25,6 +26,7 @@ using Infrastructure.DocumentLifecycleEvents;
 using Infrastructure.InventoryCounts;
 using Infrastructure.Idempotency;
 using Infrastructure.Ledger;
+using Infrastructure.Materials;
 using Infrastructure.Numbering;
 using Infrastructure.Policies;
 using Infrastructure.PolymorphicReferences;
@@ -96,6 +98,8 @@ public static class DependencyInjection
 
         services.AddScoped<IInventoryLedgerWriter, InventoryLedgerWriter>();
 
+        services.AddScoped<IInventoryBalanceRebuilder, InventoryBalanceRebuilder>();
+
         services.AddScoped<IInventoryKeyLock, PostgresInventoryKeyLock>();
 
         services.AddScoped<IDocumentPostingCoordinator, DocumentPostingCoordinator>();
@@ -137,6 +141,8 @@ public static class DependencyInjection
         services.AddScoped<IAssetLifecycleGuard, AssetLifecycleGuard>();
 
         services.AddScoped<IWarehouseOperationLock, PostgresWarehouseOperationLock>();
+
+        services.AddScoped<IMaterialOperationLock, PostgresMaterialOperationLock>();
 
         services.AddScoped<IInventoryFreezePolicyService, InventoryFreezePolicyService>();
 

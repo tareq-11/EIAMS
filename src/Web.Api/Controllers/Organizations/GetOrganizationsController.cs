@@ -21,7 +21,7 @@ public sealed class GetOrganizationsController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Status? status,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

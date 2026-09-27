@@ -194,7 +194,7 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options)
             .IsUnique();
 
         modelBuilder.Entity<DocumentSequence>()
-            .HasIndex(sequence => new { sequence.SiteId, sequence.DocumentType, sequence.Year })
+            .HasIndex(sequence => new { sequence.SiteId, sequence.Year })
             .IsUnique();
 
         modelBuilder.Entity<WarehouseDocument>()
