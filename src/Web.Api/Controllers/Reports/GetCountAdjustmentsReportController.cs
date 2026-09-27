@@ -16,7 +16,7 @@ public sealed class GetCountAdjustmentsReportController(
     IQueryHandler<GetCountAdjustmentsReportQuery, PagedResult<CountAdjustmentsReportRow>> handler) : ControllerBase
 {
     [HttpGet]
-    [HasPermission(PermissionCodes.InventoryCounts.View)]
+    [HasPermission(PermissionCodes.Reports.View)]
     [ProducesResponseType<ApiResponse<IReadOnlyList<CountAdjustmentsReportRow>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

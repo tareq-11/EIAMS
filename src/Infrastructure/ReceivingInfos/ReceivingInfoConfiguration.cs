@@ -14,6 +14,7 @@ internal sealed class ReceivingInfoConfiguration : IEntityTypeConfiguration<Rece
         builder.HasKey(info => info.Id);
 
         builder.Property(info => info.Id).HasColumnName("document_id");
+        builder.Property(info => info.SupplierPartyId).HasColumnName("supplier_party_id");
 
         builder.Property(info => info.SupplierRef).HasMaxLength(200).IsRequired();
 
@@ -28,11 +29,15 @@ internal sealed class ReceivingInfoConfiguration : IEntityTypeConfiguration<Rece
                 "length(btrim(supplier_ref)) > 0");
             tableBuilder.HasCheckConstraint(
                 "ck_receiving_info_receiving_type_valid",
-                "receiving_type IN ('Supplier', 'Transfer', 'Return')");
+                "receiving_type = 'Supplier'");
         });
 
         builder.HasOne<WarehouseDocument>().WithOne()
             .HasForeignKey<ReceivingInfo>(info => info.Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Domain.ExternalParties.ExternalParty>().WithMany()
+            .HasForeignKey(info => info.SupplierPartyId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

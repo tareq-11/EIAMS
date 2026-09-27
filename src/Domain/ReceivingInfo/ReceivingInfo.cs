@@ -10,6 +10,8 @@ public sealed class ReceivingInfo : Entity, IAuditableEntity
 
     /// <summary>The entity ID is also the parent WarehouseDocument ID.</summary>
     public string SupplierRef { get; private set; }
+    /// <summary>The selected master ExternalParty. Null only for legacy/imported rows.</summary>
+    public Guid? SupplierPartyId { get; private set; }
     public string? SupplierInvoiceRef { get; private set; }
     public ReceivingType ReceivingType { get; private set; }
 
@@ -22,7 +24,8 @@ public sealed class ReceivingInfo : Entity, IAuditableEntity
         Guid documentId,
         string supplierRef,
         string? supplierInvoiceRef,
-        ReceivingType receivingType)
+        ReceivingType receivingType,
+        Guid? supplierPartyId = null)
     {
         Result<(string SupplierRef, string? InvoiceRef)> validation = Validate(
             supplierRef,
@@ -38,6 +41,7 @@ public sealed class ReceivingInfo : Entity, IAuditableEntity
         {
             Id = documentId,
             SupplierRef = validation.Value.SupplierRef,
+            SupplierPartyId = supplierPartyId,
             SupplierInvoiceRef = validation.Value.InvoiceRef,
             ReceivingType = receivingType
         };
@@ -47,7 +51,7 @@ public sealed class ReceivingInfo : Entity, IAuditableEntity
         return info;
     }
 
-    public Result Update(string supplierRef, string? supplierInvoiceRef, ReceivingType receivingType)
+    public Result Update(string supplierRef, string? supplierInvoiceRef, ReceivingType receivingType, Guid? supplierPartyId = null)
     {
         Result<(string SupplierRef, string? InvoiceRef)> validation = Validate(
             supplierRef,
@@ -61,12 +65,14 @@ public sealed class ReceivingInfo : Entity, IAuditableEntity
 
         if (SupplierRef == validation.Value.SupplierRef &&
             SupplierInvoiceRef == validation.Value.InvoiceRef &&
-            ReceivingType == receivingType)
+            ReceivingType == receivingType &&
+            SupplierPartyId == supplierPartyId)
         {
             return Result.Success();
         }
 
         SupplierRef = validation.Value.SupplierRef;
+        SupplierPartyId = supplierPartyId;
         SupplierInvoiceRef = validation.Value.InvoiceRef;
         ReceivingType = receivingType;
 
@@ -95,7 +101,7 @@ public sealed class ReceivingInfo : Entity, IAuditableEntity
             return Result.Failure<(string, string?)>(ReceivingInfoErrors.SupplierInvoiceRefTooLong);
         }
 
-        if (!Enum.IsDefined(receivingType))
+        if (receivingType != ReceivingType.Supplier)
         {
             return Result.Failure<(string, string?)>(ReceivingInfoErrors.ReceivingTypeInvalid);
         }

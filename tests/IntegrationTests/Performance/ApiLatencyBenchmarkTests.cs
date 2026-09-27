@@ -7,8 +7,12 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Application.Abstractions.Authentication;
+using Application.Abstractions.Authorization;
+using Domain.Permissions;
+using Domain.Roles;
 using Domain.Users;
 using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
@@ -38,6 +42,7 @@ public sealed class ApiLatencyBenchmarkTests
     public async Task MeasureRepresentativeApiLatency()
     {
         DateTime startedAtUtc = DateTime.UtcNow;
+        await GrantBenchmarkAdministratorReadAccessAsync();
         SqlCommandCounterInterceptor commandCounter = factory.Services
             .GetRequiredService<SqlCommandCounterInterceptor>();
         using var poolCollector = new NpgsqlPoolStateCollector();
@@ -78,7 +83,7 @@ public sealed class ApiLatencyBenchmarkTests
 
         ApiBenchmarkScenarioWindow repeatedLogin = await MeasureLoginWindowAsync(
             client,
-            IntegrationTestWebAppFactory.AdministratorEmail,
+            IntegrationTestWebAppFactory.AdministratorUsername,
             IntegrationTestWebAppFactory.AdministratorPassword,
             HttpStatusCode.OK,
             sampleIterations,
@@ -92,7 +97,7 @@ public sealed class ApiLatencyBenchmarkTests
         await MeasureRejectedLoginAsync(
             client,
             "POST /api/v1/auth/login [missing-user]",
-            $"missing-{Guid.NewGuid():N}@example.com",
+            $"missing-{Guid.NewGuid():N}",
             IntegrationTestWebAppFactory.AdministratorPassword,
             HttpStatusCode.NotFound,
             sampleIterations,
@@ -102,18 +107,18 @@ public sealed class ApiLatencyBenchmarkTests
         await MeasureRejectedLoginAsync(
             client,
             "POST /api/v1/auth/login [wrong-password]",
-            IntegrationTestWebAppFactory.AdministratorEmail,
+            IntegrationTestWebAppFactory.AdministratorUsername,
             "WrongPassword1!",
             HttpStatusCode.NotFound,
             sampleIterations,
             measurements,
             failures,
             commandCounter, poolCollector, lockWaitSampler);
-        (string suspendedEmail, string suspendedPassword) = await CreateSuspendedUserAsync();
+        (string suspendedUsername, string suspendedPassword) = await CreateSuspendedUserAsync();
         await MeasureRejectedLoginAsync(
             client,
             "POST /api/v1/auth/login [suspended]",
-            suspendedEmail,
+            suspendedUsername,
             suspendedPassword,
             HttpStatusCode.Forbidden,
             sampleIterations,
@@ -147,7 +152,7 @@ public sealed class ApiLatencyBenchmarkTests
             "custodies?page=1&pageSize=20",
             "adjustments?page=1&pageSize=20",
             "external-parties?page=1&pageSize=20",
-            "counterparts?page=1&pageSize=20",
+            "counterparts?operation=Issue&page=1&pageSize=20",
             "reports/dashboard",
             "reports/inventory?page=1&pageSize=20",
             "reports/documents?page=1&pageSize=20",
@@ -262,23 +267,42 @@ public sealed class ApiLatencyBenchmarkTests
         failures.ShouldBeEmpty();
     }
 
+    private async Task GrantBenchmarkAdministratorReadAccessAsync()
+    {
+        // The latency matrix intentionally probes every read endpoint. Keep its test-only
+        // administrator grants aligned with the active dotted catalog, without broadening the
+        // production bootstrap administrator role.
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid[] requiredPermissionIds = await context.Permissions.AsNoTracking()
+            .Where(permission => PermissionVocabulary.DottedV1Codes.Contains(permission.Code))
+            .Select(permission => permission.Id)
+            .ToArrayAsync();
+        HashSet<Guid> existingPermissionIds = await context.RolePermissions.AsNoTracking()
+            .Where(grant => grant.RoleId == WellKnownRoles.AdministratorId)
+            .Select(grant => grant.PermissionId)
+            .ToHashSetAsync();
+        context.RolePermissions.AddRange(requiredPermissionIds
+            .Where(permissionId => !existingPermissionIds.Contains(permissionId))
+            .Select(permissionId => RolePermission.Create(WellKnownRoles.AdministratorId, permissionId)));
+        await context.SaveChangesAsync();
+    }
+
     private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(HttpClient client)
         => await LoginAsync(
             client,
-            IntegrationTestWebAppFactory.AdministratorEmail,
+            IntegrationTestWebAppFactory.AdministratorUsername,
             IntegrationTestWebAppFactory.AdministratorPassword);
 
     private static async Task<(HttpResponseMessage Response, double ElapsedMs)> LoginAsync(
         HttpClient client,
-        string email,
+        string username,
         string password)
     {
         var stopwatch = Stopwatch.StartNew();
-        HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new
-        {
-            email,
-            password
-        });
+        HttpResponseMessage response = await client.PostAsJsonAsync(
+            "auth/login",
+            CreateLoginPayload(username, password));
         await response.Content.LoadIntoBufferAsync();
         stopwatch.Stop();
         return (response, stopwatch.Elapsed.TotalMilliseconds);
@@ -287,7 +311,7 @@ public sealed class ApiLatencyBenchmarkTests
     private static async Task MeasureRejectedLoginAsync(
         HttpClient client,
         string name,
-        string email,
+        string username,
         string password,
         HttpStatusCode expectedStatus,
         int sampleIterations,
@@ -297,7 +321,7 @@ public sealed class ApiLatencyBenchmarkTests
         NpgsqlPoolStateCollector poolCollector,
         PostgreSqlLockWaitSampler lockWaitSampler)
     {
-        (HttpResponseMessage firstResponse, double firstObservedMs) = await LoginAsync(client, email, password);
+        (HttpResponseMessage firstResponse, double firstObservedMs) = await LoginAsync(client, username, password);
         using (firstResponse)
         {
             if (firstResponse.StatusCode != expectedStatus)
@@ -309,7 +333,7 @@ public sealed class ApiLatencyBenchmarkTests
 
         for (int iteration = 0; iteration < WarmupIterations; iteration++)
         {
-            (HttpResponseMessage response, _) = await LoginAsync(client, email, password);
+            (HttpResponseMessage response, _) = await LoginAsync(client, username, password);
             using (response)
             {
                 if (response.StatusCode != expectedStatus)
@@ -322,7 +346,7 @@ public sealed class ApiLatencyBenchmarkTests
 
         ApiBenchmarkScenarioWindow window = await MeasureLoginWindowAsync(
             client,
-            email,
+            username,
             password,
             expectedStatus,
             sampleIterations,
@@ -333,23 +357,25 @@ public sealed class ApiLatencyBenchmarkTests
         AddWindowFailures(name, window.Metrics, failures);
     }
 
-    private async Task<(string Email, string Password)> CreateSuspendedUserAsync()
+    private async Task<(string Username, string Password)> CreateSuspendedUserAsync()
     {
         const string password = "SuspendedPassword1!";
         string email = $"suspended-{Guid.NewGuid():N}@example.com";
+        string username = $"suspended-{Guid.NewGuid():N}";
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         IPasswordHasher passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
         var user = User.Create(
             Guid.NewGuid(),
             email,
+            username,
             "Suspended",
             "Benchmark",
             passwordHasher.Hash(password));
         user.SetStatus(UserStatus.Suspended);
         context.Users.Add(user);
         await context.SaveChangesAsync();
-        return (email, password);
+        return (username, password);
     }
 
     private static async Task<string> ReadAccessTokenAsync(HttpResponseMessage response)
@@ -382,7 +408,7 @@ public sealed class ApiLatencyBenchmarkTests
 
     private static async Task<ApiBenchmarkScenarioWindow> MeasureLoginWindowAsync(
         HttpClient client,
-        string email,
+        string username,
         string password,
         HttpStatusCode expectedStatus,
         int sampleIterations,
@@ -395,7 +421,7 @@ public sealed class ApiLatencyBenchmarkTests
             poolCollector,
             lockWaitSampler,
             () => ObserveAsync(
-                () => client.PostAsJsonAsync("auth/login", new { email, password }),
+                () => client.PostAsJsonAsync("auth/login", CreateLoginPayload(username, password)),
                 expectedStatus,
                 getSqlCommands: null));
 
@@ -550,6 +576,8 @@ public sealed class ApiLatencyBenchmarkTests
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion ?? "unknown";
 
+    internal static object CreateLoginPayload(string username, string password) => new { username, password };
+
     private sealed record ApiBenchmarkObservedSample(ApiBenchmarkSample Sample, int? SqlCommands);
 
     private sealed record ApiBenchmarkScenarioWindow(
@@ -565,6 +593,19 @@ public sealed class ApiLatencyBenchmarkTests
         SqlCommandDurationSnapshot SqlCommands,
         NpgsqlPoolStateSnapshot PoolState,
         PostgreSqlLockWaitSnapshot SampledLockWaitOccupancy);
+}
+
+public sealed class ApiLatencyBenchmarkContractTests
+{
+    [Fact]
+    public void LoginMeasurementPayload_ShouldUseUsernameWithoutEmailConversion()
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(
+            ApiLatencyBenchmarkTests.CreateLoginPayload("admin-test-user", "not-recorded")));
+
+        document.RootElement.GetProperty("username").GetString().ShouldBe("admin-test-user");
+        document.RootElement.TryGetProperty("email", out _).ShouldBeFalse();
+    }
 }
 
 [AttributeUsage(AttributeTargets.Method)]

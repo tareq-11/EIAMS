@@ -19,6 +19,10 @@ public static class RoleErrors
         "Roles.Forbidden",
         "You are not authorized to manage roles.");
 
+    public static readonly Error OrganizationalUnitAssignmentNotAllowed = Error.Problem(
+        "Roles.OrganizationalUnitAssignmentNotAllowed",
+        "OrganizationalUnit is a business resource and cannot be declared as a role assignment scope.");
+
     public static readonly Error BuiltInRoleImmutable = Error.Conflict(
         "Roles.BuiltInRoleImmutable",
         "The built-in Administrator role cannot be modified.");

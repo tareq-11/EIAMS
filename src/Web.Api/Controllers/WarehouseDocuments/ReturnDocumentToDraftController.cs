@@ -16,7 +16,7 @@ public sealed class ReturnDocumentToDraftController(ICommandHandler<ReturnDocume
     public sealed record RequestBody([property: JsonRequired] int ExpectedRowVersion, string? Reason = null);
 
     [HttpPost("{documentId:guid}/return-to-draft")]
-    [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
+    [HasPermission(PermissionCodes.WarehouseDocuments.Revise)]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

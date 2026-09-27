@@ -1,7 +1,6 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Messaging;
 using Application.Users;
-using Application.Users.GetSession;
 using Application.Users.Login;
 using Application.Users.Refresh;
 using Microsoft.AspNetCore.Authorization;
@@ -18,12 +17,9 @@ namespace Web.Api.Controllers.Users;
 [Tags(Tags.Users)]
 public sealed class RefreshTokenController(
     ICommandHandler<RefreshTokenCommand, AccessTokensResponse> handler,
-    IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler,
     RefreshTokenTransport refreshTokenTransport)
     : ControllerBase
 {
-    public sealed record RequestBody(string? RefreshToken);
-
     [HttpPost("refresh")]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
     [ProducesResponseType<ApiResponse<AuthenticationTokensResponse>>(StatusCodes.Status200OK)]
@@ -31,10 +27,9 @@ public sealed class RefreshTokenController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status413PayloadTooLarge)]
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RequestBody? request,
         CancellationToken cancellationToken)
     {
-        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext, request?.RefreshToken);
+        RefreshTokenResolution resolution = refreshTokenTransport.Resolve(HttpContext);
 
         if (!resolution.IsAccepted)
         {
@@ -62,6 +57,10 @@ public sealed class RefreshTokenController(
 
         if (result.IsFailure)
         {
+            // Invalid, replayed, expired, or suspended tokens must not remain in the
+            // browser after the handler has evaluated them. Origin/body rejection above
+            // intentionally occurs before this cleanup and before token consumption.
+            AuthCookies.ClearRefreshTokenCookies(HttpContext);
             return CustomResults.Problem(result, HttpContext);
         }
 
@@ -70,12 +69,6 @@ public sealed class RefreshTokenController(
             AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
         }
 
-        // Include the authoritative session projection (D-AUTH-01 §13.2).
-        Result<UserSessionResponse> sessionResult = await sessionHandler
-            .Handle(new GetUserSessionQuery(result.Value.UserId), cancellationToken)
-            .ConfigureAwait(continueOnCapturedContext: false);
-
-        UserSessionResponse? session = sessionResult.IsSuccess ? sessionResult.Value : null;
-        return ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(result.Value, session));
+        return ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(result.Value));
     }
 }

@@ -5,8 +5,12 @@ namespace Application.Abstractions.InventoryCounts;
 
 public interface IInventoryFreezePolicyService
 {
-    Task<InventoryFreezeEvaluation> EvaluateAsync(
+    Task<InventoryFreezeEvaluation> EvaluateProvisionalAsync(
         IReadOnlyCollection<Guid> warehouseIds,
+        CancellationToken cancellationToken);
+
+    Task<InventoryFreezeEvaluation> EvaluateExactAsync(
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<Guid>> affectedMaterialsByWarehouse,
         CancellationToken cancellationToken);
 }
 
@@ -24,4 +28,5 @@ public sealed record InventoryFreezeWarning(
 public sealed record InventoryFreezeEvaluation(
     IReadOnlyList<ActiveInventoryFreeze> ActiveCounts,
     IReadOnlyList<InventoryFreezeWarning> Warnings,
-    Error? BlockingError);
+    Error? BlockingError,
+    bool IsProvisional);

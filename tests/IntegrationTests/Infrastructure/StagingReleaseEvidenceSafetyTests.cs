@@ -49,6 +49,11 @@ public sealed class StagingReleaseEvidenceSafetyTests
         script.ShouldContain("proxy behavior was not observed");
         script.ShouldContain("dedicated temporary staging evidence subtree");
         script.ShouldContain("mv -f -- \"$temporary\" \"$target\"");
+        script.ShouldContain("EIAMS_STAGING_ADMIN_USERNAME");
+        script.ShouldContain("^[a-z0-9._-]{3,100}$");
+        script.ShouldContain("{username:env.EIAMS_STAGING_ADMIN_USERNAME,password:env.EIAMS_STAGING_ADMIN_PASSWORD}");
+        script.ShouldNotContain("EIAMS_STAGING_ADMIN_EMAIL");
+        script.ShouldNotContain("{email:env.EIAMS_STAGING_ADMIN_EMAIL");
         script.ShouldNotContain("psql \"$database_url\"");
         script.ShouldNotContain("--insecure");
         script.ShouldNotContain(" -k");
@@ -71,7 +76,7 @@ public sealed class StagingReleaseEvidenceSafetyTests
         result.StandardError.ShouldContain("Refusing staging release evidence");
     }
 
-    #pragma warning disable CA1054 // Inline test data exercises rejected URL strings.
+#pragma warning disable CA1054 // Inline test data exercises rejected URL strings.
     [Theory]
     [InlineData("https://api.prod.example.test", "api.prod.example.test", "db.staging.example.test", "db.staging.example.test")]
     [InlineData("https://api.staging.example.test", "api.staging.example.test", "db.staging.example.test", "other.staging.example.test")]
@@ -98,7 +103,7 @@ public sealed class StagingReleaseEvidenceSafetyTests
         result.ExitCode.ShouldBe(3);
         result.StandardError.ShouldContain("Refusing staging release evidence");
     }
-    #pragma warning restore CA1054
+#pragma warning restore CA1054
 
     [Fact]
     public async Task StagingReleaseEvidence_ShouldUseFakeCommandsAndWriteOnlySanitizedReadOnlyEvidence()
@@ -154,7 +159,7 @@ printf '%s\t%s' "$status" '0.001'
                 ["EIAMS_STAGING_DB_USER"] = "runtime",
                 ["EIAMS_STAGING_DB_PASSWORD"] = "db-secret",
                 ["EIAMS_STAGING_EVIDENCE_DIR"] = evidenceDirectory,
-                ["EIAMS_STAGING_ADMIN_EMAIL"] = "admin@example.test",
+                ["EIAMS_STAGING_ADMIN_USERNAME"] = "admin-test-user",
                 ["EIAMS_STAGING_ADMIN_PASSWORD"] = "not-in-evidence",
                 ["TMPDIR"] = root,
                 ["PATH"] = $"{fakeBin}:{Environment.GetEnvironmentVariable("PATH")}"
@@ -175,7 +180,7 @@ printf '%s\t%s' "$status" '0.001'
             evidence.ShouldNotContain("api.staging.example.test");
             evidence.ShouldNotContain("runtime:secret");
             evidence.ShouldNotContain("eyJhbGciOiJIUzI1NiJ9");
-            evidence.ShouldNotContain("admin@example.test");
+            evidence.ShouldNotContain("admin-test-user");
             evidence.ShouldNotContain("SELECT ");
 
             var privateDnsEnvironment = new Dictionary<string, string?>(environment)

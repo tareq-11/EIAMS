@@ -106,7 +106,7 @@ internal sealed class UpdateDocumentLineCommandHandler(
             line.MaterialId,
             command.Quantity,
             command.UnitId,
-            catalog.Family.BaseUnitId,
+            catalog.BaseUnitId,
             catalog.Conversion);
 
         if (baseQuantityResult.IsFailure)
@@ -151,6 +151,15 @@ internal sealed class UpdateDocumentLineCommandHandler(
             return documentLimitResult;
         }
 
+        Result<DocumentLineProvenance> provenanceResult = catalog.CaptureProvenance();
+
+        if (provenanceResult.IsFailure)
+        {
+            return Result.Failure(provenanceResult.Error);
+        }
+
+        DocumentLineProvenance capturedProvenance = provenanceResult.Value;
+
         bool hasChanges = line.LineType != expectedLineType ||
             line.Quantity != command.Quantity ||
             line.UnitId != command.UnitId ||
@@ -158,7 +167,8 @@ internal sealed class UpdateDocumentLineCommandHandler(
             line.UnitPrice != command.UnitPrice ||
             line.BatchNumber != command.BatchNumber ||
             line.ExpiryDate != command.ExpiryDate ||
-            line.OpeningType != command.OpeningType;
+            line.OpeningType != command.OpeningType ||
+            line.Provenance != capturedProvenance;
 
         if (!hasChanges)
         {
@@ -173,7 +183,8 @@ internal sealed class UpdateDocumentLineCommandHandler(
             command.UnitPrice,
             command.BatchNumber,
             command.ExpiryDate,
-            command.OpeningType);
+            command.OpeningType,
+            capturedProvenance);
 
         if (updateResult.IsFailure)
         {

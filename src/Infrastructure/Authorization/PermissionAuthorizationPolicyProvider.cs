@@ -23,11 +23,22 @@ internal sealed class PermissionAuthorizationPolicyProvider : DefaultAuthorizati
         }
 
         AuthorizationPolicy permissionPolicy = new AuthorizationPolicyBuilder()
-            .AddRequirements(new PermissionRequirement(policyName))
+            .AddRequirements(CreateRequirement(policyName))
             .Build();
 
         _authorizationOptions.AddPolicy(policyName, permissionPolicy);
 
         return permissionPolicy;
+    }
+
+    private static IAuthorizationRequirement CreateRequirement(string policyName)
+    {
+        if (policyName.StartsWith("any:", StringComparison.Ordinal))
+        {
+            string[] permissions = policyName[4..].Split('|', StringSplitOptions.RemoveEmptyEntries);
+            return new AnyPermissionRequirement(permissions);
+        }
+
+        return new PermissionRequirement(policyName);
     }
 }

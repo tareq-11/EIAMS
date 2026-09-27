@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Application.Abstractions.Authorization;
 using Domain.Common;
 using Domain.Permissions;
 using Domain.Roles;
@@ -26,12 +27,14 @@ public sealed class BootstrapSeedTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // Assert Well-known permissions exist
+        // Runtime permissions are the dotted-only v1 catalog; legacy identifiers are retained
+        // only as migration/audit history and must not appear in the active permission catalog.
         List<Permission> permissions = await context.Permissions.ToListAsync();
-        permissions.Count.ShouldBeGreaterThan(0);
-        permissions.ShouldContain(p => p.Id == WellKnownPermissions.WarehouseDocumentsCreateId);
-        permissions.ShouldContain(p => p.Id == WellKnownPermissions.WarehouseDocumentsReviewId);
-        permissions.ShouldContain(p => p.Id == WellKnownPermissions.AuditLogsViewId);
+        permissions.Select(permission => permission.Code).ToHashSet(StringComparer.Ordinal)
+            .SetEquals(PermissionVocabulary.DottedV1Codes).ShouldBeTrue();
+        permissions.ShouldContain(permission => permission.Id == WellKnownDottedPermissions.DocumentCreateId);
+        permissions.ShouldContain(permission => permission.Id == WellKnownDottedPermissions.DocumentPostId);
+        permissions.ShouldContain(permission => permission.Id == WellKnownDottedPermissions.AuditViewId);
 
         // Assert Well-known roles exist
         List<Role> roles = await context.Roles.ToListAsync();

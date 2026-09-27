@@ -1,3 +1,4 @@
+using Application.Abstractions.Authorization;
 using Application.UnitTests.Abstractions;
 using Application.Users.GetSession;
 using Domain.Common;
@@ -8,18 +9,21 @@ using Domain.Roles;
 using Domain.Sites;
 using Domain.UserRoleScopes;
 using Domain.Users;
+using NSubstitute;
 using SharedKernel;
 
 namespace Application.UnitTests.Users;
 
 public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
 {
+    private static readonly string[] CreatePermissionCodes = ["document.create"];
+
     [Fact]
     public async Task Handle_Should_ReturnNotFound_WhenUserDoesNotExist()
     {
         await using TestDbContext context = CreateDbContext();
         var missingUserId = Guid.NewGuid();
-        var handler = new GetUserSessionQueryHandler(context);
+        var handler = new GetUserSessionQueryHandler(context, Substitute.For<IEffectivePermissionService>());
 
         Result<UserSessionResponse> result = await handler.Handle(new GetUserSessionQuery(missingUserId), CancellationToken.None);
 
@@ -36,7 +40,7 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         context.Users.Add(user);
         await context.SaveChangesAsync();
 
-        var handler = new GetUserSessionQueryHandler(context);
+        var handler = new GetUserSessionQueryHandler(context, Substitute.For<IEffectivePermissionService>());
 
         Result<UserSessionResponse> result = await handler.Handle(new GetUserSessionQuery(userId), CancellationToken.None);
 
@@ -62,9 +66,9 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         user.LinkToEmployee(employeeId);
 
         var role = Role.Create(roleId, "DirectorateManager", "Manager of Directorate");
-        var permission = Permission.Create(permissionId, "warehouse-documents:create", "Create warehouse documents");
+        var permission = Permission.Create(permissionId, "document.create", "Create warehouse documents");
         var rolePermission = RolePermission.Create(roleId, permissionId);
-        var assignment = UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, orgUnitId);
+        var assignment = UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Site, siteId);
 
         context.Sites.Add(site);
         context.OrganizationalUnits.Add(orgUnit);
@@ -76,7 +80,10 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         context.UserRoleScopes.Add(assignment);
         await context.SaveChangesAsync();
 
-        var handler = new GetUserSessionQueryHandler(context);
+        IEffectivePermissionService effectivePermissions = Substitute.For<IEffectivePermissionService>();
+        effectivePermissions.GetEffectivePermissionCodesAsync(userId, Arg.Any<CancellationToken>())
+            .Returns(CreatePermissionCodes);
+        var handler = new GetUserSessionQueryHandler(context, effectivePermissions);
 
         Result<UserSessionResponse> result = await handler.Handle(new GetUserSessionQuery(userId), CancellationToken.None);
 
@@ -91,10 +98,58 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         result.Value.Role.Id.ShouldBe(roleId);
         result.Value.Role.Name.ShouldBe("DirectorateManager");
 
-        result.Value.Scope.ScopeType.ShouldBe(ScopeType.OrganizationalUnit.ToString());
-        result.Value.Scope.ScopeId.ShouldBe(orgUnitId);
-        result.Value.Scope.ScopeName.ShouldBe("Finance Directorate");
+        result.Value.Scope.ScopeType.ShouldBe(UserAssignmentScopeType.Site);
+        result.Value.Scope.ScopeId.ShouldBe(siteId);
+        result.Value.Scope.ScopeName.ShouldBe("Central Site");
 
-        result.Value.PermissionCodes.ShouldContain("warehouse-documents:create");
+        result.Value.PermissionCodes.ShouldContain("document.create");
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnNoAssignment_WhenOnlyLegacyOrganizationalUnitAssignmentExists()
+    {
+        await using TestDbContext context = CreateDbContext();
+        var userId = Guid.NewGuid();
+        var roleId = Guid.NewGuid();
+        var unitId = Guid.NewGuid();
+        context.Users.Add(User.Create(userId, "legacy-user@example.com", "Legacy", "Scope", "hash"));
+        context.Roles.Add(Role.Create(roleId, "Legacy role", null));
+        context.OrganizationalUnits.Add(OrganizationalUnit.Create(
+            unitId, Guid.NewGuid(), null, "Legacy unit", "Directorate"));
+        context.UserRoleScopes.Add(UserRoleScope.Create(
+            Guid.NewGuid(), userId, roleId, ScopeType.OrganizationalUnit, unitId));
+        await context.SaveChangesAsync();
+
+        var handler = new GetUserSessionQueryHandler(context, Substitute.For<IEffectivePermissionService>());
+
+        Result<UserSessionResponse> result = await handler.Handle(
+            new GetUserSessionQuery(userId), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe(UserRoleScopeErrors.NoAssignment(userId).Code);
+    }
+
+    [Fact]
+    public async Task Handle_Should_ReturnMultipleAssignments_WhenMoreThanOneActiveAssignmentExists()
+    {
+        await using TestDbContext context = CreateDbContext();
+        var userId = Guid.NewGuid();
+        var firstRoleId = Guid.NewGuid();
+        var secondRoleId = Guid.NewGuid();
+        context.Users.Add(User.Create(userId, "multiple@example.com", "Multiple", "Assignments", "hash"));
+        context.Roles.AddRange(
+            Role.Create(firstRoleId, "First role", null),
+            Role.Create(secondRoleId, "Second role", null));
+        context.UserRoleScopes.AddRange(
+            UserRoleScope.Create(Guid.NewGuid(), userId, firstRoleId, ScopeType.Enterprise, null),
+            UserRoleScope.Create(Guid.NewGuid(), userId, secondRoleId, ScopeType.Enterprise, null));
+        await context.SaveChangesAsync();
+
+        var handler = new GetUserSessionQueryHandler(context, Substitute.For<IEffectivePermissionService>());
+        Result<UserSessionResponse> result = await handler.Handle(
+            new GetUserSessionQuery(userId), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe(UserRoleScopeErrors.MultipleAssignments(userId).Code);
     }
 }

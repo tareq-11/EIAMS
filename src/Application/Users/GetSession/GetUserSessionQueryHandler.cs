@@ -1,3 +1,4 @@
+using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Domain.Common;
@@ -9,7 +10,8 @@ using SharedKernel;
 namespace Application.Users.GetSession;
 
 internal sealed class GetUserSessionQueryHandler(
-    IApplicationDbContext context) : IQueryHandler<GetUserSessionQuery, UserSessionResponse>
+    IApplicationDbContext context,
+    IEffectivePermissionService effectivePermissionService) : IQueryHandler<GetUserSessionQuery, UserSessionResponse>
 {
     public async Task<Result<UserSessionResponse>> Handle(
         GetUserSessionQuery query,
@@ -49,21 +51,30 @@ internal sealed class GetUserSessionQueryHandler(
                 .SingleOrDefaultAsync(cancellationToken);
         }
 
-        var assignment = await (
+        var assignments = await (
             from userRoleScope in context.UserRoleScopes.AsNoTracking()
-            where userRoleScope.UserId == query.UserId
+            where userRoleScope.UserId == query.UserId &&
+                  userRoleScope.ScopeType != ScopeType.OrganizationalUnit
             join role in context.Roles.AsNoTracking() on userRoleScope.RoleId equals role.Id
             select new
             {
                 Assignment = userRoleScope,
                 Role = role
             })
-            .SingleOrDefaultAsync(cancellationToken);
+            .Take(2)
+            .ToListAsync(cancellationToken);
 
-        if (assignment is null)
+        if (assignments.Count == 0)
         {
             return Result.Failure<UserSessionResponse>(UserRoleScopeErrors.NoAssignment(query.UserId));
         }
+
+        if (assignments.Count > 1)
+        {
+            return Result.Failure<UserSessionResponse>(UserRoleScopeErrors.MultipleAssignments(query.UserId));
+        }
+
+        var assignment = assignments[0];
 
         string scopeName = assignment.Assignment.ScopeType switch
         {
@@ -73,11 +84,6 @@ internal sealed class GetUserSessionQueryHandler(
                 .Where(s => s.Id == assignment.Assignment.ScopeId.Value)
                 .Select(s => s.Name)
                 .SingleOrDefaultAsync(cancellationToken) ?? "Unknown Site",
-            ScopeType.OrganizationalUnit when assignment.Assignment.ScopeId.HasValue => await context.OrganizationalUnits
-                .AsNoTracking()
-                .Where(ou => ou.Id == assignment.Assignment.ScopeId.Value)
-                .Select(ou => ou.Name)
-                .SingleOrDefaultAsync(cancellationToken) ?? "Unknown Unit",
             ScopeType.Warehouse when assignment.Assignment.ScopeId.HasValue => await context.Warehouses
                 .AsNoTracking()
                 .Where(w => w.Id == assignment.Assignment.ScopeId.Value)
@@ -86,14 +92,8 @@ internal sealed class GetUserSessionQueryHandler(
             _ => "Unknown Scope"
         };
 
-        List<string> permissionCodes = await (
-            from rp in context.RolePermissions.AsNoTracking()
-            where rp.RoleId == assignment.Role.Id
-            join p in context.Permissions.AsNoTracking() on rp.PermissionId equals p.Id
-            select p.Code)
-            .Distinct()
-            .OrderBy(code => code)
-            .ToListAsync(cancellationToken);
+        IReadOnlyList<string> permissionCodes = await effectivePermissionService
+            .GetEffectivePermissionCodesAsync(query.UserId, cancellationToken);
 
         return new UserSessionResponse(
             new UserSessionUserDto(
@@ -108,14 +108,9 @@ internal sealed class GetUserSessionQueryHandler(
                 assignment.Role.Name,
                 assignment.Role.Description),
             new UserSessionScopeDto(
-                assignment.Assignment.ScopeType.ToString(),
+                assignment.Assignment.ScopeType.ToAssignmentScopeType(),
                 assignment.Assignment.ScopeId,
                 scopeName),
-            "Selected",
-            new[] { new UserSessionRoleDto(
-                assignment.Role.Id,
-                assignment.Role.Name,
-                assignment.Role.Description) },
             permissionCodes);
     }
 }

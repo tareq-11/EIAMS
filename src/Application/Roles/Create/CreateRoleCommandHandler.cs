@@ -29,6 +29,11 @@ internal sealed class CreateRoleCommandHandler(
             return Result.Failure<Guid>(RoleErrors.Forbidden);
         }
 
+        if (command.AllowedScopeTypes?.Any(scopeType => !UserAssignmentScopeTypes.IsAllowed(scopeType)) == true)
+        {
+            return Result.Failure<Guid>(RoleErrors.OrganizationalUnitAssignmentNotAllowed);
+        }
+
         if (await context.Roles.AnyAsync(r => r.Name == command.Name, cancellationToken))
         {
             return Result.Failure<Guid>(RoleErrors.NameNotUnique);

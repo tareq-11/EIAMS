@@ -40,7 +40,7 @@ public sealed class ApiSoakTestSmokeTests(IntegrationTestWebAppFactory factory, 
             runFactory.UseKestrel(0);
             using HttpClient client = runFactory.CreateClient();
             client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
-            using var adapter = new ApiLoadTestHttpAdapter(client, IntegrationTestWebAppFactory.AdministratorEmail,
+            using var adapter = new ApiLoadTestHttpAdapter(client, IntegrationTestWebAppFactory.AdministratorUsername,
                 IntegrationTestWebAppFactory.AdministratorPassword,
                 new ApiLoadTestFixtureContext(manifest!.GetOrganizationId(0), ApiSoakSuiteConfiguration.CreateRunNamespace(), suite.MaximumPostRequests));
             await adapter.AuthenticateAsync(CancellationToken.None); // setup is excluded from load aggregates

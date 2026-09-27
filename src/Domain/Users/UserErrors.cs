@@ -24,9 +24,9 @@ public static class UserErrors
         "Users.EmailNotUnique",
         "The provided email is not unique");
 
-    public static readonly Error RegistrationClosed = Error.Forbidden(
-        "Users.RegistrationClosed",
-        "Public registration is closed. User accounts must be created by an administrator.");
+    public static readonly Error UsernameNotUnique = Error.Conflict(
+        "Users.UsernameNotUnique",
+        "The provided username is already in use.");
 
     public static readonly Error AdministratorRecoveryUnavailable = Error.Forbidden(
         "Users.AdministratorRecoveryUnavailable",

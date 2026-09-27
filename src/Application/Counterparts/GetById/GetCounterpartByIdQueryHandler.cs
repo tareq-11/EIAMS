@@ -21,6 +21,21 @@ internal sealed class GetCounterpartByIdQueryHandler(
             return Result.Failure<CounterpartResolution>(CounterpartErrors.TypeInvalid);
         }
 
+        bool hasReadPermission = await authorizationService.HasPermissionAsync(
+            userContext.UserId, PermissionCodes.WarehouseDocuments.View, cancellationToken);
+        if (!hasReadPermission)
+        {
+            return Result.Failure<CounterpartResolution>(CounterpartErrors.OutsideScope);
+        }
+
+        bool insideScope = await authorizationService.CanAccessPartyAsync(
+            userContext.UserId, query.Type, query.CounterpartId, cancellationToken);
+        if (!insideScope)
+        {
+            return Result.Failure<CounterpartResolution>(
+                CounterpartErrors.NotFound(query.Type, query.CounterpartId));
+        }
+
         CounterpartResolution? counterpart = await counterpartResolver.ResolveAsync(
             query.Type, query.CounterpartId, cancellationToken);
         if (counterpart is null)
@@ -29,13 +44,6 @@ internal sealed class GetCounterpartByIdQueryHandler(
                 CounterpartErrors.NotFound(query.Type, query.CounterpartId));
         }
 
-        bool hasReadPermission = await authorizationService.HasPermissionAsync(
-            userContext.UserId, PermissionCodes.WarehouseDocuments.View, cancellationToken);
-        bool insideScope = await authorizationService.CanAccessPartyAsync(
-            userContext.UserId, query.Type, query.CounterpartId, cancellationToken);
-
-        return hasReadPermission && insideScope
-            ? counterpart
-            : Result.Failure<CounterpartResolution>(CounterpartErrors.OutsideScope);
+        return counterpart;
     }
 }

@@ -27,7 +27,7 @@ internal sealed class ReturnDocumentToDraftCommandHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.Edit,
+            PermissionCodes.WarehouseDocuments.Revise,
             ScopeType.Warehouse,
             document.WarehouseId,
             cancellationToken);

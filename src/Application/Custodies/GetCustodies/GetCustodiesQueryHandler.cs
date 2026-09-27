@@ -38,8 +38,8 @@ internal sealed class GetCustodiesQueryHandler(
         }
 
         Guid[] allowedWarehouseIds = access.WarehouseIds.ToArray();
-        int page = query.Page <= 0 ? 1 : query.Page;
-        int pageSize = query.PageSize <= 0 ? 20 : Math.Min(query.PageSize, 100);
+        int page = query.Page;
+        int pageSize = query.PageSize;
         int offset = checked((page - 1) * pageSize);
         string? requestedStatus = string.IsNullOrWhiteSpace(query.Status) ? null : query.Status.Trim();
         IQueryable<CustodyPageRow>? combinedRows = null;

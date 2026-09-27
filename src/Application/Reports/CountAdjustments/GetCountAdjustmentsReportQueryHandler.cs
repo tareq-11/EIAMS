@@ -20,9 +20,9 @@ internal sealed class GetCountAdjustmentsReportQueryHandler(
         CancellationToken cancellationToken)
     {
         WarehousePermissionScope access = await scopeAuthorizationService.GetWarehousePermissionScopeAsync(
-            userContext.UserId, PermissionCodes.InventoryCounts.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         bool canViewDocuments = await scopeAuthorizationService.HasPermissionAsync(
-            userContext.UserId, PermissionCodes.WarehouseDocuments.View, cancellationToken);
+            userContext.UserId, PermissionCodes.Reports.View, cancellationToken);
         if (!access.HasEnterpriseAccess && access.WarehouseIds.Count == 0 || !canViewDocuments)
         {
             return Result.Failure<PagedResult<CountAdjustmentsReportRow>>(ReportErrors.Forbidden);

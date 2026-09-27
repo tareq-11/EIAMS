@@ -15,7 +15,7 @@ namespace Web.Api.Controllers.Users;
 public sealed class RecoverAdministratorController(
     ICommandHandler<RecoverAdministratorCommand, Guid> handler) : ControllerBase
 {
-    public sealed record RequestBody(string Email, string FirstName, string LastName, string Password);
+    public sealed record RequestBody(string Email, string Username, string FirstName, string LastName, string Password);
 
     public sealed record ResponseBody(Guid Id);
 
@@ -35,6 +35,7 @@ public sealed class RecoverAdministratorController(
     {
         var command = new RecoverAdministratorCommand(
             request.Email,
+            request.Username,
             request.FirstName,
             request.LastName,
             request.Password,

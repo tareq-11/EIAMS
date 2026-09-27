@@ -1,6 +1,7 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.DocumentAttachments.Remove;
+using Application.DocumentAttachments;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -10,12 +11,13 @@ namespace Web.Api.Controllers.DocumentAttachments;
 [ApiController]
 [Route("warehouse-documents/{documentId:guid}/attachments")]
 [Tags(Tags.WarehouseDocuments)]
-public sealed class RemoveDocumentAttachmentController(ICommandHandler<RemoveDocumentAttachmentCommand> handler)
+public sealed class RemoveDocumentAttachmentController(
+    ICommandHandler<RemoveDocumentAttachmentCommand, AttachmentMutationResponse> handler)
     : ControllerBase
 {
     [HttpDelete("{attachmentId:guid}")]
     [HasPermission(PermissionCodes.WarehouseDocuments.Edit)]
-    [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiResponse<AttachmentMutationResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
@@ -29,7 +31,7 @@ public sealed class RemoveDocumentAttachmentController(ICommandHandler<RemoveDoc
     {
         var command = new RemoveDocumentAttachmentCommand(documentId, attachmentId, expectedRowVersion);
 
-        Result result = await handler.Handle(command, cancellationToken);
+        Result<AttachmentMutationResponse> result = await handler.Handle(command, cancellationToken);
 
         return result.ToApiResponse(HttpContext);
     }

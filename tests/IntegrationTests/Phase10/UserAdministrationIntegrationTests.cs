@@ -43,9 +43,13 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpResponseMessage createResponse = await HttpClient.PostAsJsonAsync("admin/users", new
         {
             email,
+            username = UsernameFor(email),
             firstName = "Managed",
             lastName = "User",
-            password = ManagedPassword
+            password = ManagedPassword,
+            roleId = WellKnownRoles.AdministratorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null
         });
 
         createResponse.StatusCode.ShouldBe(HttpStatusCode.Created);
@@ -55,13 +59,14 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         Guid managedUserId = created.Data!.Id;
 
         await GrantEnterpriseAdministratorAsync(managedUserId);
-        AccessTokens managedTokens = await LoginAsync(User.NormalizeEmail(email));
+        AccessTokens managedTokens = await LoginAsync(UsernameFor(email));
 
         // Act: suspend the managed account through the safe update operation.
         Authenticate(administratorTokens.AccessToken);
         HttpResponseMessage updateResponse = await HttpClient.PutAsJsonAsync($"admin/users/{managedUserId}", new
         {
             email,
+            username = UsernameFor(email),
             firstName = "Updated",
             lastName = "Account",
             status = "Suspended"
@@ -73,15 +78,12 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpClient.DefaultRequestHeaders.Authorization = null;
         HttpResponseMessage loginResponse = await HttpClient.PostAsJsonAsync("auth/login", new
         {
-            email,
+            username = UsernameFor(email),
             password = ManagedPassword
         });
         loginResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
-        HttpResponseMessage refreshResponse = await HttpClient.PostAsJsonAsync("auth/refresh", new
-        {
-            refreshToken = managedTokens.RefreshToken
-        });
+        HttpResponseMessage refreshResponse = await HttpClient.PostAsync("auth/refresh", null);
         refreshResponse.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
         Authenticate(managedTokens.AccessToken);
@@ -120,6 +122,7 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         HttpResponseMessage response = await HttpClient.PutAsJsonAsync($"admin/users/{administratorId}", new
         {
             email = $"self-{Guid.NewGuid():N}@example.com",
+            username = $"self-{Guid.NewGuid():N}",
             firstName = "System",
             lastName = "Administrator",
             status = "Suspended"
@@ -135,21 +138,20 @@ public sealed class UserAdministrationIntegrationTests : BaseIntegrationTest
         await AuthenticateAsAdministratorAsync();
         string email = UniqueEmail();
         Guid userId = await RegisterUserAsync(email);
-        AccessTokens tokens = await LoginAsync(email);
+        await AssignEnterpriseAdministratorAsync(userId);
+        await LoginAsync(UsernameFor(email));
         await AuthenticateAsAdministratorAsync();
 
 #pragma warning disable CA2025 // Both client-bound tasks are awaited before the shared client is disposed.
         Task<HttpResponseMessage> suspensionRequest = HttpClient.PutAsJsonAsync($"admin/users/{userId}", new
         {
             email,
+            username = UsernameFor(email),
             firstName = "Concurrent",
             lastName = "Suspension",
             status = "Suspended"
         });
-        Task<HttpResponseMessage> refreshRequest = HttpClient.PostAsJsonAsync("auth/refresh", new
-        {
-            refreshToken = tokens.RefreshToken
-        });
+        Task<HttpResponseMessage> refreshRequest = HttpClient.PostAsync("auth/refresh", null);
 #pragma warning restore CA2025
 
         HttpResponseMessage[] responses = await Task.WhenAll(suspensionRequest, refreshRequest);

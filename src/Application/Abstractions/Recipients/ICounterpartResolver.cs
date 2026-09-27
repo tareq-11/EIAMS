@@ -27,6 +27,7 @@ public interface ICounterpartResolver
     Task<PagedResult<CounterpartResolution>> SearchActiveAsync(
         Guid userId,
         string? search,
+        OperationType operation,
         PartyType? type,
         int page,
         int pageSize,

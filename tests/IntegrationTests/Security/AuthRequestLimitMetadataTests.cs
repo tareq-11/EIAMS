@@ -12,7 +12,6 @@ public sealed class AuthRequestLimitMetadataTests
         typeof(LoginController),
         typeof(RefreshTokenController),
         typeof(LogoutController),
-        typeof(RegisterController),
         typeof(RecoverAdministratorController),
         typeof(Web.Api.Controllers.Users.CreateUserController)
     };

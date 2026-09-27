@@ -1,4 +1,5 @@
 using Domain.DocumentAttachments;
+using Domain.Sites;
 using Domain.Users;
 using Domain.WarehouseDocuments;
 using Domain.Warehouses;
@@ -14,6 +15,10 @@ internal sealed class WarehouseDocumentConfiguration : IEntityTypeConfiguration<
         builder.HasKey(d => d.Id);
 
         builder.HasIndex(d => d.SystemReferenceNumber).IsUnique();
+
+        builder.HasIndex(d => new { d.ReferenceSiteId, d.ReferenceYear, d.ReferenceSequence })
+            .IsUnique()
+            .HasFilter("reference_site_id IS NOT NULL AND reference_year IS NOT NULL AND reference_sequence IS NOT NULL");
 
         builder.HasIndex(d => new { d.WarehouseId, d.DocumentStatus, d.CreatedAtUtc });
 
@@ -52,6 +57,19 @@ internal sealed class WarehouseDocumentConfiguration : IEntityTypeConfiguration<
                 "paper_document_year IS NULL OR paper_document_year BETWEEN 1900 AND 9999");
 
             tableBuilder.HasCheckConstraint(
+                "ck_warehouse_documents_reference_identity_complete",
+                "(reference_site_id IS NULL AND reference_year IS NULL AND reference_sequence IS NULL) OR " +
+                "(reference_site_id IS NOT NULL AND reference_year IS NOT NULL AND reference_sequence IS NOT NULL)");
+
+            tableBuilder.HasCheckConstraint(
+                "ck_warehouse_documents_reference_identity_values_valid",
+                "reference_year IS NULL OR reference_year BETWEEN 2000 AND 9999");
+
+            tableBuilder.HasCheckConstraint(
+                "ck_warehouse_documents_reference_sequence_positive",
+                "reference_sequence IS NULL OR reference_sequence > 0");
+
+            tableBuilder.HasCheckConstraint(
                 "ck_warehouse_documents_posted_metadata",
                 "(document_status IN ('Posted', 'Reversed') " +
                 "AND posted_by IS NOT NULL AND posted_at_utc IS NOT NULL AND signed_copy_attachment_id IS NOT NULL) " +
@@ -60,6 +78,8 @@ internal sealed class WarehouseDocumentConfiguration : IEntityTypeConfiguration<
         });
 
         builder.HasOne<Warehouse>().WithMany().HasForeignKey(d => d.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<Site>().WithMany().HasForeignKey(d => d.ReferenceSiteId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<User>().WithMany().HasForeignKey(d => d.CreatedBy).OnDelete(DeleteBehavior.Restrict);
 

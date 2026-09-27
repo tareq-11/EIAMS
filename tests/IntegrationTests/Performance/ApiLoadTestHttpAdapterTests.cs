@@ -45,7 +45,7 @@ public sealed class ApiLoadTestHttpAdapterTests
     {
         using var handler = new StaticResponseHandler(HttpStatusCode.InternalServerError, "payload");
         using var client = new HttpClient(handler, disposeHandler: false) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "not-logged");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "not-logged");
 
         ApiLoadTestExecutionSample sample = await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
 
@@ -60,7 +60,7 @@ public sealed class ApiLoadTestHttpAdapterTests
         const string loginBody = "{\"data\":{\"access_token\":\"test-token\"}}";
         using var handler = new StaticResponseHandler(HttpStatusCode.OK, loginBody);
         using var client = new HttpClient(handler, false) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "not-logged");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "not-logged");
 
         await Task.WhenAll(Enumerable.Range(0, 100).Select(_ => adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None)));
 
@@ -80,7 +80,7 @@ public sealed class ApiLoadTestHttpAdapterTests
         const string rateLimitedBody = "{}";
         using var handler = new StaticResponseHandler(HttpStatusCode.TooManyRequests, rateLimitedBody);
         using var client = new HttpClient(handler, false) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "not-logged");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "not-logged");
 
         await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
 
@@ -100,7 +100,7 @@ public sealed class ApiLoadTestHttpAdapterTests
     {
         using var handler = new CountingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password", new ApiLoadTestFixtureContext(Guid.Empty));
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password", new ApiLoadTestFixtureContext(Guid.Empty));
 
         await Should.ThrowAsync<InvalidOperationException>(() => adapter.ExecuteAsync(ApiLoadTestScenario.ReadDetail, CancellationToken.None));
         handler.Count.ShouldBe(0);
@@ -111,7 +111,7 @@ public sealed class ApiLoadTestHttpAdapterTests
     {
         using var handler = new CountingHandler(_ => throw new OperationCanceledException());
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password");
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
@@ -127,7 +127,7 @@ public sealed class ApiLoadTestHttpAdapterTests
             ? JsonResponse()
             : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password");
 
         await adapter.AuthenticateAsync(CancellationToken.None);
         adapter.GetMetrics().Completed.ShouldBe(0);
@@ -138,11 +138,25 @@ public sealed class ApiLoadTestHttpAdapterTests
     }
 
     [Fact]
+    public async Task AuthenticateAsync_ShouldSendCanonicalUsernameLoginPayload()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse());
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password");
+
+        await adapter.AuthenticateAsync(CancellationToken.None);
+
+        using var body = JsonDocument.Parse(handler.Requests.Single().Body);
+        body.RootElement.GetProperty("username").GetString().ShouldBe("admin-test-user");
+        body.RootElement.TryGetProperty("email", out _).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task ResetMetrics_ShouldKeepWarmupAggregatesOutOfMeasurementSnapshot()
     {
         using var handler = new CountingHandler(_ => JsonResponse());
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password");
 
         await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
         adapter.GetMetrics().Completed.ShouldBe(1);
@@ -163,7 +177,7 @@ public sealed class ApiLoadTestHttpAdapterTests
             ? JsonResponse()
             : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("not-json") });
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password");
 
         await adapter.AuthenticateAsync(CancellationToken.None);
         ApiLoadTestExecutionSample sample = await adapter.ExecuteAsync(ApiLoadTestScenario.ReadList, CancellationToken.None);
@@ -179,7 +193,7 @@ public sealed class ApiLoadTestHttpAdapterTests
             HttpStatusCode.Unauthorized,
             "{\"error\":{\"code\":\"AUTH_DENIED\",\"message\":\"do-not-emit\"}}");
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password");
 
         InvalidOperationException exception = await Should.ThrowAsync<InvalidOperationException>(
             () => adapter.AuthenticateAsync(CancellationToken.None));
@@ -198,7 +212,7 @@ public sealed class ApiLoadTestHttpAdapterTests
             ? JsonResponse()
             : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"success\":true}") });
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password", fixture);
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password", fixture);
 
         await adapter.AuthenticateAsync(CancellationToken.None);
         await Task.WhenAll(Enumerable.Range(0, 100)
@@ -227,7 +241,7 @@ public sealed class ApiLoadTestHttpAdapterTests
             ? JsonResponse()
             : new HttpResponseMessage(HttpStatusCode.OK));
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "password", fixture);
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "password", fixture);
 
         await adapter.AuthenticateAsync(CancellationToken.None);
         await adapter.ExecuteAsync(ApiLoadTestScenario.Post, CancellationToken.None);

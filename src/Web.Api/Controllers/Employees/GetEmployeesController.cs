@@ -20,8 +20,8 @@ public sealed class GetEmployeesController(IQueryHandler<GetEmployeesQuery, Page
     [ProducesResponseType<ApiResponse<IReadOnlyList<EmployeeResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid? orgUnitId,
-        Status? status,
+        [FromQuery] Guid? orgUnitId,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

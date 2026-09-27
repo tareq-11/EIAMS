@@ -18,7 +18,8 @@ internal sealed class GetUnitsOfMeasureQueryHandler(IApplicationDbContext contex
                 Id = u.Id,
                 Name = u.Name,
                 Symbol = u.Symbol,
-                UnitType = u.UnitType
+                UnitType = u.UnitType,
+                Status = u.Status
             })
             .OrderBy(u => u.Name)
             .ThenBy(u => u.Id)

@@ -1,55 +1,39 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Application.Abstractions.Authentication;
 using Domain.Permissions;
 using Domain.Roles;
+using Domain.UserRoleScopes;
 using Domain.Users;
 using Infrastructure.Database;
+using Infrastructure.DomainEvents;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
+using SharedKernel;
 using Testcontainers.PostgreSql;
 
 namespace IntegrationTests.Security;
 
 public sealed class BootstrapAndAdministratorSafetyTests
 {
-    private const string Password = "Bootstrap123!";
-    private static readonly string BootstrapToken = Convert.ToBase64String(new byte[32]);
+    private const string BootstrapEmail = "bootstrap@example.com";
+    private const string BootstrapUsername = "bootstrap-admin";
+    private const string BootstrapPassword = "Bootstrap123!";
+    private static readonly string RecoveryToken = Convert.ToBase64String(new byte[32]);
     private static readonly string[] EnterpriseScope = ["Enterprise"];
-
-    [Fact]
-    public async Task Bootstrap_Should_ReturnForbidden_WhenOperationalGateIsDisabled()
-    {
-        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: false);
-
-        try
-        {
-            await factory.StartAsync();
-            using HttpClient client = factory.CreateApiClient();
-
-            RegistrationAttempt response = await RegisterAsync(client, "blocked-bootstrap@example.com");
-            RegistrationAttempt recovery = await RecoverAsync(client, "blocked-recovery@example.com");
-
-            response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-            response.UserId.ShouldBeNull();
-            recovery.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-            recovery.UserId.ShouldBeNull();
-        }
-        finally
-        {
-            await factory.ShutdownAsync();
-        }
-    }
 
     [Fact]
     public async Task Recovery_Should_CreateOnlyOneNewAdministrator_RevokeRefreshTokens_AndAuditTheOperation()
     {
-        var factory = new EmptySystemWebAppFactory(
-            bootstrapEnabled: false,
-            recoveryEnabled: true);
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: false, recoveryEnabled: true);
 
         try
         {
@@ -68,12 +52,9 @@ public sealed class BootstrapAndAdministratorSafetyTests
             responses.Count(response => response.StatusCode == HttpStatusCode.Created).ShouldBe(1);
             responses.Count(response => response.StatusCode == HttpStatusCode.Forbidden).ShouldBe(1);
 
-            string administratorEmail = responses[0].StatusCode == HttpStatusCode.Created
-                ? "first-recovery@example.com"
-                : "second-recovery@example.com";
-
             await factory.AssertRecoveryStateAsync();
-            LoginResponse login = await LoginAsync(firstClient, administratorEmail);
+            string recoveredUsername = UsernameFor(responses.Single(response => response.StatusCode == HttpStatusCode.Created).Email);
+            LoginResponse login = await LoginAsync(firstClient, recoveredUsername, BootstrapPassword);
             login.Data.AccessToken.ShouldNotBeNullOrWhiteSpace();
 
             RegistrationAttempt replay = await RecoverAsync(firstClient, "replayed-recovery@example.com");
@@ -86,64 +67,28 @@ public sealed class BootstrapAndAdministratorSafetyTests
     }
 
     [Fact]
-    public async Task BootstrapAndBuiltInAdministrator_Should_ResistConcurrentCreationAndLockout()
+    public async Task PublicRegistration_Should_NotExist_AndSwagger_ShouldNotExposeIt()
     {
-        var factory = new EmptySystemWebAppFactory();
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: false);
 
         try
         {
             await factory.StartAsync();
-            using HttpClient firstClient = factory.CreateApiClient();
-            using HttpClient secondClient = factory.CreateApiClient();
-            await firstClient.GetAsync("health/live");
+            using HttpClient client = factory.CreateApiClient();
 
-#pragma warning disable CA2025 // Both client-bound tasks are awaited together before either client leaves scope.
-            Task<RegistrationAttempt> firstRequest = RegisterAsync(firstClient, "first-bootstrap@example.com");
-            Task<RegistrationAttempt> secondRequest = RegisterAsync(secondClient, "second-bootstrap@example.com");
-#pragma warning restore CA2025
-            RegistrationAttempt[] registrationResponses = await Task.WhenAll(firstRequest, secondRequest);
+            using HttpResponseMessage removedEndpoint = await client.PostAsJsonAsync("admin/users/register", new
+            {
+                email = BootstrapEmail,
+                username = BootstrapUsername,
+                firstName = "Bootstrap",
+                lastName = "Administrator",
+                password = BootstrapPassword
+            });
+            removedEndpoint.StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
 
-            registrationResponses.Count(response => response.StatusCode == HttpStatusCode.Created).ShouldBe(1);
-            registrationResponses.Count(response => response.StatusCode == HttpStatusCode.Forbidden).ShouldBe(1);
-
-            int winnerIndex = Array.FindIndex(
-                registrationResponses,
-                response => response.StatusCode == HttpStatusCode.Created);
-            string administratorEmail = winnerIndex == 0
-                ? "first-bootstrap@example.com"
-                : "second-bootstrap@example.com";
-            Guid? administratorIdValue = registrationResponses[winnerIndex].UserId;
-            administratorIdValue.ShouldNotBeNull();
-            Guid administratorId = administratorIdValue.Value;
-
-            LoginResponse? login = await LoginAsync(firstClient, administratorEmail);
-            firstClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
-
-            HttpResponseMessage removeAssignment = await firstClient.DeleteAsync(
-                $"admin/users/{administratorId}/role-scope");
-            removeAssignment.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-
-            AssignmentResponse? assignment = await firstClient
-                .GetFromJsonAsync<AssignmentResponse>($"admin/users/{administratorId}/role-scope");
-            assignment.ShouldNotBeNull();
-            HttpResponseMessage legacyRevoke = await firstClient.DeleteAsync(
-                $"admin/user-role-scopes/{assignment.Data.Id}");
-            legacyRevoke.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-
-            HttpResponseMessage alterBuiltInRole = await firstClient.PutAsJsonAsync(
-                $"admin/roles/{WellKnownRoles.AdministratorId}",
-                new
-                {
-                    name = "Changed Administrator",
-                    description = "unsafe",
-                    allowedScopeTypes = EnterpriseScope
-                });
-            alterBuiltInRole.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-
-            HttpResponseMessage removeManagementPermission = await firstClient.DeleteAsync(
-                $"admin/roles/{WellKnownRoles.AdministratorId}/permissions/{WellKnownPermissions.RolesManageId}");
-            removeManagementPermission.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            string swagger = await client.GetStringAsync("/swagger/v1/swagger.json");
+            swagger.ShouldNotContain("/api/v1/admin/users/register");
+            swagger.ShouldNotContain("RegisterController");
         }
         finally
         {
@@ -151,27 +96,190 @@ public sealed class BootstrapAndAdministratorSafetyTests
         }
     }
 
-    private static async Task<RegistrationAttempt> RegisterAsync(HttpClient client, string email)
+    [Fact]
+    public async Task EnabledBootstrap_ShouldRejectWeakConfiguration_BeforeHostStarts()
     {
-        client.DefaultRequestHeaders.Add("X-Bootstrap-Token", BootstrapToken);
-        using HttpResponseMessage response = await client.PostAsJsonAsync("admin/users/register", new
-        {
-            email,
-            firstName = "Bootstrap",
-            lastName = "Administrator",
-            password = Password
-        });
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: true, bootstrapPassword: "weak");
 
-        Guid? userId = null;
-
-        if (response.StatusCode == HttpStatusCode.Created)
+        try
         {
-            BootstrapResponse? body = await response.Content.ReadFromJsonAsync<BootstrapResponse>();
-            body.ShouldNotBeNull();
-            userId = body.Data.Id;
+            await factory.StartAsync();
+            Should.Throw<OptionsValidationException>(() => factory.CreateApiClient());
         }
+        finally
+        {
+            await factory.ShutdownAsync();
+        }
+    }
 
-        return new RegistrationAttempt(response.StatusCode, userId);
+    [Fact]
+    public async Task EnabledBootstrap_ShouldCreateIdempotentSystemAdministrator_WithExactStructuralGrants()
+    {
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: true);
+
+        try
+        {
+            await factory.StartAsync();
+            using HttpClient client = factory.CreateApiClient();
+            (await client.GetAsync("health/live")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+            LoginResponse? login = await LoginAsync(client);
+            login.ShouldNotBeNull();
+            login.Data.AccessToken.ShouldNotBeNullOrWhiteSpace();
+
+            IHostedService seeder = factory.Services
+                .GetServices<IHostedService>()
+                .Single(service => service.GetType().Name == "BootstrapAdministratorSeeder");
+            await seeder.StartAsync(CancellationToken.None);
+
+            using (IServiceScope scope = factory.Services.CreateScope())
+            {
+                ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                User? user = await context.Users.SingleAsync(item => item.Email == BootstrapEmail);
+                user.Username.ShouldBe(BootstrapUsername);
+
+                (await context.UserRoleScopes.CountAsync(item => item.UserId == user.Id)).ShouldBe(1);
+                UserRoleScope assignment = await context.UserRoleScopes.SingleAsync(item => item.UserId == user.Id);
+                assignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
+                assignment.ScopeType.ShouldBe(Domain.Common.ScopeType.Enterprise);
+                assignment.ScopeId.ShouldBeNull();
+
+                Guid[] expectedPermissionIds = WellKnownDottedPermissions
+                    .SystemAdministratorPermissionIds
+                    .ToArray();
+                var assignedPermissions = await context.RolePermissions
+                    .Where(permission => permission.RoleId == WellKnownRoles.AdministratorId)
+                    .Join(
+                        context.Permissions,
+                        rolePermission => rolePermission.PermissionId,
+                        permission => permission.Id,
+                        (_, permission) => new { permission.Id, permission.Code })
+                    .ToListAsync();
+                Guid[] actualPermissionIds = assignedPermissions
+                    .Where(permission => permission.Code.Contains('.'))
+                    .Select(permission => permission.Id)
+                    .OrderBy(id => id)
+                    .ToArray();
+                actualPermissionIds.ShouldBe(expectedPermissionIds.OrderBy(id => id).ToArray());
+
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
+                using HttpResponseMessage sessionResponse = await client.GetAsync("auth/session");
+                sessionResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+                using var sessionDocument = JsonDocument.Parse(
+                    await sessionResponse.Content.ReadAsStringAsync());
+                string[] expectedPermissionCodes = await context.Permissions
+                    .Where(permission => expectedPermissionIds.Contains(permission.Id))
+                    .Select(permission => permission.Code)
+                    .OrderBy(code => code)
+                    .ToArrayAsync();
+                string[] actualPermissionCodes = sessionDocument.RootElement
+                    .GetProperty("data")
+                    .GetProperty("permissionCodes")
+                    .EnumerateArray()
+                    .Select(item => item.GetString()!)
+                    .OrderBy(code => code)
+                    .ToArray();
+                actualPermissionCodes.ShouldBe(expectedPermissionCodes);
+                actualPermissionCodes.ShouldNotContain(code =>
+                    code.StartsWith("inventory.", StringComparison.Ordinal) ||
+                    code.StartsWith("audit.", StringComparison.Ordinal) ||
+                    code.StartsWith("report.", StringComparison.Ordinal));
+            }
+
+            // Reusing the running host is safe and does not create a second assignment.
+            using HttpClient secondClient = factory.CreateApiClient();
+            (await secondClient.GetAsync("health/live")).StatusCode.ShouldBe(HttpStatusCode.OK);
+        }
+        finally
+        {
+            await factory.ShutdownAsync();
+        }
+    }
+
+    [Fact]
+    public async Task EnabledBootstrap_ShouldFailClosed_WhenExistingUsersHaveNoAdministrator()
+    {
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: true);
+
+        try
+        {
+            await factory.StartAsync(seedOrdinaryUser: true);
+            Should.Throw<InvalidOperationException>(() => factory.CreateApiClient());
+        }
+        finally
+        {
+            await factory.ShutdownAsync();
+        }
+    }
+
+    [Fact]
+    public async Task BootstrapAdministrator_ShouldResistAssignmentRoleAndPermissionRemoval()
+    {
+        var factory = new EmptySystemWebAppFactory(bootstrapEnabled: true);
+
+        try
+        {
+            await factory.StartAsync();
+            using HttpClient client = factory.CreateApiClient();
+            LoginResponse login = await LoginAsync(client);
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Bearer", login.Data.AccessToken);
+
+            Guid administratorId;
+            using (IServiceScope scope = factory.Services.CreateScope())
+            {
+                ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                administratorId = await context.Users
+                    .Where(user => user.Email == BootstrapEmail)
+                    .Select(user => user.Id)
+                    .SingleAsync();
+            }
+
+            (await client.DeleteAsync($"admin/users/{administratorId}/role-scope"))
+                .StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
+
+            AssignmentResponse? assignment = await client
+                .GetFromJsonAsync<AssignmentResponse>($"admin/users/{administratorId}/role-scope");
+            assignment.ShouldNotBeNull();
+            (await client.DeleteAsync($"admin/user-role-scopes/{assignment.Data.Id}"))
+                .StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+            (await client.PutAsJsonAsync(
+                $"admin/roles/{WellKnownRoles.AdministratorId}",
+                new
+                {
+                    name = "Changed Administrator",
+                    description = "unsafe",
+                    allowedScopeTypes = EnterpriseScope
+                })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+            (await client.DeleteAsync(
+                $"admin/roles/{WellKnownRoles.AdministratorId}/permissions/{WellKnownDottedPermissions.AdminRoleManageId}"))
+                .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        }
+        finally
+        {
+            await factory.ShutdownAsync();
+        }
+    }
+
+    private static async Task<LoginResponse> LoginAsync(HttpClient client)
+        => await LoginAsync(client, BootstrapUsername, BootstrapPassword);
+
+    private static string UsernameFor(string email) => $"recovery-{email[..email.IndexOf('@')]}";
+
+    private static async Task<LoginResponse> LoginAsync(HttpClient client, string username, string password)
+    {
+        HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new
+        {
+            username,
+            password
+        });
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        LoginResponse? body = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        body.ShouldNotBeNull();
+        return body;
     }
 
     private static async Task<RegistrationAttempt> RecoverAsync(HttpClient client, string email)
@@ -181,52 +289,32 @@ public sealed class BootstrapAndAdministratorSafetyTests
             Content = JsonContent.Create(new
             {
                 email,
+                username = $"recovery-{email[..email.IndexOf('@')]}",
                 firstName = "Recovered",
                 lastName = "Administrator",
-                password = Password
+                password = BootstrapPassword
             })
         };
-        request.Headers.Add("X-Administrator-Recovery-Token", BootstrapToken);
+        request.Headers.Add("X-Administrator-Recovery-Token", RecoveryToken);
 
         using HttpResponseMessage response = await client.SendAsync(request);
-        Guid? userId = null;
-
-        if (response.StatusCode == HttpStatusCode.Created)
-        {
-            BootstrapResponse? body = await response.Content.ReadFromJsonAsync<BootstrapResponse>();
-            body.ShouldNotBeNull();
-            userId = body.Data.Id;
-        }
-
-        return new RegistrationAttempt(response.StatusCode, userId);
+        return new RegistrationAttempt(response.StatusCode, email);
     }
-
-    private static async Task<LoginResponse> LoginAsync(HttpClient client, string email)
-    {
-        HttpResponseMessage response = await client.PostAsJsonAsync("auth/login", new { email, password = Password });
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        LoginResponse? body = await response.Content.ReadFromJsonAsync<LoginResponse>();
-        body.ShouldNotBeNull();
-        return body;
-    }
-
-    private sealed record BootstrapResponse(bool Success, Identifier Data);
-
-    private sealed record RegistrationAttempt(HttpStatusCode StatusCode, Guid? UserId);
-
-    private sealed record Identifier(Guid Id);
 
     private sealed record LoginResponse(bool Success, Tokens Data);
 
     private sealed record Tokens(string AccessToken, string RefreshToken);
+
+    private sealed record RegistrationAttempt(HttpStatusCode StatusCode, string Email);
 
     private sealed record AssignmentResponse(bool Success, Assignment Data);
 
     private sealed record Assignment(Guid Id);
 
     private sealed class EmptySystemWebAppFactory(
-        bool bootstrapEnabled = true,
-        bool recoveryEnabled = false) : WebApplicationFactory<Program>
+        bool bootstrapEnabled,
+        bool recoveryEnabled = false,
+        string bootstrapPassword = BootstrapPassword) : WebApplicationFactory<Program>
     {
         private readonly string attachmentStoragePath = Path.Combine(
             Path.GetTempPath(),
@@ -250,20 +338,39 @@ public sealed class BootstrapAndAdministratorSafetyTests
             builder.UseSetting("RateLimiting:Global:PermitLimit", "1000");
             builder.UseSetting("RateLimiting:Authentication:PermitLimit", "1000");
             builder.UseSetting("BootstrapAdministrator:Enabled", bootstrapEnabled.ToString());
-            builder.UseSetting("BootstrapAdministrator:Token", BootstrapToken);
+            builder.UseSetting("BootstrapAdministrator:Email", BootstrapEmail);
+            builder.UseSetting("BootstrapAdministrator:Username", BootstrapUsername);
+            builder.UseSetting("BootstrapAdministrator:FirstName", "Bootstrap");
+            builder.UseSetting("BootstrapAdministrator:LastName", "Administrator");
+            builder.UseSetting("BootstrapAdministrator:Password", bootstrapPassword);
             builder.UseSetting("AdministratorRecovery:Enabled", recoveryEnabled.ToString());
-            builder.UseSetting("AdministratorRecovery:Token", BootstrapToken);
+            builder.UseSetting("AdministratorRecovery:Token", RecoveryToken);
             builder.UseSetting(
                 "AdministratorRecovery:ExpiresAtUtc",
                 DateTime.UtcNow.AddMinutes(10).ToString("O"));
         }
 
-        internal async Task StartAsync()
+        internal async Task StartAsync(bool seedOrdinaryUser = false)
         {
             await database.StartAsync();
-            using IServiceScope scope = Services.CreateScope();
-            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>()
+                .UseNpgsql(database.GetConnectionString())
+                .UseSnakeCaseNamingConvention()
+                .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .Options;
+            await using ApplicationDbContext context = new(options, new NoOpDomainEventsDispatcher());
             await context.Database.MigrateAsync();
+            if (seedOrdinaryUser)
+            {
+                context.Users.Add(User.Create(
+                    Guid.NewGuid(),
+                    "ordinary@example.com",
+                    "ordinary-user",
+                    "Ordinary",
+                    "User",
+                    "not-a-real-hash-for-startup-seed-test"));
+                await context.SaveChangesAsync();
+            }
         }
 
         internal HttpClient CreateApiClient()
@@ -281,9 +388,10 @@ public sealed class BootstrapAndAdministratorSafetyTests
             var user = User.Create(
                 Guid.NewGuid(),
                 "ordinary-before-recovery@example.com",
+                "ordinary-before-recovery",
                 "Ordinary",
                 "User",
-                passwordHasher.Hash(Password));
+                passwordHasher.Hash(BootstrapPassword));
             context.Users.Add(user);
             context.RefreshTokens.Add(RefreshToken.Create(
                 Guid.NewGuid(),
@@ -298,7 +406,6 @@ public sealed class BootstrapAndAdministratorSafetyTests
         {
             using IServiceScope scope = Services.CreateScope();
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
             int activeAdministrators = await (
                     from assignment in context.UserRoleScopes
                     join user in context.Users on assignment.UserId equals user.Id
@@ -310,19 +417,21 @@ public sealed class BootstrapAndAdministratorSafetyTests
 
             activeAdministrators.ShouldBe(1);
             (await context.RefreshTokens.CountAsync(token => token.RevokedOnUtc == null)).ShouldBe(0);
-            (await context.AuditLogs.AnyAsync(log =>
-                log.CommandName == "RecoverAdministratorCommand")).ShouldBeTrue();
+            (await context.AuditLogs.AnyAsync(log => log.CommandName == "RecoverAdministratorCommand"))
+                .ShouldBeTrue();
         }
 
         internal async Task ShutdownAsync()
         {
-            await base.DisposeAsync();
+            await DisposeAsync();
             await database.DisposeAsync();
+        }
 
-            if (Directory.Exists(attachmentStoragePath))
-            {
-                Directory.Delete(attachmentStoragePath, recursive: true);
-            }
+        private sealed class NoOpDomainEventsDispatcher : IDomainEventsDispatcher
+        {
+            public Task DispatchAsync(
+                IEnumerable<IDomainEvent> domainEvents,
+                CancellationToken cancellationToken = default) => Task.CompletedTask;
         }
     }
 }

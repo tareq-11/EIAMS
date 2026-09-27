@@ -413,11 +413,17 @@ FodyWeavers.xsd
 !API-CONTRACT-RATIFICATION.md
 !FRONTEND-BACKEND-REMEDIATION-PLAN.md
 !AUTHORIZATION-MATRIX.md
+!docs/
+!docs/phase3a-material-base-unit-inventory.md
+!docs/phase7c-release-evidence.md
+!docs/testing/real-integration-default.md
 !prd_en.md
 !M0-ARCHITECTURE.md
 !M0-ARCHITECTURE.ar.md
 !V1-SIGNOFF-CHECKLIST.md
 !contracts/
 contracts/*
+!contracts/baseline/
+!contracts/baseline/phase0-baseline.json
 !contracts/openapi/
 !contracts/openapi/README.md

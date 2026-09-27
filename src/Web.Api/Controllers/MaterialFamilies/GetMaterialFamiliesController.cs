@@ -20,8 +20,8 @@ public sealed class GetMaterialFamiliesController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialFamilyResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid? categoryId,
-        Status? status,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

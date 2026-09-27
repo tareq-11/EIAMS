@@ -21,8 +21,8 @@ public sealed class GetExternalPartiesController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<ExternalPartyResponse>>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Organizations.View)]
     public async Task<IResult> Handle(
-        string? search,
-        Status? status,
+        [FromQuery] string? search,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

@@ -3,10 +3,12 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Storage;
+using Application.DocumentAttachments.GetList;
 using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.WarehouseDocuments;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SharedKernel;
 
 namespace Application.DocumentAttachments.Remove;
@@ -15,17 +17,20 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
-    IAttachmentFileCleanup fileCleanup)
-    : ICommandHandler<RemoveDocumentAttachmentCommand>
+    IAttachmentFileCleanup fileCleanup,
+    IOptions<AttachmentMalwareScanOptions> malwareScanOptions)
+    : ICommandHandler<RemoveDocumentAttachmentCommand, AttachmentMutationResponse>
 {
-    public async Task<Result> Handle(RemoveDocumentAttachmentCommand command, CancellationToken cancellationToken)
+    public async Task<Result<AttachmentMutationResponse>> Handle(
+        RemoveDocumentAttachmentCommand command,
+        CancellationToken cancellationToken)
     {
         WarehouseDocument? document = await context.WarehouseDocuments
             .SingleOrDefaultAsync(d => d.Id == command.DocumentId, cancellationToken);
 
         if (document is null)
         {
-            return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
@@ -37,12 +42,12 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
 
         if (!authorized)
         {
-            return Result.Failure(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
         if (document.RowVersion != command.ExpectedRowVersion)
         {
-            return Result.Failure(WarehouseDocumentErrors.RowVersionMismatch(
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.RowVersionMismatch(
                 command.DocumentId,
                 command.ExpectedRowVersion,
                 document.RowVersion));
@@ -50,7 +55,7 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
 
         if (document.DocumentStatus != DocumentStatus.Draft)
         {
-            return Result.Failure(DocumentAttachmentErrors.NotEditable);
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.NotEditable);
         }
 
         DocumentAttachment? attachment = await context.DocumentAttachments.SingleOrDefaultAsync(
@@ -59,12 +64,12 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
 
         if (attachment is null)
         {
-            return Result.Failure(DocumentAttachmentErrors.NotFound(command.AttachmentId));
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.NotFound(command.AttachmentId));
         }
 
         if (!attachment.IsActive)
         {
-            return Result.Failure(DocumentAttachmentErrors.ArchivedCannotBeRemoved(attachment.Id));
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.ArchivedCannotBeRemoved(attachment.Id));
         }
 
         if (document.SignedCopyAttachmentId == attachment.Id)
@@ -73,7 +78,7 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
 
             if (clearResult.IsFailure)
             {
-                return clearResult;
+                return Result.Failure<AttachmentMutationResponse>(clearResult.Error);
             }
         }
         else
@@ -82,7 +87,7 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
 
             if (detailMutationResult.IsFailure)
             {
-                return detailMutationResult;
+                return Result.Failure<AttachmentMutationResponse>(detailMutationResult.Error);
             }
         }
 
@@ -101,7 +106,7 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
                 .Select(d => (int?)d.RowVersion)
                 .SingleOrDefaultAsync(cancellationToken);
 
-            return Result.Failure(WarehouseDocumentErrors.RowVersionMismatch(
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.RowVersionMismatch(
                 command.DocumentId,
                 command.ExpectedRowVersion,
                 currentRowVersion));
@@ -111,6 +116,27 @@ internal sealed class RemoveDocumentAttachmentCommandHandler(
         // retries it in the background without undoing the successful document mutation.
         await fileCleanup.DeleteOrEnqueueAsync(attachment.StorageKey, CancellationToken.None);
 
-        return Result.Success();
+        var attachmentResponse = new DocumentAttachmentResponse(
+            attachment.Id,
+            attachment.AttachmentType.ToString(),
+            attachment.OriginalFilename,
+            attachment.MimeType,
+            attachment.FileSize,
+            attachment.Checksum,
+            attachment.UploadedBy,
+            attachment.UploadedAtUtc,
+            IsActive: false,
+            attachment.ArchivedAtUtc,
+            attachment.ArchivedBy,
+            attachment.ReplacesAttachmentId,
+            ReplacedByAttachmentId: null);
+
+        return new AttachmentMutationResponse(
+            attachment.Id,
+            Removed: true,
+            document.RowVersion,
+            malwareScanOptions.Value.Policy.ToString(),
+            attachment.MalwareScanClean,
+            attachmentResponse);
     }
 }

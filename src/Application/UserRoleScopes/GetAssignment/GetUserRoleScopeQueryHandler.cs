@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.UserRoleScopes.GetByUser;
+using Domain.Common;
 using Domain.UserRoleScopes;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -56,8 +57,9 @@ internal sealed class GetUserRoleScopeQueryHandler(
             Id = assignment.Entity.Id,
             RoleId = assignment.Entity.RoleId,
             RoleName = assignment.RoleName,
-            ScopeType = assignment.Entity.ScopeType.ToString(),
-            ScopeId = assignment.Entity.ScopeId
+            ScopeType = assignment.Entity.ScopeType.ToAssignmentScopeType(),
+            ScopeId = assignment.Entity.ScopeId,
+            RowVersion = assignment.Entity.RowVersion
         };
     }
 }

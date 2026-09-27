@@ -12,4 +12,16 @@ namespace Application.Abstractions.Numbering;
 public interface IReferenceNumberGenerator
 {
     Task<Result<string>> AllocateAsync(Guid siteId, DocumentType documentType, CancellationToken cancellationToken);
+
+    Task<Result<AllocatedDocumentReference>> AllocateIdentityAsync(
+        Guid siteId,
+        DocumentType documentType,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>Immutable identity of a newly allocated system document reference.</summary>
+public sealed record AllocatedDocumentReference(
+    Guid SiteId,
+    int Year,
+    int Sequence,
+    string ReferenceNumber);

@@ -26,7 +26,8 @@ internal sealed class GetUnitOfMeasureByIdQueryHandler(
                     Id = u.Id,
                     Name = u.Name,
                     Symbol = u.Symbol,
-                    UnitType = u.UnitType
+                    UnitType = u.UnitType,
+                    Status = u.Status
                 })
                 .SingleOrDefaultAsync(ct),
             new HybridCacheEntryOptions

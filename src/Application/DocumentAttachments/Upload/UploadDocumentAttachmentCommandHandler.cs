@@ -3,6 +3,7 @@ using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Storage;
+using Application.DocumentAttachments.GetList;
 using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.WarehouseDocuments;
@@ -23,16 +24,18 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
     IDateTimeProvider dateTimeProvider,
     IOptions<AttachmentStorageOptions> storageOptions,
     IOptions<AttachmentMalwareScanOptions> malwareScanOptions)
-    : ICommandHandler<UploadDocumentAttachmentCommand, Guid>
+    : ICommandHandler<UploadDocumentAttachmentCommand, AttachmentMutationResponse>
 {
-    public async Task<Result<Guid>> Handle(UploadDocumentAttachmentCommand command, CancellationToken cancellationToken)
+    public async Task<Result<AttachmentMutationResponse>> Handle(
+        UploadDocumentAttachmentCommand command,
+        CancellationToken cancellationToken)
     {
         WarehouseDocument? document = await context.WarehouseDocuments
             .SingleOrDefaultAsync(d => d.Id == command.DocumentId, cancellationToken);
 
         if (document is null)
         {
-            return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
@@ -44,12 +47,12 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
 
         if (!authorized)
         {
-            return Result.Failure<Guid>(WarehouseDocumentErrors.NotFound(command.DocumentId));
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.NotFound(command.DocumentId));
         }
 
         if (document.RowVersion != command.ExpectedRowVersion)
         {
-            return Result.Failure<Guid>(WarehouseDocumentErrors.RowVersionMismatch(
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.RowVersionMismatch(
                 command.DocumentId,
                 command.ExpectedRowVersion,
                 document.RowVersion));
@@ -57,24 +60,24 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
 
         if (document.DocumentStatus != DocumentStatus.Draft)
         {
-            return Result.Failure<Guid>(DocumentAttachmentErrors.NotEditable);
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.NotEditable);
         }
 
         AttachmentStorageOptions options = storageOptions.Value;
 
         if (command.ContentLength <= 0)
         {
-            return Result.Failure<Guid>(DocumentAttachmentErrors.FileEmpty);
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.FileEmpty);
         }
 
         if (command.ContentLength > options.MaxFileSizeInBytes)
         {
-            return Result.Failure<Guid>(DocumentAttachmentErrors.FileTooLarge(options.MaxFileSizeInBytes));
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.FileTooLarge(options.MaxFileSizeInBytes));
         }
 
         if (!options.IsMimeTypeAllowed(command.MimeType))
         {
-            return Result.Failure<Guid>(DocumentAttachmentErrors.MimeTypeNotAllowed(command.MimeType));
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.MimeTypeNotAllowed(command.MimeType));
         }
 
         if (!await FileSignatureValidator.MatchesMimeTypeAsync(
@@ -82,7 +85,7 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
                 command.MimeType,
                 cancellationToken))
         {
-            return Result.Failure<Guid>(DocumentAttachmentErrors.FileSignatureMismatch);
+            return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.FileSignatureMismatch);
         }
 
         if (malwareScanOptions.Value.Policy == AttachmentMalwareScanPolicy.Required)
@@ -90,12 +93,12 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
             AttachmentMalwareScanVerdict verdict = await malwareScanner.ScanAsync(command.Content, cancellationToken);
             if (verdict == AttachmentMalwareScanVerdict.Infected)
             {
-                return Result.Failure<Guid>(DocumentAttachmentErrors.MalwareScanRejected);
+                return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.MalwareScanRejected);
             }
 
             if (verdict != AttachmentMalwareScanVerdict.Clean)
             {
-                return Result.Failure<Guid>(DocumentAttachmentErrors.MalwareScannerUnavailable);
+                return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.MalwareScannerUnavailable);
             }
         }
 
@@ -111,7 +114,7 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
 
         if (storageResult.IsFailure)
         {
-            return Result.Failure<Guid>(storageResult.Error);
+            return Result.Failure<AttachmentMutationResponse>(storageResult.Error);
         }
 
         StoredFile storedFile = storageResult.Value;
@@ -147,7 +150,7 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
                 if (archiveResult.IsFailure)
                 {
                     await fileCleanup.DeleteOrEnqueueAsync(storedFile.StorageKey, CancellationToken.None);
-                    return Result.Failure<Guid>(archiveResult.Error);
+                    return Result.Failure<AttachmentMutationResponse>(archiveResult.Error);
                 }
             }
 
@@ -161,7 +164,7 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
         if (detailMutationResult.IsFailure)
         {
             await fileCleanup.DeleteOrEnqueueAsync(storedFile.StorageKey, CancellationToken.None);
-            return Result.Failure<Guid>(detailMutationResult.Error);
+            return Result.Failure<AttachmentMutationResponse>(detailMutationResult.Error);
         }
 
         try
@@ -178,7 +181,7 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
                 .Select(d => (int?)d.RowVersion)
                 .SingleOrDefaultAsync(cancellationToken);
 
-            return Result.Failure<Guid>(WarehouseDocumentErrors.RowVersionMismatch(
+            return Result.Failure<AttachmentMutationResponse>(WarehouseDocumentErrors.RowVersionMismatch(
                 command.DocumentId,
                 command.ExpectedRowVersion,
                 currentRowVersion));
@@ -194,13 +197,34 @@ internal sealed class UploadDocumentAttachmentCommandHandler(
                     exception,
                     "ux_document_attachments_signed_original"))
             {
-                return Result.Failure<Guid>(DocumentAttachmentErrors.SignedOriginalAlreadyExists(command.DocumentId));
+                return Result.Failure<AttachmentMutationResponse>(DocumentAttachmentErrors.SignedOriginalAlreadyExists(command.DocumentId));
             }
 
             throw;
         }
 
-        return attachment.Id;
+        var attachmentResponse = new DocumentAttachmentResponse(
+            attachment.Id,
+            attachment.AttachmentType.ToString(),
+            attachment.OriginalFilename,
+            attachment.MimeType,
+            attachment.FileSize,
+            attachment.Checksum,
+            attachment.UploadedBy,
+            attachment.UploadedAtUtc,
+            attachment.IsActive,
+            attachment.ArchivedAtUtc,
+            attachment.ArchivedBy,
+            attachment.ReplacesAttachmentId,
+            ReplacedByAttachmentId: null);
+
+        return new AttachmentMutationResponse(
+            attachment.Id,
+            Removed: false,
+            document.RowVersion,
+            malwareScanOptions.Value.Policy.ToString(),
+            attachment.MalwareScanClean,
+            attachmentResponse);
     }
 
     private static string SanitizeFilename(string filename)

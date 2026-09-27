@@ -13,7 +13,7 @@ namespace Web.Api.Controllers.MaterialFamilies;
 public sealed class CreateMaterialFamilyController(ICommandHandler<CreateMaterialFamilyCommand, Guid> handler)
     : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] Guid CategoryId, string Name, string Code, [property: JsonRequired] Guid BaseUnitId);
+    public sealed record RequestBody([property: JsonRequired] Guid CategoryId, string Name, string Code);
 
     [HttpPost]
     [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
@@ -23,8 +23,7 @@ public sealed class CreateMaterialFamilyController(ICommandHandler<CreateMateria
         var command = new CreateMaterialFamilyCommand(
             request.CategoryId,
             request.Name,
-            request.Code,
-            request.BaseUnitId);
+            request.Code);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 

@@ -16,14 +16,17 @@ public sealed class CreateRoleController(ICommandHandler<CreateRoleCommand, Guid
     public sealed record RequestBody(
         string Name,
         string? Description,
-        [property: JsonRequired] IReadOnlyCollection<ScopeType> AllowedScopeTypes);
+        [property: JsonRequired] IReadOnlyCollection<UserAssignmentScopeType> AllowedScopeTypes);
 
     [HttpPost]
     [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status200OK)]
     [HasPermission(PermissionCodes.Roles.Manage)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new CreateRoleCommand(request.Name, request.Description, request.AllowedScopeTypes);
+        var command = new CreateRoleCommand(
+            request.Name,
+            request.Description,
+            request.AllowedScopeTypes.Select(scopeType => scopeType.ToPersistedScopeType()).ToArray());
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 

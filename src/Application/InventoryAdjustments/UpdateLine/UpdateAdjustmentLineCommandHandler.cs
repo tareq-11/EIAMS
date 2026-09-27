@@ -54,15 +54,22 @@ internal sealed class UpdateAdjustmentLineCommandHandler(
 
         Result<decimal> baseQuantity = BaseQuantityCalculator.Calculate(
             line.MaterialId, Math.Abs(command.Difference), command.UnitId,
-            catalogResult.Value.Family.BaseUnitId, catalogResult.Value.Conversion);
+            catalogResult.Value.BaseUnitId, catalogResult.Value.Conversion);
         if (baseQuantity.IsFailure)
         {
             return Result.Failure(baseQuantity.Error);
         }
 
         decimal signedBaseDifference = Math.Sign(command.Difference) * baseQuantity.Value;
+        Result<DocumentLineProvenance> provenance = catalogResult.Value.CaptureProvenance();
+        if (provenance.IsFailure)
+        {
+            return Result.Failure(provenance.Error);
+        }
+
         Result lineUpdate = line.Update(DocumentLineType.Normal, Math.Abs(command.Difference),
-            command.UnitId, baseQuantity.Value, null, null, null, null);
+            command.UnitId, baseQuantity.Value, null, null, null, null,
+            provenance.Value);
         Result detailUpdate = adjustmentLine.Update(signedBaseDifference, command.Reason);
         if (lineUpdate.IsFailure || detailUpdate.IsFailure)
         {

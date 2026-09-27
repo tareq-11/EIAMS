@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
 using Application.Users;
+using Application.Users.GetSession;
 using Application.Users.Refresh;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -144,6 +145,28 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         newToken.SessionId.ShouldBe(oldToken.SessionId);
     }
 
+    [Fact]
+    public async Task Handle_Should_NotRotateToken_WhenSessionProjectionFails()
+    {
+        await using TestDbContext context = CreateDbContext();
+        DateTime now = DateTime.UtcNow;
+        await SeedRefreshTokenAsync(context, "hash:old-token", now.AddDays(1));
+        ITokenProvider tokenProvider = Substitute.For<ITokenProvider>();
+        tokenProvider.HashRefreshToken("old-token").Returns("hash:old-token");
+        Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler = Substitute.For<Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse>>();
+        sessionHandler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result.Failure<UserSessionResponse>(UserErrors.NotFound(Guid.NewGuid())));
+
+        Result<AccessTokensResponse> result = await CreateHandler(context, tokenProvider,
+            Substitute.For<IDateTimeProvider>(), sessionHandler).Handle(new RefreshTokenCommand("old-token"), CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        RefreshToken token = await context.RefreshTokens.SingleAsync();
+        token.RevokedOnUtc.ShouldBeNull();
+        token.ReplacedByToken.ShouldBeNull();
+        tokenProvider.DidNotReceive().Create(Arg.Any<User>());
+    }
+
     private static async Task SeedRefreshTokenAsync(
         TestDbContext context,
         string tokenHash,
@@ -174,7 +197,8 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
     private static RefreshTokenCommandHandler CreateHandler(
         TestDbContext context,
         ITokenProvider tokenProvider,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse>? sessionHandler = null)
     {
         IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
         transaction.ExecuteAsync(
@@ -192,6 +216,17 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
             applicationLock,
             tokenProvider,
             dateTimeProvider,
-            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>());
+            Substitute.For<Application.Abstractions.Audit.IAuditOperationContextAccessor>(),
+            sessionHandler ?? CreateSessionHandler());
+    }
+
+    private static Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> CreateSessionHandler()
+    {
+        Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> handler = Substitute.For<Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse>>();
+        handler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>()).Returns(new UserSessionResponse(
+            new UserSessionUserDto(Guid.NewGuid(), "test@example.com", "Test", "User", null, null),
+            new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
+            new UserSessionScopeDto(Domain.Common.UserAssignmentScopeType.Enterprise, null, "Enterprise"), []));
+        return handler;
     }
 }

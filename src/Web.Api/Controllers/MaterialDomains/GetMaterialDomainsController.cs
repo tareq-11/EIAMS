@@ -20,7 +20,7 @@ public sealed class GetMaterialDomainsController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<MaterialDomainResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Status? status,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

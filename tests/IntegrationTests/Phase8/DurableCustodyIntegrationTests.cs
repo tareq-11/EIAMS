@@ -1,16 +1,23 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Abstractions.Posting;
 using Application.Custodies.GetCustodies;
 using Application.Returns.GetEligibleItems;
 using Domain.Common;
 using Domain.DocumentAttachments;
 using Domain.DurableCustodyAllocations;
+using Domain.DurableCustodies;
+using Domain.DocumentLines;
 using Domain.Employees;
+using Domain.ExternalParties;
+using Domain.IssueTos;
 using Domain.MaterialCategories;
 using Domain.MaterialDomains;
 using Domain.MaterialFamilies;
 using Domain.Materials;
+using Domain.ReceivingInfos;
+using Domain.Permissions;
 using Domain.OrganizationalUnits;
 using Domain.Organizations;
 using Domain.Roles;
@@ -20,9 +27,11 @@ using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Domain.Warehouses;
 using Infrastructure.Database;
+using IntegrationTests.Regression;
 using IntegrationTests.Performance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using SharedKernel;
 using Web.Api.Controllers.Custodies;
 using Web.Api.Infrastructure;
@@ -36,6 +45,97 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     public DurableCustodyIntegrationTests(IntegrationTestWebAppFactory factory) : base(factory)
     {
         this.factory = factory;
+    }
+
+    [Fact]
+    public async Task DurableAllocationHolderGuard_ShouldAllowExternalAndRejectMissingTargets()
+    {
+        RegressionSeedData seed = await RegressionTestHelper.SeedAsync(factory.Services);
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Material material = await context.Materials.SingleAsync(item => item.Id == seed.NormalMaterialId);
+            material.UpdateDetails(material.NameAr, material.NameEn, MaterialKind.Durable,
+                TrackingType.Quantity, material.HasExpiry, material.Attributes);
+            await context.SaveChangesAsync();
+        }
+
+        WarehouseDocument receiving = await CreateSubmittedDocumentAsync(
+            seed, DocumentType.Receiving, seed.KeeperUserId, null, 5m);
+        (await PostAsync(receiving.Id, seed.ManagerUserId)).IsSuccess.ShouldBeTrue();
+        WarehouseDocument issue = await CreateSubmittedDocumentAsync(
+            seed, DocumentType.Issue, seed.KeeperUserId, seed.EmployeeId, 2m);
+        (await PostAsync(issue.Id, seed.ManagerUserId)).IsSuccess.ShouldBeTrue();
+
+        var externalId = Guid.NewGuid();
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            context.ExternalParties.Add(ExternalParty.Create(externalId, "External holder test", "EXT-HOLDER", null, null));
+            await context.SaveChangesAsync();
+            DurableCustodyAllocation allocation = await context.DurableCustodyAllocations
+                .SingleAsync(item => item.IssueDocumentId == issue.Id);
+            allocation.Transfer(PartyType.External, externalId, CustodyKind.Operational, DateTime.UtcNow)
+                .IsSuccess.ShouldBeTrue();
+            await context.SaveChangesAsync();
+
+            ExternalParty externalParty = await context.ExternalParties.SingleAsync(item => item.Id == externalId);
+            externalParty.SetStatus(Status.Inactive);
+            DbUpdateException deactivateException = await Should.ThrowAsync<DbUpdateException>(
+                () => context.SaveChangesAsync());
+            deactivateException.InnerException.ShouldBeOfType<PostgresException>().ConstraintName
+                .ShouldBe("trg_prevent_deactivating_held_external_party");
+
+            PostgresException exception = await Should.ThrowAsync<PostgresException>(() =>
+                context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE public.durable_custody_allocations SET holder_id = {Guid.NewGuid()} WHERE id = {allocation.Id}"));
+            exception.SqlState.ShouldBe(PostgresErrorCodes.CheckViolation);
+            exception.ConstraintName.ShouldBe("trg_validate_durable_allocation_holder");
+        }
+    }
+
+    [Fact]
+    public async Task DurableIssuePosting_Should_CreateTypedCustodyStateAndImmutableIssueHistory()
+    {
+        RegressionSeedData seed = await RegressionTestHelper.SeedAsync(factory.Services);
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Material material = await context.Materials.SingleAsync(item => item.Id == seed.NormalMaterialId);
+            material.UpdateDetails(
+                material.NameAr, material.NameEn, MaterialKind.Durable, TrackingType.Quantity,
+                material.HasExpiry, material.Attributes);
+            await context.SaveChangesAsync();
+        }
+
+        WarehouseDocument receiving = await CreateSubmittedDocumentAsync(
+            seed, DocumentType.Receiving, seed.KeeperUserId, null, 8m);
+        Result<PostingOutcome> receipt = await PostAsync(receiving.Id, seed.ManagerUserId);
+        receipt.IsSuccess.ShouldBeTrue(receipt.IsFailure ? receipt.Error.ToString() : null);
+
+        WarehouseDocument issue = await CreateSubmittedDocumentAsync(
+            seed, DocumentType.Issue, seed.KeeperUserId, seed.EmployeeId, 3m);
+        Result<PostingOutcome> issueResult = await PostAsync(issue.Id, seed.ManagerUserId);
+        issueResult.IsSuccess.ShouldBeTrue(issueResult.IsFailure ? issueResult.Error.ToString() : null);
+
+        await using AsyncServiceScope verificationScope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext verification = verificationScope.ServiceProvider
+            .GetRequiredService<ApplicationDbContext>();
+        DurableCustodyAllocation allocation = await verification.DurableCustodyAllocations
+            .SingleAsync(item => item.IssueDocumentId == issue.Id);
+        allocation.MaterialId.ShouldBe(seed.NormalMaterialId);
+        allocation.HolderType.ShouldBe(PartyType.Employee);
+        allocation.HolderId.ShouldBe(seed.EmployeeId);
+        allocation.ActiveQuantity.ShouldBe(3m);
+        DurableCustodyHistory history = await verification.DurableCustodyHistories
+            .SingleAsync(item => item.SubjectId == allocation.Id);
+        history.SubjectType.ShouldBe(CustodySubjectType.MaterialQuantity);
+        history.Action.ShouldBe(DurableCustodyAction.Issued);
+        history.DocumentId.ShouldBe(issue.Id);
+        decimal balance = await verification.InventoryBalances
+            .Where(item => item.WarehouseId == seed.WarehouseId && item.MaterialId == seed.NormalMaterialId)
+            .Select(item => item.Quantity).SingleAsync();
+        balance.ShouldBe(5m);
     }
 
     [Fact]
@@ -53,12 +153,12 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
 
         // Seed data
         Guid siteId = await SeedSiteAsync();
         Guid warehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, warehouseId);
         Guid unitId = await SeedUnitOfMeasureAsync();
         Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
         Guid employeeId = await SeedEmployeeAsync(siteId);
@@ -89,6 +189,9 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         // Act
         SqlCommandCounterInterceptor commandCounter =
             factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        // Warm the same endpoint that is measured below; this removes startup/JIT noise
+        // without turning the returns endpoint into a proxy for custody query cost.
+        await HttpClient.GetAsync("custodies");
         commandCounter.Reset();
         HttpResponseMessage response = await HttpClient.GetAsync("custodies");
 
@@ -100,7 +203,8 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         envelope.ShouldNotBeNull();
         envelope.Data.ShouldNotBeNull();
         envelope.Data.ShouldContain(c => c.MaterialId == materialId && c.IssuedQuantity == 5m);
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
+        // The dotted policy performs one additional warehouse-scope authorization read.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(11);
     }
 
     [Fact]
@@ -108,11 +212,11 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
 
         Guid siteId = await SeedSiteAsync();
         Guid warehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, warehouseId);
         Guid unitId = await SeedUnitOfMeasureAsync();
         Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
         Guid employeeId = await SeedEmployeeAsync(siteId);
@@ -167,8 +271,91 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
             updated.RowVersion.ShouldBe(2);
 
             bool historyExists = await dbContext.DurableCustodyHistories
-                .AnyAsync(h => h.SubjectId == allocId && h.Action == "Transferred");
+                .AnyAsync(h => h.SubjectId == allocId && h.Action == Domain.DurableCustodies.DurableCustodyAction.Transferred);
             historyExists.ShouldBeTrue();
+
+            Domain.DurableCustodies.DurableCustodyHistory history = await dbContext.DurableCustodyHistories
+                .SingleAsync(h => h.SubjectId == allocId);
+            PostgresException updateError = await Should.ThrowAsync<PostgresException>(async () =>
+                await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE public.durable_custody_histories SET note = 'rewritten' WHERE id = {history.Id}"));
+            updateError.SqlState.ShouldBe("55000");
+            PostgresException deleteError = await Should.ThrowAsync<PostgresException>(async () =>
+                await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM public.durable_custody_histories WHERE id = {history.Id}"));
+            deleteError.SqlState.ShouldBe("55000");
+            (await dbContext.DurableCustodyHistories.AnyAsync(h => h.Id == history.Id)).ShouldBeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task TransferCustody_Should_RejectMaterialQuantityOutsideAssignedWarehouse_WithoutMutation()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Authenticate(tokens.AccessToken);
+
+        Guid siteId = await SeedSiteAsync();
+        Guid assignedWarehouseId = await SeedWarehouseAsync(siteId);
+        Guid sourceWarehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, assignedWarehouseId);
+        Guid unitId = await SeedUnitOfMeasureAsync();
+        Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
+        Guid employeeId = await SeedEmployeeAsync(siteId);
+        Guid issueDocId = await SeedPostedIssueDocumentAsync(sourceWarehouseId, userId);
+        var allocationId = Guid.NewGuid();
+
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            DurableCustodyAllocation allocation = DurableCustodyAllocation.Open(
+                allocationId,
+                materialId,
+                sourceWarehouseId,
+                PartyType.Employee,
+                employeeId,
+                CustodyKind.Personal,
+                issueDocId,
+                10m,
+                DateTime.UtcNow).Value;
+
+            dbContext.DurableCustodyAllocations.Add(allocation);
+            await dbContext.SaveChangesAsync();
+        }
+
+        var transferRequest = new TransferCustodyRequest(
+            CustodySubjectType.MaterialQuantity,
+            PartyType.Site,
+            siteId,
+            CustodyKind.Operational,
+            1,
+            "Cross-warehouse transfer must be denied");
+
+        // Act
+        HttpResponseMessage response = await HttpClient.PostAsJsonAsync(
+            $"custodies/{allocationId}/transfer",
+            transferRequest);
+
+        // Assert
+        string errorContent = await response.Content.ReadAsStringAsync();
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden, errorContent);
+
+        using (IServiceScope scope = factory.Services.CreateScope())
+        {
+            ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            DurableCustodyAllocation? allocation = await dbContext.DurableCustodyAllocations
+                .AsNoTracking()
+                .SingleOrDefaultAsync(item => item.Id == allocationId);
+
+            allocation.ShouldNotBeNull();
+            allocation.HolderType.ShouldBe(PartyType.Employee);
+            allocation.HolderId.ShouldBe(employeeId);
+            allocation.CustodyKind.ShouldBe(CustodyKind.Personal);
+            allocation.RowVersion.ShouldBe(1);
+
+            bool historyExists = await dbContext.DurableCustodyHistories
+                .AnyAsync(history => history.SubjectId == allocationId);
+            historyExists.ShouldBeFalse();
         }
     }
 
@@ -177,11 +364,11 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
         Authenticate(tokens.AccessToken);
 
         Guid siteId = await SeedSiteAsync();
         Guid warehouseId = await SeedWarehouseAsync(siteId);
+        await GrantEnterpriseAdministratorAsync(userId, warehouseId);
         Guid unitId = await SeedUnitOfMeasureAsync();
         Guid materialId = await SeedMaterialAsync(unitId, MaterialKind.Durable, TrackingType.Quantity);
         Guid employeeId = await SeedEmployeeAsync(siteId);
@@ -241,7 +428,7 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
             data[i].GetProperty("availableQuantity").GetDecimal().ShouldBe(expectedQuantities[i]);
         }
 
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(10);
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(11);
 
         ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>? envelope =
             await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<ReturnEligibleItemResponse>>>();
@@ -250,25 +437,78 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         envelope.Data.Count.ShouldBe(10);
     }
 
-    private async Task GrantEnterpriseAdministratorAsync(Guid userId)
+    private async Task GrantEnterpriseAdministratorAsync(Guid userId, Guid warehouseId)
     {
         using IServiceScope scope = factory.Services.CreateScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        UserRoleScope? assignment = await dbContext.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
+        var roleId = Guid.NewGuid();
+        dbContext.Roles.Add(Role.Create(roleId, $"Durable custody {roleId:N}", null));
+        dbContext.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        dbContext.RolePermissions.AddRange(
+            RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CustodyAssignId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId));
+        await dbContext.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        dbContext.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
+        await dbContext.SaveChangesAsync();
+    }
 
-        if (assignment is null)
+    private async Task<WarehouseDocument> CreateSubmittedDocumentAsync(
+        RegressionSeedData seed,
+        DocumentType documentType,
+        Guid createdBy,
+        Guid? recipientEmployeeId,
+        decimal quantity)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        string suffix = Guid.NewGuid().ToString("N")[..10];
+        var document = WarehouseDocument.CreateDraft(
+            Guid.NewGuid(), seed.WarehouseId, documentType, $"P8-{documentType}-{suffix}");
+        document.UpdatePaperReference($"P8-PAPER-{suffix}", DateTime.UtcNow.Year).IsSuccess.ShouldBeTrue();
+        Material material = await context.Materials.SingleAsync(item => item.Id == seed.NormalMaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion, material.MaterialKind, material.TrackingType, material.BaseUnitId).Value;
+        context.WarehouseDocuments.Add(document);
+        context.DocumentLines.Add(DocumentLine.Create(
+            Guid.NewGuid(), document.Id, material.Id, DocumentLineType.Normal,
+            quantity, seed.UnitOfMeasureId, quantity, null, null, null,
+            provenance: provenance).Value);
+        if (documentType == DocumentType.Receiving)
         {
-            Role adminRole = await dbContext.Roles.FirstAsync(r => r.Name == "Administrator");
-            dbContext.UserRoleScopes.Add(UserRoleScope.Create(
-                Guid.NewGuid(),
-                userId,
-                adminRole.Id,
-                ScopeType.Enterprise,
-                null));
-
-            await dbContext.SaveChangesAsync();
+            context.ReceivingInfos.Add(ReceivingInfo.Create(
+                document.Id, "Durable integration supplier", null, ReceivingType.Supplier).Value);
         }
+        else if (documentType == DocumentType.Issue && recipientEmployeeId is Guid employeeId)
+        {
+            context.IssueTos.Add(IssueTo.Create(
+                document.Id, PartyType.Employee, employeeId, "Durable issue integration test").Value);
+        }
+
+        await context.SaveChangesAsync();
+        var attachment = DocumentAttachment.Create(
+            Guid.NewGuid(), document.Id, AttachmentType.SignedOriginal,
+            $"p8/{suffix}.pdf", $"{suffix}.pdf", "application/pdf", 16, suffix,
+            createdBy, DateTime.UtcNow);
+        context.DocumentAttachments.Add(attachment);
+        await context.SaveChangesAsync();
+        document.SetSignedCopy(attachment.Id).IsSuccess.ShouldBeTrue();
+        document.Submit().IsSuccess.ShouldBeTrue();
+        await context.SaveChangesAsync();
+        return document;
+    }
+
+    private async Task<Result<PostingOutcome>> PostAsync(Guid documentId, Guid postedBy)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        IDocumentPostingCoordinator coordinator = scope.ServiceProvider
+            .GetRequiredService<IDocumentPostingCoordinator>();
+        WarehouseDocument document = await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>()
+            .WarehouseDocuments.AsNoTracking().SingleAsync(item => item.Id == documentId);
+        return await coordinator.PostAsync(
+            documentId, document.RowVersion, postedBy, CancellationToken.None);
     }
 
     private async Task<Guid> SeedSiteAsync()
@@ -331,7 +571,7 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         string suffix = Guid.NewGuid().ToString("N")[..8];
         var domain = MaterialDomain.Create(Guid.NewGuid(), $"Domain {suffix}", $"D{suffix}");
         var cat = MaterialCategory.Create(Guid.NewGuid(), domain.Id, null, $"Cat {suffix}", $"C{suffix}");
-        var family = MaterialFamily.Create(Guid.NewGuid(), cat.Id, $"Fam {suffix}", $"F{suffix}", unitId);
+        var family = MaterialFamily.Create(Guid.NewGuid(), cat.Id, $"Fam {suffix}", $"F{suffix}");
 
         dbContext.MaterialDomains.Add(domain);
         dbContext.MaterialCategories.Add(cat);

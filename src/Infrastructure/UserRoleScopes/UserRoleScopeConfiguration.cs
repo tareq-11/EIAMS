@@ -13,6 +13,7 @@ internal sealed class UserRoleScopeConfiguration : IEntityTypeConfiguration<User
         builder.HasKey(s => s.Id);
 
         builder.Property(s => s.ScopeType).HasConversion<string>().HasMaxLength(30);
+        builder.Property(s => s.RowVersion).IsConcurrencyToken().HasDefaultValue(1);
 
         builder.HasIndex(s => s.UserId)
             .HasDatabaseName("ux_user_role_scopes_user_id")
@@ -21,7 +22,7 @@ internal sealed class UserRoleScopeConfiguration : IEntityTypeConfiguration<User
         builder.ToTable(tableBuilder => tableBuilder.HasCheckConstraint(
             "ck_user_role_scopes_scope_id",
             "(scope_type = 'Enterprise' AND scope_id IS NULL) OR " +
-            "(scope_type IN ('Site', 'OrganizationalUnit', 'Warehouse') AND scope_id IS NOT NULL)"));
+            "(scope_type IN ('Site', 'Warehouse') AND scope_id IS NOT NULL)"));
 
         builder.HasOne<User>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Restrict);
 

@@ -13,5 +13,6 @@ public sealed record ActiveInventoryFreezeResponse(
 public sealed record InventoryFreezeStatusResponse(
     Guid WarehouseId,
     bool IsPostingBlocked,
+    bool IsProvisional,
     bool HasSoftFreezeWarning,
     IReadOnlyList<ActiveInventoryFreezeResponse> ActiveCounts);

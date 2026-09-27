@@ -57,6 +57,7 @@ public interface IApplicationDbContext
     DbSet<Role> Roles { get; }
     DbSet<RoleAllowedScopeType> RoleAllowedScopeTypes { get; }
     DbSet<Permission> Permissions { get; }
+    DbSet<PermissionAllowedScopeType> PermissionAllowedScopeTypes { get; }
     DbSet<RolePermission> RolePermissions { get; }
     DbSet<UserRoleScope> UserRoleScopes { get; }
     DbSet<UnitOfMeasure> UnitsOfMeasure { get; }

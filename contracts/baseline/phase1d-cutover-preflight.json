@@ -1,0 +1,21 @@
+{
+  "version": "phase-1d-v1",
+  "overallStatus": "WARN",
+  "semantics": {
+    "PASS": "no observed anomaly",
+    "BLOCK": "manual remediation or migration gate required",
+    "WARN": "review required or database unavailable",
+    "UNAVAILABLE": "not safely inferable"
+  },
+  "database": {
+    "status": "UNAVAILABLE",
+    "note": "EIAMS_PHASE1D_PG* variables were not supplied; database checks were not inferred.",
+    "checks": []
+  },
+  "remediation": "OrganizationalUnit user assignments are a BLOCK. A business owner must explicitly choose Enterprise, Site, Warehouse, or suspend the user after backup/restore verification; this tool never maps or deletes rows.",
+  "limitations": [
+    "Counts only; no identifiers, PII, credentials, or live row data are written.",
+    "SQL assumes the checked-in EF table/column contract; missing schema is UNAVAILABLE.",
+    "No migration or data mutation is performed."
+  ]
+}

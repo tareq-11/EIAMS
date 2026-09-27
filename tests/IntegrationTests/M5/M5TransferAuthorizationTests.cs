@@ -68,7 +68,7 @@ public sealed class M5TransferAuthorizationTests : BaseIntegrationTest
         var unit = UnitOfMeasure.Create(Guid.NewGuid(), $"Piece {suffix}", $"P{suffix}", "Count");
         var domain = MaterialDomain.Create(Guid.NewGuid(), $"Domain {suffix}", $"D{suffix}");
         var category = MaterialCategory.Create(Guid.NewGuid(), domain.Id, null, $"Category {suffix}", $"C{suffix}");
-        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}", unit.Id);
+        var family = MaterialFamily.Create(Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}");
         var material = Material.Create(
             Guid.NewGuid(), family.Id, unit.Id, $"Material {suffix}", null, $"M{suffix}", MaterialKind.Consumable,
             TrackingType.Quantity, false, null);
@@ -114,7 +114,9 @@ public sealed class M5TransferAuthorizationTests : BaseIntegrationTest
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var role = Role.Create(Guid.NewGuid(), $"M5 transfer review {Guid.NewGuid():N}", null);
         dbContext.Roles.Add(role);
-        dbContext.RolePermissions.Add(RolePermission.Create(role.Id, WellKnownPermissions.WarehouseDocumentsReviewId));
+        dbContext.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(role.Id, ScopeType.Warehouse));
+        dbContext.RolePermissions.Add(RolePermission.Create(role.Id, WellKnownDottedPermissions.DocumentPostId));
+        await dbContext.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         dbContext.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, role.Id, ScopeType.Warehouse, sourceWarehouseId));
         await dbContext.SaveChangesAsync();

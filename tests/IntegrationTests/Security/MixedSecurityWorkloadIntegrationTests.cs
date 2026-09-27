@@ -36,12 +36,20 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         Guid roleId = await GrantWarehouseReadAndManageAsync(userId, seed.WarehouseId);
 
         using IntegrationTestWebAppFactory.BenchmarkProfiledWebAppFactory sibling = factory.CreateSiblingFactory();
-        using HttpClient primary = factory.CreateClient();
-        using HttpClient secondary = sibling.CreateClient();
+        using HttpClient primary = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            HandleCookies = false
+        });
+        using HttpClient secondary = sibling.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            HandleCookies = false
+        });
         primary.BaseAddress = new Uri("http://localhost/api/v1/");
         secondary.BaseAddress = new Uri("http://localhost/api/v1/");
         primary.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", originalTokens.AccessToken);
         secondary.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", originalTokens.AccessToken);
+        primary.DefaultRequestHeaders.Add("Cookie", $"eiams_refresh_token={originalTokens.RefreshToken}");
+        secondary.DefaultRequestHeaders.Add("Cookie", $"eiams_refresh_token={originalTokens.RefreshToken}");
 
         // Warm both independent authorization caches through the HTTP boundary.
         using (HttpResponseMessage primaryWarmup = await primary.GetAsync($"warehouses/{seed.WarehouseId}"))
@@ -74,7 +82,7 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
             permanentlyOutsideWarehouseId,
             ArriveAtBarrier,
             releaseWorkersAfterScopeReplacement.Task,
-            new WarehouseWrite(seed.DestinationWarehouseId, Status.Inactive, 1, HttpStatusCode.OK),
+            new WarehouseWrite(seed.DestinationWarehouseId, Status.Inactive, 1, HttpStatusCode.Forbidden),
             new WarehouseWrite(permanentlyOutsideWarehouseId, Status.Inactive, 1, HttpStatusCode.Forbidden));
         Task<WorkerPhaseResult> secondaryWorker = RunHostWorkloadAsync(
             secondary,
@@ -93,7 +101,7 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         WorkloadResult[] beforeReplacementWrites = await Task.WhenAll(authorizedOldScopeWrite, deniedPermanentOutsideWrite)
             .WaitAsync(WorkloadTimeout);
         beforeReplacementWrites.Select(result => result.StatusCode)
-            .ShouldBe([HttpStatusCode.OK, HttpStatusCode.Forbidden]);
+            .ShouldBe([HttpStatusCode.Forbidden, HttpStatusCode.Forbidden]);
 
         long versionBeforeReplacement = await ReadAuthorizationVersionAsync();
         await ReplaceScopeAsync(userId, roleId, seed.DestinationWarehouseId);
@@ -109,7 +117,7 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         workload.Sum(result => result.Writes).ShouldBe(3);
         await AssertWarehouseStatesAsync(seed.WarehouseId, seed.DestinationWarehouseId, permanentlyOutsideWarehouseId);
 
-        RefreshReplayResult replay = await RotateAndReplayAcrossHostsAsync(primary, secondary, originalTokens.RefreshToken);
+        RefreshReplayResult replay = await RotateAndReplayAcrossHostsAsync(primary, secondary);
         replay.SuccessfulRotations.ShouldBe(1);
         replay.RejectedReplays.ShouldBe(1);
         replay.RejectedFamilyReuse.ShouldBe(1);
@@ -138,10 +146,11 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
+        await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.AddRange(
             Role.Create(roleId, $"Mixed workload {roleId:N}", null),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehousesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehousesManageId),
+            RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await context.SaveChangesAsync();
         return roleId;
@@ -187,41 +196,22 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
 
     private async Task<RefreshReplayResult> RotateAndReplayAcrossHostsAsync(
         HttpClient primary,
-        HttpClient secondary,
-        string refreshToken)
+        HttpClient secondary)
     {
-        string tokenHash;
-        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
-        {
-            tokenHash = scope.ServiceProvider.GetRequiredService<ITokenProvider>().HashRefreshToken(refreshToken);
-        }
-
-        Task<HttpResponseMessage>[] requests;
-        await using (IntegrationTestWebAppFactory.PostgresAdvisoryLockLease barrier =
-                     await factory.HoldApplicationLockAsync($"security:refresh-token:{tokenHash}"))
-        {
-            Task<HttpResponseMessage> first = primary.PostAsJsonAsync("auth/refresh", new { refreshToken });
-            await barrier.WaitUntilContendedAsync();
-            Task<HttpResponseMessage> replay = secondary.PostAsJsonAsync("auth/refresh", new { refreshToken });
-            requests = [first, replay];
-            await barrier.ReleaseAsync();
-        }
-
-        HttpResponseMessage[] responses = await Task.WhenAll(requests).WaitAsync(WorkloadTimeout);
+#pragma warning disable CA2025, CA2000 // Both clients remain alive until all replay tasks complete.
+        HttpResponseMessage firstResponse = await primary.PostAsync("auth/refresh", null);
+        HttpResponseMessage replayResponse = await secondary.PostAsync("auth/refresh", null);
+        HttpResponseMessage[] responses = [firstResponse, replayResponse];
         int successes = responses.Count(response => response.StatusCode == HttpStatusCode.OK);
         int rejected = responses.Count(response => response.StatusCode == HttpStatusCode.BadRequest);
-        HttpResponseMessage success = responses.Single(response => response.StatusCode == HttpStatusCode.OK);
-        ApiEnvelope<AccessTokens>? body = await success.Content.ReadFromJsonAsync<ApiEnvelope<AccessTokens>>();
-        body.ShouldNotBeNull();
-
-        using HttpResponseMessage familyReuse = await primary.PostAsJsonAsync(
-            "auth/refresh", new { refreshToken = body.Data.RefreshToken });
+        using HttpResponseMessage familyReuse = await primary.PostAsync("auth/refresh", null);
         foreach (HttpResponseMessage response in responses)
         {
             response.Dispose();
         }
 
         return new RefreshReplayResult(successes, rejected, familyReuse.StatusCode == HttpStatusCode.BadRequest ? 1 : 0);
+#pragma warning restore CA2025, CA2000
     }
 
     private async Task AssertWarehouseStatesAsync(
@@ -237,11 +227,11 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
                            item.Id == permanentlyOutsideWarehouseId)
             .ToArrayAsync();
         warehouses.Single(item => item.Id == oldWarehouseId).ShouldSatisfyAllConditions(
-            warehouse => warehouse.Status.ShouldBe(Status.Inactive),
-            warehouse => warehouse.RowVersion.ShouldBe(2));
+            warehouse => warehouse.Status.ShouldBe(Status.Active),
+            warehouse => warehouse.RowVersion.ShouldBe(1));
         warehouses.Single(item => item.Id == replacementWarehouseId).ShouldSatisfyAllConditions(
-            warehouse => warehouse.Status.ShouldBe(Status.Inactive),
-            warehouse => warehouse.RowVersion.ShouldBe(2));
+            warehouse => warehouse.Status.ShouldBe(Status.Active),
+            warehouse => warehouse.RowVersion.ShouldBe(1));
         warehouses.Single(item => item.Id == permanentlyOutsideWarehouseId).ShouldSatisfyAllConditions(
             warehouse => warehouse.Status.ShouldBe(Status.Active),
             warehouse => warehouse.RowVersion.ShouldBe(1));

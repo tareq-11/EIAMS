@@ -30,7 +30,7 @@ builder.Services.AddObservability(builder.Configuration, builder.Environment.App
 
 builder.Services.AddRateLimitingInternal(builder.Configuration);
 
-builder.Services.AddCorsPolicy(builder.Configuration, builder.Environment);
+builder.Services.AddCorsPolicy();
 
 builder.Services.AddForwardedHeaders(builder.Configuration);
 

@@ -48,12 +48,12 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task UpdateWarehouse_Should_AuthorizeSiteGrantForWarehouseInsideThatSite()
+    public async Task UpdateWarehouse_Should_DenySiteScopedMutationUnderLegacyPolicy()
     {
         // Arrange
         WarehouseSeed seed = await SeedWarehouseAsync();
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownPermissions.WarehousesManageId, ScopeType.Site, seed.SiteId);
+        await GrantPermissionAsync(userId, WellKnownDottedPermissions.WarehouseManageId, ScopeType.Site, seed.SiteId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -69,12 +69,12 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
             });
 
         // Assert
-        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         Warehouse warehouse = await context.Warehouses.SingleAsync(item => item.Id == seed.WarehouseId);
-        warehouse.Name.ShouldBe("Updated warehouse");
-        warehouse.RowVersion.ShouldBe(2);
+        warehouse.Name.ShouldNotBe("Updated warehouse");
+        warehouse.RowVersion.ShouldBe(1);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         WarehouseSeed seed = await SeedWarehouseAsync();
         Guid otherSiteId = await SeedSiteAsync(seed.OrganizationId);
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownPermissions.WarehousesManageId, ScopeType.Site, otherSiteId);
+        await GrantPermissionAsync(userId, WellKnownDottedPermissions.WarehouseManageId, ScopeType.Site, otherSiteId);
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -103,7 +103,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         ApiErrorEnvelope? body = await response.Content.ReadFromJsonAsync<ApiErrorEnvelope>();
         body.ShouldNotBeNull();
-        body.Error.Code.ShouldBe("WAREHOUSES_FORBIDDEN");
+        body.Error.Code.ShouldBe("AUTHORIZATION_FORBIDDEN");
     }
 
     [Fact]
@@ -111,22 +111,26 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     {
         WarehouseSeed seed = await SeedWarehouseAsync();
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownPermissions.WarehousesManageId, ScopeType.Warehouse, seed.WarehouseId);
+        await GrantPermissionAsync(userId, WellKnownDottedPermissions.WarehouseManageId, ScopeType.Warehouse, seed.WarehouseId);
         Authenticate(tokens.AccessToken);
 
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("admin/users", new
         {
             email = $"scoped-editor-{Guid.NewGuid():N}@example.test",
+            username = $"scoped-editor-{Guid.NewGuid():N}",
             firstName = "Scoped",
             lastName = "Editor",
-            password = "Password123!"
+            password = "Password123!",
+            roleId = WellKnownRoles.AdministratorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     [Fact]
-    public async Task UpdateWarehouse_Should_AuthorizeOrganizationalUnitDescendantsButRejectSibling()
+    public async Task LegacyOrganizationalUnitAssignment_ShouldBeRejectedByCutoverConstraint()
     {
         WarehouseSeed seed = await SeedWarehouseAsync();
         var descendantWarehouseId = Guid.NewGuid();
@@ -146,29 +150,9 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
             await context.SaveChangesAsync();
         }
 
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownPermissions.WarehousesManageId, ScopeType.OrganizationalUnit, seed.OrganizationalUnitId);
-        Authenticate(tokens.AccessToken);
-
-        HttpResponseMessage descendant = await HttpClient.PutAsJsonAsync($"warehouses/{descendantWarehouseId}", new
-        {
-            organizationalUnitId = descendantUnitId,
-            name = "Descendant updated",
-            warehouseType = "Main",
-            canHoldStock = true,
-            expectedRowVersion = 1
-        });
-        HttpResponseMessage sibling = await HttpClient.PutAsJsonAsync($"warehouses/{siblingWarehouseId}", new
-        {
-            organizationalUnitId = siblingUnitId,
-            name = "Sibling must not update",
-            warehouseType = "Main",
-            canHoldStock = true,
-            expectedRowVersion = 1
-        });
-
-        descendant.StatusCode.ShouldBe(HttpStatusCode.OK);
-        sibling.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (Guid userId, _) = await RegisterAndLoginAsync();
+        await Should.ThrowAsync<DbUpdateException>(() =>
+            GrantPermissionAsync(userId, WellKnownDottedPermissions.WarehouseManageId, ScopeType.OrganizationalUnit, seed.OrganizationalUnitId));
     }
 
     [Fact]
@@ -176,7 +160,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantPermissionAsync(userId, WellKnownPermissions.OrganizationsManageId, ScopeType.Enterprise, null);
+        await GrantPermissionAsync(userId, WellKnownDottedPermissions.OrganizationManageId, ScopeType.Enterprise, null);
         Authenticate(tokens.AccessToken);
         string code = $"ORG-{Guid.NewGuid():N}";
 
@@ -204,30 +188,30 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
             userId,
             ScopeType.Enterprise,
             null,
-            WellKnownPermissions.RolesManageId,
-            WellKnownPermissions.RolesViewId);
+            WellKnownDottedPermissions.AdminRoleManageId,
+            WellKnownDottedPermissions.AdminRoleViewId);
         Guid roleId = await SeedRoleAsync();
         Authenticate(tokens.AccessToken);
 
         // Act
         HttpResponseMessage assignResponse = await HttpClient.PostAsJsonAsync(
             $"admin/roles/{roleId}/permissions",
-            new { permissionId = WellKnownPermissions.MaterialsManageId });
+            new { permissionId = WellKnownDottedPermissions.CatalogManageId });
         HttpResponseMessage listedResponse = await HttpClient.GetAsync($"admin/roles/{roleId}/permissions");
         HttpResponseMessage removeResponse = await HttpClient.DeleteAsync(
-            $"admin/roles/{roleId}/permissions/{WellKnownPermissions.MaterialsManageId}");
+            $"admin/roles/{roleId}/permissions/{WellKnownDottedPermissions.CatalogManageId}");
 
         // Assert
         assignResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         listedResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         PagedApiEnvelope<PermissionItem>? listed = await listedResponse.Content.ReadFromJsonAsync<PagedApiEnvelope<PermissionItem>>();
         listed.ShouldNotBeNull();
-        listed.Data.ShouldContain(item => item.Id == WellKnownPermissions.MaterialsManageId);
+        listed.Data.ShouldContain(item => item.Id == WellKnownDottedPermissions.CatalogManageId);
         removeResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await context.RolePermissions.AnyAsync(item =>
-            item.RoleId == roleId && item.PermissionId == WellKnownPermissions.MaterialsManageId)).ShouldBeFalse();
+            item.RoleId == roleId && item.PermissionId == WellKnownDottedPermissions.CatalogManageId)).ShouldBeFalse();
     }
 
     [Fact]
@@ -435,7 +419,9 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
         Guid roleId = await SeedRoleAsync(context);
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, scopeType));
         context.RolePermissions.AddRange(permissionIds.Select(permissionId =>
             RolePermission.Create(roleId, permissionId)));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
@@ -516,7 +502,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category-{categoryId:N}", $"CAT-{categoryId:N}"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(sourceUnitId, "Box", "box", "Count"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family-{familyId:N}", $"FAM-{familyId:N}", baseUnitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family-{familyId:N}", $"FAM-{familyId:N}"));
         context.Materials.Add(Material.Create(
             materialId,
             familyId,

@@ -16,7 +16,7 @@ public sealed class ReverseInventoryAdjustmentController(
     ICommandHandler<CreateReversalDocumentCommand, Guid> handler) : ControllerBase
 {
     [HttpPost("{id:guid}/reverse")]
-    [HasPermission(PermissionCodes.WarehouseDocuments.Create)]
+    [HasPermission(PermissionCodes.WarehouseDocuments.Reverse)]
     [ProducesResponseType<ApiResponse<ResourceIdResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]

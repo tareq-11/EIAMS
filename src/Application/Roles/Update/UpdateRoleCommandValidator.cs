@@ -1,3 +1,4 @@
+using Domain.Common;
 using FluentValidation;
 
 namespace Application.Roles.Update;
@@ -8,6 +9,9 @@ internal sealed class UpdateRoleCommandValidator : AbstractValidator<UpdateRoleC
     {
         RuleFor(c => c.RoleId).NotEmpty();
         RuleFor(c => c.Name).NotEmpty().MaximumLength(100);
-        RuleForEach(c => c.AllowedScopeTypes).IsInEnum();
+        RuleForEach(c => c.AllowedScopeTypes)
+            .IsInEnum()
+            .Must(UserAssignmentScopeTypes.IsAllowed)
+            .WithMessage("OrganizationalUnit is not an allowed user assignment scope.");
     }
 }

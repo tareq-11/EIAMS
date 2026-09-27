@@ -9,7 +9,7 @@ public sealed class DurableCustodyHistory : Entity, IAuditableEntity
 
     public CustodySubjectType SubjectType { get; private set; }
     public Guid SubjectId { get; private set; }
-    public string Action { get; private set; }
+    public DurableCustodyAction Action { get; private set; }
     public PartyType? FromHolderType { get; private set; }
     public Guid? FromHolderId { get; private set; }
     public PartyType? ToHolderType { get; private set; }
@@ -29,7 +29,7 @@ public sealed class DurableCustodyHistory : Entity, IAuditableEntity
         Guid id,
         CustodySubjectType subjectType,
         Guid subjectId,
-        string action,
+        DurableCustodyAction action,
         PartyType? fromHolderType,
         Guid? fromHolderId,
         PartyType? toHolderType,

@@ -28,8 +28,16 @@ internal static class ForwardedHeadersExtensions
                 return;
             }
 
-            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                                       ForwardedHeaders.XForwardedProto |
+                                       ForwardedHeaders.XForwardedHost;
             options.ForwardLimit = 1;
+            foreach (string allowedHost in (configuration["AllowedHosts"] ?? string.Empty)
+                         .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                         .Where(host => !host.Contains('*', StringComparison.Ordinal)))
+            {
+                options.AllowedHosts.Add(allowedHost);
+            }
 
             foreach (string proxy in knownProxyValues)
             {

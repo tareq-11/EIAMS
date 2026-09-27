@@ -78,7 +78,6 @@ internal static class SecurityOutcomeMetricsExtensions
     {
         eventType = controllerName switch
         {
-            "RegisterController" => "administrator_bootstrap",
             "RecoverAdministratorController" => "administrator_recovery",
             "CreateUserController" => "administrator_user_create",
             "UpdateUserController" => "administrator_user_update",
@@ -98,7 +97,6 @@ internal static class SecurityOutcomeMetricsExtensions
     }
 
     private static bool IsKnownEventType(string eventType) => eventType is
-        "administrator_bootstrap" or
         "administrator_recovery" or
         "administrator_user_create" or
         "administrator_user_update" or

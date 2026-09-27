@@ -388,11 +388,9 @@ public sealed class AuditCaptureTests : BaseIntegrationTest
     [Fact]
     public async Task Secrets_Should_NeverAppearInAuditTables_AndSyntheticAuthHeadersShouldExist()
     {
-        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (Guid userId, _) = await RegisterAndLoginAsync();
 
-        HttpResponseMessage refreshResponse = await HttpClient.PostAsJsonAsync(
-            "auth/refresh",
-            new { refreshToken = tokens.RefreshToken });
+        HttpResponseMessage refreshResponse = await HttpClient.PostAsync("auth/refresh", null);
 
         refreshResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
 

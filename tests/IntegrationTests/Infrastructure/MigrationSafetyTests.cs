@@ -1,5 +1,7 @@
 using Infrastructure.Database;
+using Infrastructure.DomainEvents;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,6 +12,203 @@ namespace IntegrationTests.Infrastructure;
 [Collection(nameof(IntegrationTestCollection))]
 public sealed class MigrationSafetyTests(IntegrationTestWebAppFactory factory)
 {
+    [Fact]
+    public void PolymorphicHolderMigration_LocksReferenceTablesBeforePreflight()
+    {
+        string migrationPath = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "Infrastructure",
+            "Migrations",
+            "20260927103000_EnforcePolymorphicHolderTargets.cs");
+        string migration = File.ReadAllText(migrationPath);
+        int lockIndex = migration.IndexOf("LOCK TABLE public.custodies", StringComparison.Ordinal);
+        int preflightIndex = migration.IndexOf("DO $$", lockIndex, StringComparison.Ordinal);
+
+        lockIndex.ShouldBeGreaterThanOrEqualTo(0);
+        preflightIndex.ShouldBeGreaterThan(lockIndex);
+        migration[..preflightIndex].ShouldContain("public.durable_custody_allocations");
+        migration[..preflightIndex].ShouldContain("public.tracked_material_units");
+        migration[..preflightIndex].ShouldContain("public.issue_to");
+        migration[..preflightIndex].ShouldContain("public.employees");
+        migration[..preflightIndex].ShouldContain("public.external_parties");
+        migration[..preflightIndex].ShouldContain("public.organizational_units");
+        migration[..preflightIndex].ShouldContain("public.sites");
+        migration[..preflightIndex].ShouldContain("IN SHARE ROW EXCLUSIVE MODE");
+    }
+
+    [Fact]
+    public async Task CutoverMigration_OnFreshDisposableDatabase_ShouldApplyAndRejectLegacyScope()
+    {
+        string database = $"migration_1d_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync();
+
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.permissions WHERE code LIKE '%:%'")).ShouldBe(0);
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.role_permissions rp JOIN public.permissions p ON p.id = rp.permission_id WHERE p.code LIKE '%:%'")).ShouldBe(0);
+            (await ScalarAsync(connection, "SELECT active_vocabulary FROM public.authorization_policy_versions WHERE is_active")).ShouldBe("dotted-v1");
+            await ExecuteAsync(connection, $"INSERT INTO public.users (id, email, username, first_name, last_name, password_hash, status, created_at_utc) VALUES ('{Guid.NewGuid()}', 'migration-{database}@example.test', 'migration-{database}', 'Migration', 'Test', 'hash', 'Active', NOW())");
+            var userId = Guid.NewGuid();
+            await ExecuteAsync(connection, $"INSERT INTO public.users (id, email, username, first_name, last_name, password_hash, status, created_at_utc) VALUES ('{userId}', 'scope-{database}@example.test', 'scope-{database}', 'Scope', 'Test', 'hash', 'Active', NOW())");
+            await Should.ThrowAsync<PostgresException>(() => ExecuteAsync(connection, $"INSERT INTO public.user_role_scopes (id, user_id, role_id, scope_type, scope_id, row_version, created_at_utc) VALUES ('{Guid.NewGuid()}', '{userId}', '{Domain.Roles.WellKnownRoles.AdministratorId}', 'OrganizationalUnit', '{Guid.NewGuid()}', 1, NOW())"));
+
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.role_allowed_scope_types WHERE scope_type = 'OrganizationalUnit'")).ShouldBe(0);
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.permission_allowed_scope_types WHERE scope_type = 'OrganizationalUnit'")).ShouldBe(0);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
+    public async Task CutoverMigration_WithLegacyAssignment_ShouldFailBeforeHistoryOrMutation()
+    {
+        string database = $"migration_1d_guard_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            var userId = Guid.NewGuid();
+            var assignmentId = Guid.NewGuid();
+            await ExecuteAsync(connection, $"INSERT INTO public.users (id, email, username, first_name, last_name, password_hash, status, created_at_utc) VALUES ('{userId}', 'legacy-{database}@example.test', 'legacy-{database}', 'Legacy', 'Test', 'hash', 'Active', NOW())");
+            await ExecuteAsync(connection, $"INSERT INTO public.user_role_scopes (id, user_id, role_id, scope_type, scope_id, row_version, created_at_utc) VALUES ('{assignmentId}', '{userId}', '{Domain.Roles.WellKnownRoles.WarehouseManagerId}', 'OrganizationalUnit', '{Guid.NewGuid()}', 1, NOW())");
+
+            await Should.ThrowAsync<PostgresException>(() => context.Database.MigrateAsync());
+            (await ScalarAsync(connection, $"SELECT COUNT(*) FROM public.user_role_scopes WHERE id = '{assignmentId}'")).ShouldBe(1);
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = '20260922021122_CutoverUserAssignmentScopeVocabulary'")).ShouldBe(0);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
+    public async Task CutoverMigration_WithZeroAssignmentUser_ShouldFailBeforeHistory()
+    {
+        string database = $"migration_1d_zero_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await ExecuteAsync(connection, $"INSERT INTO public.users (id, email, username, first_name, last_name, password_hash, status, created_at_utc) VALUES ('{Guid.NewGuid()}', 'zero-{database}@example.test', 'zero-{database}', 'Zero', 'Assignment', 'hash', 'Active', NOW())");
+
+            await Should.ThrowAsync<PostgresException>(() => context.Database.MigrateAsync());
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = '20260922021122_CutoverUserAssignmentScopeVocabulary'")).ShouldBe(0);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
+    public async Task CutoverMigration_WithSuspendedZeroAssignmentUser_ShouldSucceed()
+    {
+        string database = $"migration_1d_suspended_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await ExecuteAsync(connection, $"INSERT INTO public.users (id, email, username, first_name, last_name, password_hash, status, created_at_utc) VALUES ('{Guid.NewGuid()}', 'suspended-{database}@example.test', 'suspended-{database}', 'Suspended', 'User', 'hash', 'Suspended', NOW())");
+
+            await context.Database.MigrateAsync();
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = '20260922021122_CutoverUserAssignmentScopeVocabulary'")).ShouldBe(1);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
+    public async Task DottedPermissionCutover_WithUnknownPermission_ShouldFailBeforeCleanupOrHistory()
+    {
+        string database = $"migration_2a_guard_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        var permissionId = Guid.NewGuid();
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await ExecuteAsync(connection, $"INSERT INTO public.permissions (id, code, description) VALUES ('{permissionId}', 'unknown.permission', 'test-only unknown permission')");
+
+            await Should.ThrowAsync<PostgresException>(() => context.Database.MigrateAsync());
+            (await ScalarAsync(connection, $"SELECT COUNT(*) FROM public.permissions WHERE id = '{permissionId}'")).ShouldBe(1);
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = '20260922220000_CutoverToDottedOnlyPermissionVocabulary'")).ShouldBe(0);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
+    public async Task DottedPermissionCutover_WithMissingRoleGrantParity_ShouldFailBeforeCleanupOrHistory()
+    {
+        string database = $"migration_2a_role_guard_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        var roleId = Guid.NewGuid();
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await ExecuteAsync(connection, $"INSERT INTO public.roles (id, name, description, created_at_utc) VALUES ('{roleId}', '2A role {roleId:N}', 'test-only', NOW())");
+            await ExecuteAsync(connection, $"INSERT INTO public.role_permissions (permission_id, role_id) VALUES ('00000000-0000-0000-0000-000000000116', '{roleId}')");
+
+            await Should.ThrowAsync<PostgresException>(() => context.Database.MigrateAsync());
+            (await ScalarAsync(connection, $"SELECT COUNT(*) FROM public.role_permissions WHERE role_id = '{roleId}' AND permission_id = '00000000-0000-0000-0000-000000000116'")).ShouldBe(1);
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = '20260922220000_CutoverToDottedOnlyPermissionVocabulary'")).ShouldBe(0);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
+    [Fact]
+    public async Task DottedPermissionCutover_WithMissingScopeParity_ShouldFailBeforeCleanupOrHistory()
+    {
+        string database = $"migration_2a_scope_guard_{Guid.NewGuid():N}";
+        string connectionString = await CreateDatabaseAsync(database);
+        try
+        {
+            await using ApplicationDbContext context = CreateContext(connectionString);
+            await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await ExecuteAsync(connection, "DELETE FROM public.permission_allowed_scope_types WHERE permission_id = '00000000-0000-0000-0000-000000000214' AND scope_type = 'Warehouse'");
+
+            await Should.ThrowAsync<PostgresException>(() => context.Database.MigrateAsync());
+            long scopeCount = (long)(await ScalarAsync(connection, "SELECT COUNT(*) FROM public.permission_allowed_scope_types pas JOIN public.permissions p ON p.id = pas.permission_id WHERE p.code = 'warehouse-documents:create'") ?? 0L);
+            scopeCount.ShouldBeGreaterThan(0);
+            (await ScalarAsync(connection, "SELECT COUNT(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = '20260922220000_CutoverToDottedOnlyPermissionVocabulary'")).ShouldBe(0);
+        }
+        finally
+        {
+            await DropDatabaseAsync(database);
+        }
+    }
+
     [Fact]
     public async Task FreshMigration_ShouldCreateNonNullableAttachmentMalwareScanStateDefaultingFalse()
     {
@@ -177,4 +376,42 @@ public sealed class MigrationSafetyTests(IntegrationTestWebAppFactory factory)
 
         throw new DirectoryNotFoundException("Could not locate the repository root for migration-script verification.");
     }
+
+    private ApplicationDbContext CreateContext(string connectionString)
+    {
+        DbContextOptions<ApplicationDbContext> options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName))
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        return new ApplicationDbContext(options, factory.Services.GetRequiredService<IDomainEventsDispatcher>());
+    }
+
+    private async Task<string> CreateDatabaseAsync(string database)
+    {
+        NpgsqlConnectionStringBuilder builder = new(factory.DatabaseConnectionString) { Database = "postgres" };
+        await using var connection = new NpgsqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
+        await ExecuteAsync(connection, $"CREATE DATABASE \"{database}\"");
+        builder.Database = database;
+        return builder.ConnectionString;
+    }
+
+    private async Task DropDatabaseAsync(string database)
+    {
+        NpgsqlConnectionStringBuilder builder = new(factory.DatabaseConnectionString) { Database = "postgres" };
+        await using var connection = new NpgsqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
+        await ExecuteAsync(connection, $"DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)");
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The SQL is fixed at each call site and only uses Guid-generated identifiers in disposable Testcontainers databases.")]
+    private static async Task<object?> ScalarAsync(NpgsqlConnection connection, string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        return await command.ExecuteScalarAsync();
+    }
+
 }

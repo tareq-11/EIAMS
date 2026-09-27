@@ -23,7 +23,7 @@ public sealed class GetWarehouseMaterialSettingsController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(
-        Guid warehouseId,
+        [FromRoute] Guid warehouseId,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

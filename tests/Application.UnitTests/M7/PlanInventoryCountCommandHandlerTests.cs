@@ -2,7 +2,6 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.InventoryCounts;
-using Application.Abstractions.Warehouses;
 using Application.InventoryCounts.Plan;
 using Application.UnitTests.Abstractions;
 using Domain.Common;
@@ -19,7 +18,7 @@ namespace Application.UnitTests.M7;
 public sealed class PlanInventoryCountCommandHandlerTests : BaseHandlerTest
 {
     [Fact]
-    public async Task Handle_Should_LockAndPersistSelectedSnapshot_InsideTransaction()
+    public async Task Handle_Should_LockAndPersistPlannedScopeWithoutStartingMembership()
     {
         // Arrange
         await using TestDbContext context = CreateDbContext();
@@ -37,7 +36,7 @@ public sealed class PlanInventoryCountCommandHandlerTests : BaseHandlerTest
         var baseUnitId = Guid.NewGuid();
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
         context.MaterialFamilies.Add(MaterialFamily.Create(
-            familyId, categoryId, "Family", "FAM", baseUnitId));
+            familyId, categoryId, "Family", "FAM"));
         context.Materials.Add(Material.Create(
             materialId, familyId, baseUnitId, "مادة", "Material", "MAT-COUNT",
             MaterialKind.Consumable, TrackingType.Quantity, false, null));
@@ -59,17 +58,10 @@ public sealed class PlanInventoryCountCommandHandlerTests : BaseHandlerTest
                 userId, PermissionCodes.InventoryCounts.Plan, ScopeType.Warehouse,
                 warehouseId, Arg.Any<CancellationToken>())
             .Returns(true);
-        ICapabilityCheckService capability = Substitute.For<ICapabilityCheckService>();
-        capability.EnsureAllowedAsync(
-                warehouseId, domainId, OperationType.Count, Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
-        capability.EnsureAllowedBatchAsync(
-                warehouseId, Arg.Any<IEnumerable<Guid>>(), OperationType.Count, Arg.Any<CancellationToken>())
-            .Returns(Result.Success());
         IDateTimeProvider dateTimeProvider = Substitute.For<IDateTimeProvider>();
         dateTimeProvider.UtcNow.Returns(DateTime.UtcNow);
         var handler = new PlanInventoryCountCommandHandler(
-            context, userContext, authorization, capability, transaction, warehouseLock, dateTimeProvider);
+            context, userContext, authorization, transaction, warehouseLock, dateTimeProvider);
         var command = new PlanInventoryCountCommand(
             warehouseId, InventoryCountType.Cycle, InventoryCountScopeType.SelectedMaterials,
             null, [materialId], FreezePolicy.HardFreeze);
@@ -80,8 +72,7 @@ public sealed class PlanInventoryCountCommandHandlerTests : BaseHandlerTest
         // Assert
         result.IsSuccess.ShouldBeTrue();
         context.InventoryCounts.ShouldContain(item => item.Id == result.Value);
-        context.InventoryCountLines.ShouldContain(item =>
-            item.CountId == result.Value && item.MaterialId == materialId && item.SnapshotQuantity == 0m);
+        context.InventoryCountLines.ShouldBeEmpty();
         context.InventoryCountScopeMaterials.ShouldContain(item =>
             item.CountId == result.Value && item.MaterialId == materialId);
         await warehouseLock.Received(1).AcquireAsync(

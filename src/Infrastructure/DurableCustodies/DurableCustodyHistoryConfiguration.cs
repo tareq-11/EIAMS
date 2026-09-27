@@ -14,7 +14,7 @@ internal sealed class DurableCustodyHistoryConfiguration : IEntityTypeConfigurat
         builder.HasKey(h => h.Id);
 
         builder.Property(h => h.SubjectType).HasConversion<string>().HasMaxLength(30).IsRequired();
-        builder.Property(h => h.Action).HasMaxLength(50).IsRequired();
+        builder.Property(h => h.Action).HasConversion<string>().HasMaxLength(50).IsRequired();
         builder.Property(h => h.FromHolderType).HasConversion<string>().HasMaxLength(20);
         builder.Property(h => h.ToHolderType).HasConversion<string>().HasMaxLength(20);
         builder.Property(h => h.Quantity).HasPrecision(18, 3);

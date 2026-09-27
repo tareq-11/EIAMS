@@ -45,7 +45,12 @@ public sealed class AuditLogApiTests : BaseIntegrationTest
     public async Task ReadRoutes_Should_ReturnForbidden_WhenPermissionIsMissing()
     {
         // Arrange
-        (_, AccessTokens tokens) = await RegisterAndLoginAsync();
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        }
         Authenticate(tokens.AccessToken);
 
         // Act
@@ -169,15 +174,12 @@ public sealed class AuditLogApiTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        if (await context.UserRoleScopes.AnyAsync(assignment => assignment.UserId == userId))
-        {
-            return;
-        }
-
         var roleId = Guid.NewGuid();
 
+        await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
         context.Roles.Add(Role.Create(roleId, $"AuditViewer-{roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.AuditLogsViewId));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
+        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.AuditViewId));
         context.UserRoleScopes.Add(UserRoleScope.Create(
             Guid.NewGuid(), userId, roleId, ScopeType.Enterprise, null));
         await context.SaveChangesAsync();

@@ -18,6 +18,9 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
     public string? PaperDocumentNumber { get; private set; }
     public int? PaperDocumentYear { get; private set; }
     public string SystemReferenceNumber { get; private set; }
+    public Guid? ReferenceSiteId { get; private set; }
+    public int? ReferenceYear { get; private set; }
+    public int? ReferenceSequence { get; private set; }
     public Guid? SignedCopyAttachmentId { get; private set; }
     public DocumentStatus DocumentStatus { get; private set; }
     public Guid? PostedBy { get; private set; }
@@ -38,7 +41,10 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
         Guid warehouseId,
         DocumentType documentType,
         string systemReferenceNumber,
-        Guid? reversalOfDocumentId = null)
+        Guid? reversalOfDocumentId = null,
+        Guid? referenceSiteId = null,
+        int? referenceYear = null,
+        int? referenceSequence = null)
     {
         var document = new WarehouseDocument
         {
@@ -46,6 +52,9 @@ public sealed class WarehouseDocument : Entity, IAuditableEntity
             WarehouseId = warehouseId,
             DocumentType = documentType,
             SystemReferenceNumber = systemReferenceNumber,
+            ReferenceSiteId = referenceSiteId,
+            ReferenceYear = referenceYear,
+            ReferenceSequence = referenceSequence,
             DocumentStatus = DocumentStatus.Draft,
             ReversalOfDocumentId = reversalOfDocumentId,
             RowVersion = 1

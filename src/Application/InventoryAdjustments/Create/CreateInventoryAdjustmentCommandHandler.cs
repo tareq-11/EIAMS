@@ -14,7 +14,8 @@ internal sealed class CreateInventoryAdjustmentCommandHandler(
     IApplicationDbContext context,
     IUserContext userContext,
     IScopeAuthorizationService scopeAuthorizationService,
-    IWarehouseDocumentDraftFactory draftFactory)
+    IWarehouseDocumentDraftFactory draftFactory,
+    IApplicationTransaction transaction)
     : ICommandHandler<CreateInventoryAdjustmentCommand, Guid>
 {
     public async Task<Result<Guid>> Handle(CreateInventoryAdjustmentCommand command, CancellationToken cancellationToken)
@@ -27,6 +28,13 @@ internal sealed class CreateInventoryAdjustmentCommandHandler(
             return Result.Failure<Guid>(WarehouseDocumentErrors.Forbidden);
         }
 
+        return await transaction.ExecuteAsync(ct => CreateInTransactionAsync(command, ct), cancellationToken);
+    }
+
+    private async Task<Result<Guid>> CreateInTransactionAsync(
+        CreateInventoryAdjustmentCommand command,
+        CancellationToken cancellationToken)
+    {
         Result<WarehouseDocument> document = await draftFactory.CreateAsync(
             command.WarehouseId, DocumentType.Adjustment, cancellationToken);
         if (document.IsFailure)

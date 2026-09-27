@@ -29,11 +29,11 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         // Act: Single login request
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("auth/login", new
         {
-            email = "nonexistent@example.com",
+            username = "nonexistent-user",
             password = "Password123!"
         });
 
-        // Assert: Under normal rate, should return 400 (InvalidCredentials) rather than 429
+        // Assert: Under normal rate, should not be throttled before generic credential handling.
         response.StatusCode.ShouldNotBe(HttpStatusCode.TooManyRequests);
     }
 
@@ -51,7 +51,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         client.BaseAddress = new Uri("http://localhost/api/v1/");
         var credentials = new
         {
-            email = "rate-limit-missing@example.com",
+            username = "rate-limit-missing",
             password = "Password123!"
         };
 
@@ -151,7 +151,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         client.BaseAddress = new Uri("http://localhost/api/v1/");
         var credentials = new
         {
-            email = "concurrency-limit-missing@example.com",
+            username = "concurrency-limit-missing",
             password = "Password123!"
         };
 
@@ -179,7 +179,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
     [Trait("WorkloadClass", PerformanceWorkloadContracts.Abuse)]
     public async Task GlobalAuthenticationConcurrencyLimit_Should_ApplyAcrossDifferentClientPartitions()
     {
-        AccessTokens administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorEmail);
+        AccessTokens administratorTokens = await LoginAsync(IntegrationTestWebAppFactory.AdministratorUsername);
         using var blockingHasher = new BlockingPasswordHasher();
         await using WebApplicationFactory<Program> limitedFactory = factory.WithWebHostBuilder(builder =>
         {
@@ -201,7 +201,7 @@ public sealed class RateLimitingTests : BaseIntegrationTest
             new AuthenticationHeaderValue("Bearer", administratorTokens.AccessToken);
         var credentials = new
         {
-            email = "global-concurrency-missing@example.com",
+            username = "global-concurrency-missing",
             password = "Password123!"
         };
         Task<HttpStatusCode> firstRequest = SendLoginAsync(anonymousClient, credentials);
@@ -211,10 +211,11 @@ public sealed class RateLimitingTests : BaseIntegrationTest
         {
             await blockingHasher.Entered.WaitAsync(TimeSpan.FromSeconds(10));
             using HttpResponseMessage rejected = await authenticatedClient.PostAsJsonAsync(
-                "admin/users/register",
+                "admin/recovery/administrator",
                 new
                 {
-                    email = "bootstrap-concurrency@example.com",
+                    email = "recovery-concurrency@example.com",
+                    username = "recovery-concurrency",
                     firstName = "Concurrency",
                     lastName = "Test",
                     password = "Password123!"

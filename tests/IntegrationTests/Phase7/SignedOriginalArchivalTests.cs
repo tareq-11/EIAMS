@@ -44,9 +44,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         Guid firstAttachmentId = await UploadSignedOriginalAsync(documentId, 1, "signed-v1.pdf", "version-one");
 
@@ -104,9 +104,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
         Guid archivedAttachmentId = await UploadSignedOriginalAsync(documentId, 1, "signed-v1.pdf", "version-one");
         await UploadSignedOriginalAsync(documentId, 2, "signed-v2.pdf", "version-two");
 
@@ -126,13 +126,48 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task UploadAndRemoveAttachment_ShouldReturnAuthoritativeParentVersionAndSafeAttachmentMetadata()
+    {
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage upload = await SendSignedOriginalAsync(documentId, 1, "signed.pdf", "version-one");
+        upload.StatusCode.ShouldBe(HttpStatusCode.Created);
+        ApiEnvelope<AttachmentMutationDto>? uploaded =
+            await upload.Content.ReadFromJsonAsync<ApiEnvelope<AttachmentMutationDto>>();
+        uploaded.ShouldNotBeNull();
+        uploaded.Data.AttachmentId.ShouldBe(uploaded.Data.Attachment.Id);
+        uploaded.Data.Removed.ShouldBeFalse();
+        uploaded.Data.DocumentRowVersion.ShouldBe(2);
+        uploaded.Data.MalwareScanPolicy.ShouldNotBeNullOrWhiteSpace();
+        uploaded.Data.Attachment.UploadedBy.ShouldBe(userId);
+        uploaded.Data.Attachment.MalwareScanClean.ShouldBeFalse();
+
+        HttpResponseMessage remove = await HttpClient.DeleteAsync(
+            $"warehouse-documents/{documentId}/attachments/{uploaded.Data.AttachmentId}?expectedRowVersion=2");
+        remove.StatusCode.ShouldBe(HttpStatusCode.OK);
+        ApiEnvelope<AttachmentMutationDto>? removed =
+            await remove.Content.ReadFromJsonAsync<ApiEnvelope<AttachmentMutationDto>>();
+        removed.ShouldNotBeNull();
+        removed.Data.AttachmentId.ShouldBe(uploaded.Data.AttachmentId);
+        removed.Data.Removed.ShouldBeTrue();
+        removed.Data.DocumentRowVersion.ShouldBe(3);
+        removed.Data.Attachment.OriginalFilename.ShouldBe("signed.pdf");
+        removed.Data.Attachment.UploadedBy.ShouldBe(userId);
+        removed.Data.Attachment.IsActive.ShouldBeFalse();
+        removed.Data.Attachment.GetType().GetProperty("StorageKey").ShouldBeNull();
+    }
+
+    [Fact]
     public async Task UploadSignedOriginal_Should_ReturnBadRequest_WhenDocumentIsNotDraft()
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
         await UploadSignedOriginalAsync(documentId, 1, "signed-v1.pdf", "version-one");
         int submittedRowVersion = await SubmitDirectlyAsync(documentId);
 
@@ -158,9 +193,9 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
     public async Task UploadSignedOriginal_Should_RejectContentThatDoesNotMatchDeclaredMimeType()
     {
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
-        await GrantEnterpriseAdministratorAsync(userId);
-        Authenticate(tokens.AccessToken);
         Guid documentId = await SeedDraftDocumentAsync();
+        await GrantEnterpriseAdministratorAsync(userId, await GetWarehouseAsync(documentId));
+        Authenticate(tokens.AccessToken);
 
         HttpResponseMessage response = await SendSignedOriginalAsync(
             documentId,
@@ -188,10 +223,11 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
             content);
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        ApiEnvelope<ResourceIdDto>? body =
-            await response.Content.ReadFromJsonAsync<ApiEnvelope<ResourceIdDto>>();
+        ApiEnvelope<AttachmentMutationDto>? body =
+            await response.Content.ReadFromJsonAsync<ApiEnvelope<AttachmentMutationDto>>();
         body.ShouldNotBeNull();
-        return body.Data.Id;
+        body.Data.Removed.ShouldBeFalse();
+        return body.Data.AttachmentId;
     }
 
     private async Task<HttpResponseMessage> SendSignedOriginalAsync(
@@ -254,28 +290,42 @@ public sealed class SignedOriginalArchivalTests : BaseIntegrationTest
         return document.RowVersion;
     }
 
-    private async Task GrantEnterpriseAdministratorAsync(Guid userId)
+    private async Task<Guid> GetWarehouseAsync(Guid documentId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        UserRoleScope? assignment = await dbContext.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
+        return await dbContext.WarehouseDocuments.Where(item => item.Id == documentId).Select(item => item.WarehouseId).SingleAsync();
+    }
 
-        if (assignment is not null)
-        {
-            assignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
-            assignment.ScopeType.ShouldBe(ScopeType.Enterprise);
-            return;
-        }
-
-        dbContext.UserRoleScopes.Add(UserRoleScope.Create(
-            Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+    private async Task GrantEnterpriseAdministratorAsync(Guid userId, Guid warehouseId)
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleId = Guid.NewGuid();
+        dbContext.Roles.Add(Domain.Roles.Role.Create(roleId, $"Attachment editor {roleId:N}", null));
+        dbContext.RoleAllowedScopeTypes.Add(Domain.Roles.RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        dbContext.RolePermissions.AddRange(
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentViewId),
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentCreateId),
+            Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentUpdateId));
+        await dbContext.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
+        dbContext.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));
         await dbContext.SaveChangesAsync();
     }
 
-    private sealed record ResourceIdDto(Guid Id);
+    private sealed record AttachmentMutationDto(
+        Guid AttachmentId,
+        bool Removed,
+        int DocumentRowVersion,
+        string MalwareScanPolicy,
+        bool MalwareScanClean,
+        AttachmentDto Attachment);
 
     private sealed record AttachmentDto(
         Guid Id,
+        string OriginalFilename,
+        Guid UploadedBy,
+        bool MalwareScanClean,
         bool IsActive,
         DateTime? ArchivedAtUtc,
         Guid? ArchivedBy,

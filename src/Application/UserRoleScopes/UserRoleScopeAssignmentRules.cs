@@ -16,6 +16,11 @@ internal static class UserRoleScopeAssignmentRules
         Guid? scopeId,
         CancellationToken cancellationToken)
     {
+        if (!UserAssignmentScopeTypes.IsAllowed(scopeType))
+        {
+            return UserRoleScopeErrors.OrganizationalUnitAssignmentNotAllowed;
+        }
+
         if (!await context.Roles.AsNoTracking().AnyAsync(role => role.Id == roleId, cancellationToken))
         {
             return RoleErrors.NotFound(roleId);
@@ -48,11 +53,6 @@ internal static class UserRoleScopeAssignmentRules
                 .AsNoTracking()
                 .Where(site => site.Id == scopeId.Value)
                 .Select(site => new ValueTuple<bool, Status>(true, site.Status))
-                .SingleOrDefaultAsync(cancellationToken),
-            ScopeType.OrganizationalUnit => await context.OrganizationalUnits
-                .AsNoTracking()
-                .Where(unit => unit.Id == scopeId.Value)
-                .Select(unit => new ValueTuple<bool, Status>(true, unit.Status))
                 .SingleOrDefaultAsync(cancellationToken),
             ScopeType.Warehouse => await context.Warehouses
                 .AsNoTracking()

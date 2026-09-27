@@ -33,5 +33,13 @@ internal sealed class MaterialConfiguration : IEntityTypeConfiguration<Material>
         builder.HasOne<MaterialFamily>().WithMany().HasForeignKey(m => m.FamilyId);
 
         builder.HasOne<UnitOfMeasure>().WithMany().HasForeignKey(m => m.BaseUnitId);
+
+        // The classification revision is also the write-optimistic-concurrency token: a concurrent
+        // classification write fails the conditional UPDATE instead of silently reusing a revision.
+        builder.Property(m => m.CatalogVersion).IsConcurrencyToken();
+
+        builder.ToTable(tableBuilder => tableBuilder.HasCheckConstraint(
+            "ck_materials_catalog_version_positive",
+            "catalog_version > 0"));
     }
 }

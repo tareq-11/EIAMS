@@ -44,6 +44,7 @@ internal sealed class GetInventoryCountByIdQueryHandler(
 
         return new InventoryCountDetailsResponse(count.Id, count.WarehouseId, count.CountType, count.ScopeType,
             count.ScopeMaterialDomainId, count.FreezePolicy, count.Status, count.RowVersion,
-            count.PlannedAtUtc, count.StartedAtUtc, count.CompletedAtUtc, count.ClosedAtUtc, summary);
+            count.PlannedAtUtc, count.StartedAtUtc, count.CompletedAtUtc, count.ClosedAtUtc,
+            count.AbortedAtUtc, summary);
     }
 }

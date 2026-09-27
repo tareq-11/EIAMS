@@ -6,6 +6,7 @@ internal sealed class RemoveMaterialUnitConversionCommandValidator : AbstractVal
 {
     public RemoveMaterialUnitConversionCommandValidator()
     {
-        RuleFor(c => c.MaterialUnitConversionId).NotEmpty();
+        RuleFor(c => c.MaterialId).NotEmpty();
+        RuleFor(c => c.ConversionId).NotEmpty();
     }
 }

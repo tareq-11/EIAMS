@@ -16,10 +16,11 @@ public sealed class UpdateMaterialController(ICommandHandler<UpdateMaterialComma
     public sealed record RequestBody(
         string NameAr,
         string? NameEn,
-        [property: JsonRequired] int MaterialKind,
-        [property: JsonRequired] int TrackingType,
+        [property: JsonRequired] MaterialKind MaterialKind,
+        [property: JsonRequired] TrackingType TrackingType,
         [property: JsonRequired] bool HasExpiry,
-        string? Attributes);
+        string? Attributes,
+        [property: JsonRequired] int ExpectedCatalogVersion);
 
     [HttpPut("{materialId:guid}")]
     [ProducesResponseType<ApiResponse<EmptyResponse>>(StatusCodes.Status200OK)]
@@ -30,10 +31,11 @@ public sealed class UpdateMaterialController(ICommandHandler<UpdateMaterialComma
             materialId,
             request.NameAr,
             request.NameEn,
-            (MaterialKind)request.MaterialKind,
-            (TrackingType)request.TrackingType,
+            request.MaterialKind,
+            request.TrackingType,
             request.HasExpiry,
-            request.Attributes);
+            request.Attributes,
+            request.ExpectedCatalogVersion);
 
         Result result = await handler.Handle(command, cancellationToken);
 

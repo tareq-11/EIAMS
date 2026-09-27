@@ -22,8 +22,8 @@ public sealed class GetWarehousesController(IQueryHandler<GetWarehousesQuery, Pa
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     public async Task<IResult> Handle(
-        Guid? siteId,
-        Status? status,
+        [FromQuery] Guid? siteId,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

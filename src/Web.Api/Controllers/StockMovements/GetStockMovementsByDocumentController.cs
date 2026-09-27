@@ -23,7 +23,7 @@ public sealed class GetStockMovementsByDocumentController(
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(
-        Guid documentId,
+        [FromRoute] Guid documentId,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

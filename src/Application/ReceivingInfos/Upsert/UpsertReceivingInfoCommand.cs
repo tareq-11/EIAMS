@@ -5,7 +5,7 @@ namespace Application.ReceivingInfos.Upsert;
 
 public sealed record UpsertReceivingInfoCommand(
     Guid DocumentId,
-    string SupplierRef,
+    Guid SupplierPartyId,
     string? SupplierInvoiceRef,
     ReceivingType ReceivingType,
     int ExpectedRowVersion) : ICommand;

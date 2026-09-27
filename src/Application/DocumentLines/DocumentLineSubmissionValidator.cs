@@ -113,8 +113,7 @@ public static class DocumentLineSubmissionValidator
         var rowByMaterialId = catalogRows.ToDictionary(r => r.Material.Id);
 
         Guid[] unitIds = catalogRows
-            .Where(r => r.Family is not null)
-            .Select(r => r.Family!.BaseUnitId)
+            .Select(r => r.Material.BaseUnitId)
             .Concat(lines.Where(line => line.UnitId is not null).Select(line => line.UnitId!.Value))
             .Distinct()
             .ToArray();
@@ -186,14 +185,14 @@ public static class DocumentLineSubmissionValidator
                 return Result.Failure(DocumentLineErrors.MaterialDomainNotActive(row.Domain.Id));
             }
 
-            if (!existingUnitIds.Contains(row.Family.BaseUnitId))
+            if (!existingUnitIds.Contains(row.Material.BaseUnitId))
             {
-                return Result.Failure(DocumentLineErrors.UnitNotFound(row.Family.BaseUnitId));
+                return Result.Failure(DocumentLineErrors.UnitNotFound(row.Material.BaseUnitId));
             }
 
             MaterialUnitConversion? conversion = null;
 
-            if (line.UnitId is not null && line.UnitId != row.Family.BaseUnitId)
+            if (line.UnitId is not null && line.UnitId != row.Material.BaseUnitId)
             {
                 if (!existingUnitIds.Contains(line.UnitId.Value))
                 {
@@ -203,7 +202,7 @@ public static class DocumentLineSubmissionValidator
                 if (!conversionByMaterialAndUnit.TryGetValue(
                         (line.MaterialId, line.UnitId.Value),
                         out conversion) ||
-                    conversion.ToBaseUnitId != row.Family.BaseUnitId)
+                    conversion.ToBaseUnitId != row.Material.BaseUnitId)
                 {
                     return Result.Failure(DocumentLineErrors.UnitConversionNotFound(
                         line.MaterialId,
@@ -211,11 +210,22 @@ public static class DocumentLineSubmissionValidator
                 }
             }
 
+            Result provenanceResult = DocumentLineProvenanceRules.Validate(
+                document.Id,
+                line,
+                row.Material,
+                conversion);
+
+            if (provenanceResult.IsFailure)
+            {
+                return provenanceResult;
+            }
+
             Result<decimal> baseQuantityResult = BaseQuantityCalculator.Calculate(
                 line.MaterialId,
                 line.Quantity,
                 line.UnitId,
-                row.Family.BaseUnitId,
+                row.Material.BaseUnitId,
                 conversion);
 
             if (baseQuantityResult.IsFailure)

@@ -19,7 +19,7 @@ internal sealed class SetInventoryCountVarianceReasonCommandHandler(
     {
         InventoryCount? count = await context.InventoryCounts.SingleOrDefaultAsync(item => item.Id == command.CountId, cancellationToken);
         if (count is null || !await scopeAuthorizationService.HasPermissionInScopeAsync(
-            userContext.UserId, PermissionCodes.InventoryCounts.Review, ScopeType.Warehouse, count.WarehouseId, cancellationToken))
+            userContext.UserId, PermissionCodes.InventoryCounts.Complete, ScopeType.Warehouse, count.WarehouseId, cancellationToken))
         {
             return Result.Failure(InventoryCountErrors.NotFound(command.CountId));
         }

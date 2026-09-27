@@ -50,12 +50,8 @@ internal sealed class GetReturnEligibleItemsQueryHandler(
                 "You do not have permission to view items from this issue document."));
         }
 
-        int page = query.Page < PaginationDefaults.DefaultPage
-            ? PaginationDefaults.DefaultPage
-            : Math.Min(query.Page, PaginationDefaults.MaximumPage);
-        int pageSize = query.PageSize < PaginationDefaults.DefaultPage
-            ? PaginationDefaults.DefaultPageSize
-            : Math.Min(query.PageSize, PaginationDefaults.MaximumPageSize);
+        int page = query.Page;
+        int pageSize = query.PageSize;
         int offset = checked((page - 1) * pageSize);
         int fetchLimit = checked(offset + pageSize);
 

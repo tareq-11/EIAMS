@@ -30,20 +30,6 @@ public static class DependencyInjection
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen();
 
-        RefreshTokenTransportOptions refreshTokenTransportOptions = configuration
-            .GetSection(RefreshTokenTransportOptions.SectionName)
-            .Get<RefreshTokenTransportOptions>() ?? new RefreshTokenTransportOptions();
-        if (refreshTokenTransportOptions.AllowedCookieOrigins.Length == 0)
-        {
-            refreshTokenTransportOptions = new RefreshTokenTransportOptions
-            {
-                AllowRequestBody = refreshTokenTransportOptions.AllowRequestBody,
-                IncludeInResponseBody = refreshTokenTransportOptions.IncludeInResponseBody,
-                AllowedCookieOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? []
-            };
-        }
-
-        services.AddSingleton(refreshTokenTransportOptions);
         services.AddSingleton<RefreshTokenTransport>();
 
         services

@@ -18,6 +18,7 @@ public sealed class InventoryCount : Entity, IAuditableEntity
     public DateTime? StartedAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
     public DateTime? ClosedAtUtc { get; private set; }
+    public DateTime? AbortedAtUtc { get; private set; }
     public int RowVersion { get; private set; }
 
     public DateTime CreatedAtUtc { get; set; }
@@ -105,6 +106,26 @@ public sealed class InventoryCount : Entity, IAuditableEntity
         CompletedAtUtc,
         () => ClosedAtUtc = atUtc,
         new InventoryCountClosedDomainEvent(Id));
+
+    public Result Abort(DateTime atUtc)
+    {
+        if (Status is not (InventoryCountStatus.Planned or InventoryCountStatus.InProgress))
+        {
+            return Result.Failure(InventoryCountErrors.InvalidTransition(Id, Status, InventoryCountStatus.Aborted));
+        }
+
+        DateTime earliestUtc = StartedAtUtc ?? PlannedAtUtc;
+        if (atUtc < earliestUtc)
+        {
+            return Result.Failure(InventoryCountErrors.TimestampInvalid);
+        }
+
+        AbortedAtUtc = atUtc;
+        Status = InventoryCountStatus.Aborted;
+        RowVersion++;
+        Raise(new InventoryCountAbortedDomainEvent(Id, WarehouseId));
+        return Result.Success();
+    }
 
     public Result RegisterLineMutation()
     {

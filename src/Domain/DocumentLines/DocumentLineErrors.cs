@@ -128,4 +128,123 @@ public static class DocumentLineErrors
                 current_line_type = currentLineType.ToString(),
                 expected_line_type = expectedLineType.ToString()
             });
+
+    public static Error MaterialProvenanceStale(
+        Guid documentId,
+        Guid lineId,
+        Guid materialId,
+        int capturedMaterialVersion,
+        int currentMaterialVersion) => Error.Conflict(
+            "DocumentLines.MaterialProvenanceStale",
+            $"The line was captured against material catalog version {capturedMaterialVersion}, but the material is now at version {currentMaterialVersion}. Update the line to re-capture its provenance.",
+            new
+            {
+                document_id = documentId,
+                line_id = lineId,
+                material_id = materialId,
+                captured_material_version = capturedMaterialVersion,
+                current_material_version = currentMaterialVersion
+            });
+
+    public static Error BaseUnitProvenanceStale(
+        Guid documentId,
+        Guid lineId,
+        Guid materialId,
+        Guid capturedBaseUnitId,
+        Guid currentBaseUnitId) => Error.Conflict(
+            "DocumentLines.BaseUnitProvenanceStale",
+            "The line was captured against a different material base unit. Update the line to re-capture its provenance.",
+            new
+            {
+                document_id = documentId,
+                line_id = lineId,
+                material_id = materialId,
+                captured_base_unit_id = capturedBaseUnitId,
+                current_base_unit_id = currentBaseUnitId
+            });
+
+    public static Error ClassificationProvenanceStale(
+        Guid documentId,
+        Guid lineId,
+        Guid materialId,
+        string capturedClassification,
+        string currentClassification) => Error.Conflict(
+            "DocumentLines.ClassificationProvenanceStale",
+            "The line was captured against a different material classification. Update the line to re-capture its provenance.",
+            new
+            {
+                document_id = documentId,
+                line_id = lineId,
+                material_id = materialId,
+                captured_classification = capturedClassification,
+                current_classification = currentClassification
+            });
+
+    public static Error ConversionProvenanceStale(
+        Guid documentId,
+        Guid lineId,
+        Guid materialId,
+        Guid? capturedConversionId,
+        Guid? currentConversionId) => Error.Conflict(
+            "DocumentLines.ConversionProvenanceStale",
+            "The unit conversion captured with the line is no longer the active conversion for its unit. Update the line to re-capture its provenance.",
+            new
+            {
+                document_id = documentId,
+                line_id = lineId,
+                material_id = materialId,
+                captured_conversion_id = capturedConversionId,
+                current_conversion_id = currentConversionId
+            });
+
+    public static Error ConversionProvenanceChanged(
+        Guid documentId,
+        Guid lineId,
+        Guid conversionId,
+        decimal capturedFactor,
+        decimal currentFactor) => Error.Conflict(
+            "DocumentLines.ConversionProvenanceChanged",
+            "The unit conversion factor used by the line has changed since the line was captured. Update the line to re-capture its provenance.",
+            new
+            {
+                document_id = documentId,
+                line_id = lineId,
+                conversion_id = conversionId,
+                captured_factor = capturedFactor,
+                current_factor = currentFactor
+            });
+
+    /// <summary>
+    /// The line carries no catalog snapshot, so its material classification revision, base unit and
+    /// conversion factor were never recorded and cannot be proven at submit or post. It is refused
+    /// instead of being re-interpreted against the live catalog; re-capturing the line (updating it
+    /// while its document is still a draft) is the only way forward, which re-reads the live catalog
+    /// deliberately instead of guessing what the line used to mean.
+    /// </summary>
+    public static Error ProvenanceNotCaptured(Guid documentId, Guid lineId) => Error.Conflict(
+        "DocumentLines.ProvenanceNotCaptured",
+        "The document line was created before material provenance was captured, so the catalog revision it was written against is unknown and it cannot be submitted or posted. Update the line to re-capture its provenance against the current catalog, or cancel the document.",
+        new { document_id = documentId, line_id = lineId });
+
+    /// <summary>
+    /// The stored snapshot is incomplete: a catalog revision was recorded but part of the snapshot is
+    /// missing. This is a corrupt row rather than a legacy fact, so it is reported distinctly instead
+    /// of being treated as "never captured".
+    /// </summary>
+    public static Error ProvenanceIncomplete(Guid documentId, Guid lineId, int? storedMaterialVersion) =>
+        Error.Conflict(
+            "DocumentLines.ProvenanceIncomplete",
+            "The document line stores a partial material provenance snapshot, which cannot be interpreted. Update the line to re-capture its provenance against the current catalog.",
+            new
+            {
+                document_id = documentId,
+                line_id = lineId,
+                stored_material_version = storedMaterialVersion
+            });
+
+    /// <summary>An incomplete provenance capture was rejected before it could be stored.</summary>
+    public static Error ProvenanceCaptureInvalid(string field, string reason) => Error.Problem(
+        "DocumentLines.ProvenanceCaptureInvalid",
+        $"The captured material provenance is incomplete: {field} {reason}.",
+        new { field });
 }

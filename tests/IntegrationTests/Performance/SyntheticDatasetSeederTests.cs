@@ -80,7 +80,7 @@ public sealed class SyntheticDatasetSeederTests
         assignments.Count.ShouldBe(manifest.Definition.UserCount);
         assignments.Select(assignment => assignment.UserId).Distinct().Count().ShouldBe(manifest.Definition.UserCount);
         assignments.Select(assignment => assignment.ScopeType).Distinct().Order().ShouldBe(
-            Enum.GetValues<ScopeType>().Order());
+            new[] { ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse }.Order());
         foreach ((Guid _, ScopeType scopeType, Guid? scopeId) in assignments)
         {
             if (scopeType == ScopeType.Enterprise)
@@ -109,11 +109,11 @@ public sealed class SyntheticDatasetSeederTests
             .ToListAsync();
         Guid[] expectedReadPermissionIds =
         [
-            WellKnownPermissions.WarehousesViewId,
-            WellKnownPermissions.MaterialsViewId,
-            WellKnownPermissions.InventoryViewId,
-            WellKnownPermissions.WarehouseDocumentsViewId,
-            WellKnownPermissions.AuditLogsViewId
+            WellKnownDottedPermissions.WarehouseViewId,
+            WellKnownDottedPermissions.CatalogViewId,
+            WellKnownDottedPermissions.InventoryViewId,
+            WellKnownDottedPermissions.DocumentViewId,
+            WellKnownDottedPermissions.AuditViewId
         ];
 
         foreach (SyntheticUserScopeAssignment assignment in manifest.UserScopeAssignments)

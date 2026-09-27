@@ -1,7 +1,6 @@
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Messaging;
 using Application.Users;
-using Application.Users.GetSession;
 using Application.Users.Login;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,7 +16,6 @@ namespace Web.Api.Controllers.Users;
 [Tags(Tags.Users)]
 public sealed class LoginController(
     ICommandHandler<LoginUserCommand, AccessTokensResponse> handler,
-    IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler,
     RefreshTokenTransport refreshTokenTransport) : ControllerBase
 {
     public sealed record RequestBody(string Username, string Password);
@@ -30,6 +28,18 @@ public sealed class LoginController(
     [EnableRateLimiting(RateLimitingPolicies.Authentication)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
+        // Login also sets a credential cookie, so apply the same origin policy before
+        // invoking the handler. Requests without Origin remain valid for non-browser clients.
+        RefreshTokenResolution origin = refreshTokenTransport.ValidateCookieOrigin(HttpContext);
+        if (!origin.IsAccepted)
+        {
+            return ApiResults.Error(
+                HttpContext,
+                origin.ErrorStatusCode,
+                origin.ErrorCode!,
+                origin.ErrorMessage!);
+        }
+
         var command = new LoginUserCommand(request.Username, request.Password);
 
         Result<AccessTokensResponse> result = await handler.Handle(command, cancellationToken);
@@ -44,14 +54,6 @@ public sealed class LoginController(
             AuthCookies.SetRefreshTokenCookie(HttpContext, result.Value.RefreshToken);
         }
 
-        // Include the authoritative session projection so the SPA can populate the
-        // session cache synchronously after login without a second round-trip (D-AUTH-01
-        // §13.2: the contract is "session inside the login response").
-        Result<UserSessionResponse> sessionResult = await sessionHandler
-            .Handle(new GetUserSessionQuery(result.Value.UserId), cancellationToken)
-            .ConfigureAwait(continueOnCapturedContext: false);
-
-        UserSessionResponse? session = sessionResult.IsSuccess ? sessionResult.Value : null;
-        return ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(result.Value, session));
+        return ApiResults.Ok(HttpContext, refreshTokenTransport.CreateResponse(result.Value));
     }
 }

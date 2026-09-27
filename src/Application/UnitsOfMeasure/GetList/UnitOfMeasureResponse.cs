@@ -1,3 +1,5 @@
+using Domain.Common;
+
 namespace Application.UnitsOfMeasure.GetList;
 
 public sealed class UnitOfMeasureResponse
@@ -9,4 +11,5 @@ public sealed class UnitOfMeasureResponse
     public string Symbol { get; init; }
 
     public string UnitType { get; init; }
+    public Status Status { get; init; }
 }

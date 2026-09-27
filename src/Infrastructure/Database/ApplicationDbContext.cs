@@ -83,9 +83,15 @@ public sealed class ApplicationDbContext(
 
     public DbSet<Permission> Permissions { get; set; }
 
+    public DbSet<PermissionAllowedScopeType> PermissionAllowedScopeTypes { get; set; }
+
     public DbSet<RolePermission> RolePermissions { get; set; }
 
     public DbSet<UserRoleScope> UserRoleScopes { get; set; }
+
+    public DbSet<PermissionCodeMapping> PermissionCodeMappings { get; set; }
+
+    public DbSet<AuthorizationPolicyVersion> AuthorizationPolicyVersions { get; set; }
 
     public DbSet<UnitOfMeasure> UnitsOfMeasure { get; set; }
 

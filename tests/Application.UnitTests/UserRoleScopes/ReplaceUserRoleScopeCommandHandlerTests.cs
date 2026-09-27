@@ -2,6 +2,7 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.UnitTests.Abstractions;
+using Application.UserRoleScopes.GetByUser;
 using Application.UserRoleScopes.Replace;
 using Domain.Common;
 using Domain.OrganizationalUnits;
@@ -22,10 +23,10 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
     public async Task Handle_Should_ReturnNotFound_WhenUserDoesNotExist()
     {
         await using TestDbContext context = CreateDbContext();
-        var command = new ReplaceUserRoleScopeCommand(Guid.NewGuid(), WellKnownRoles.AdministratorId, ScopeType.Enterprise, null);
+        var command = new ReplaceUserRoleScopeCommand(Guid.NewGuid(), WellKnownRoles.AdministratorId, ScopeType.Enterprise, null, 0);
         ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+        Result<UserRoleScopeResponse> result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe(UserErrors.NotFound(command.UserId).Code);
@@ -41,12 +42,13 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
         await context.SaveChangesAsync();
 
-        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null);
+        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null, 0);
         ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+        Result<UserRoleScopeResponse> result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.ShouldBeTrue();
+        result.Value.RowVersion.ShouldBe(1);
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         assignment.ShouldNotBeNull();
         assignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
@@ -55,7 +57,39 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
     }
 
     [Fact]
-    public async Task Handle_Should_ReplaceExistingAssignment_Atomically()
+    public async Task Handle_Should_IncrementRowVersion_AndRejectStaleReplacement()
+    {
+        await using TestDbContext context = CreateDbContext();
+        var userId = Guid.NewGuid();
+        var replacementRoleId = Guid.NewGuid();
+        context.Users.Add(User.Create(userId, "versioned@example.com", "Versioned", "User", "hash"));
+        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
+        context.Roles.Add(Role.Create(replacementRoleId, "Viewer", "Viewer role"));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(replacementRoleId, ScopeType.Enterprise));
+        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+        var secondAdminId = Guid.NewGuid();
+        context.Users.Add(User.Create(secondAdminId, "second-versioned@example.com", "Second", "Admin", "hash"));
+        context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), secondAdminId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
+        await context.SaveChangesAsync();
+        ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
+
+        Result<UserRoleScopeResponse> updated = await handler.Handle(
+            new ReplaceUserRoleScopeCommand(userId, replacementRoleId, ScopeType.Enterprise, null, 1),
+            CancellationToken.None);
+        updated.IsSuccess.ShouldBeTrue();
+        updated.Value.RowVersion.ShouldBe(2);
+
+        Result<UserRoleScopeResponse> stale = await handler.Handle(
+            new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null, 1),
+            CancellationToken.None);
+        stale.Error.Code.ShouldBe("UserRoleScopes.RowVersionMismatch");
+        stale.Error.Details.ShouldNotBeNull();
+        (await context.UserRoleScopes.SingleAsync(item => item.UserId == userId)).RoleId.ShouldBe(replacementRoleId);
+    }
+
+    [Fact]
+    public async Task Handle_Should_RejectOrganizationalUnitReplacement()
     {
         await using TestDbContext context = CreateDbContext();
         var userId = Guid.NewGuid();
@@ -66,7 +100,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
         context.Roles.Add(Role.Create(WellKnownRoles.WarehouseManagerId, "Manager", "Manager role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
-        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseManagerId, ScopeType.OrganizationalUnit));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseManagerId, ScopeType.Warehouse));
         context.Sites.Add(Site.Create(siteId, Guid.NewGuid(), "Main Site", "SITE1", null));
         context.OrganizationalUnits.Add(OrganizationalUnit.Create(orgUnitId, siteId, null, "Directorate", "Directorate"));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
@@ -85,18 +119,19 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
             null));
         await context.SaveChangesAsync();
 
-        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseManagerId, ScopeType.OrganizationalUnit, orgUnitId);
+        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseManagerId, ScopeType.OrganizationalUnit, orgUnitId, 1);
         ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+        Result<UserRoleScopeResponse> result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.ShouldBeTrue();
+        result.IsFailure.ShouldBeTrue();
+        result.Error.ShouldBe(UserRoleScopeErrors.OrganizationalUnitAssignmentNotAllowed);
         (await context.UserRoleScopes.CountAsync(item => item.UserId == userId)).ShouldBe(1);
         UserRoleScope? updatedAssignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         updatedAssignment.ShouldNotBeNull();
-        updatedAssignment.RoleId.ShouldBe(WellKnownRoles.WarehouseManagerId);
-        updatedAssignment.ScopeType.ShouldBe(ScopeType.OrganizationalUnit);
-        updatedAssignment.ScopeId.ShouldBe(orgUnitId);
+        updatedAssignment.RoleId.ShouldBe(WellKnownRoles.AdministratorId);
+        updatedAssignment.ScopeType.ShouldBe(ScopeType.Enterprise);
+        updatedAssignment.ScopeId.ShouldBeNull();
     }
 
     [Fact]
@@ -119,8 +154,8 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await context.SaveChangesAsync();
         ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
-        Result<Guid> result = await handler.Handle(
-            new ReplaceUserRoleScopeCommand(userId, replacementRoleId, ScopeType.Enterprise, null),
+        Result<UserRoleScopeResponse> result = await handler.Handle(
+            new ReplaceUserRoleScopeCommand(userId, replacementRoleId, ScopeType.Enterprise, null, 1),
             CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
@@ -137,10 +172,10 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse));
         await context.SaveChangesAsync();
 
-        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Enterprise, null);
+        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Enterprise, null, 0);
         ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+        Result<UserRoleScopeResponse> result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe(UserRoleScopeErrors.RoleNotAllowedAtScope(WellKnownRoles.WarehouseKeeperId, ScopeType.Enterprise).Code);
@@ -157,10 +192,10 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse));
         await context.SaveChangesAsync();
 
-        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, missingWarehouseId);
+        var command = new ReplaceUserRoleScopeCommand(userId, WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse, missingWarehouseId, 0);
         ReplaceUserRoleScopeCommandHandler handler = CreateHandler(context);
 
-        Result<Guid> result = await handler.Handle(command, CancellationToken.None);
+        Result<UserRoleScopeResponse> result = await handler.Handle(command, CancellationToken.None);
 
         result.IsFailure.ShouldBeTrue();
         result.Error.Code.ShouldBe(UserRoleScopeErrors.ScopeTargetNotFound(missingWarehouseId).Code);
@@ -177,9 +212,9 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
     {
         IApplicationTransaction transaction = Substitute.For<IApplicationTransaction>();
         transaction.ExecuteAsync(
-                Arg.Any<Func<CancellationToken, Task<Result<Guid>>>>(),
+                Arg.Any<Func<CancellationToken, Task<Result<Application.UserRoleScopes.GetByUser.UserRoleScopeResponse>>>>(),
                 Arg.Any<CancellationToken>())
-            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<Guid>>>>(0)(
+            .Returns(call => call.ArgAt<Func<CancellationToken, Task<Result<UserRoleScopeResponse>>>>(0)(
                 call.ArgAt<CancellationToken>(1)));
         IApplicationLock applicationLock = Substitute.For<IApplicationLock>();
         applicationLock.AcquireAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())

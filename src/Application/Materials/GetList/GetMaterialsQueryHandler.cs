@@ -1,6 +1,7 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Domain.Materials;
 using SharedKernel;
 
 namespace Application.Materials.GetList;
@@ -31,7 +32,8 @@ internal sealed class GetMaterialsQueryHandler(IApplicationDbContext context)
                     MaterialKind = m.MaterialKind.ToString(),
                     TrackingType = m.TrackingType.ToString(),
                     HasExpiry = m.HasExpiry,
-                    RequiresAssetNumber = m.RequiresAssetNumber,
+                    RequiresAssetNumber = MaterialClassification.RequiresAssetNumber(m.MaterialKind),
+                    CatalogVersion = m.CatalogVersion,
                     Attributes = m.Attributes,
                     Status = m.Status.ToString(),
                     MaterialDomainId = domain.Id,

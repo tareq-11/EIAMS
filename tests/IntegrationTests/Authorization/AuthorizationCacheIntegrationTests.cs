@@ -62,7 +62,7 @@ public sealed class AuthorizationCacheIntegrationTests
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             RolePermission rolePermission = await context.RolePermissions.SingleAsync(item =>
-                item.RoleId == roleId && item.PermissionId == WellKnownPermissions.OrganizationsManageId);
+                item.RoleId == roleId && item.PermissionId == WellKnownDottedPermissions.OrganizationManageId);
             context.RolePermissions.Remove(rolePermission);
             await context.SaveChangesAsync();
         }
@@ -89,7 +89,7 @@ public sealed class AuthorizationCacheIntegrationTests
             int affectedRows = await context.Database.ExecuteSqlInterpolatedAsync($"""
                 DELETE FROM public.role_permissions
                 WHERE role_id = {roleId}
-                  AND permission_id = {WellKnownPermissions.OrganizationsManageId}
+                  AND permission_id = {WellKnownDottedPermissions.OrganizationManageId}
                 """);
             affectedRows.ShouldBe(1);
         }
@@ -119,7 +119,7 @@ public sealed class AuthorizationCacheIntegrationTests
             int affectedRows = await context.Database.ExecuteSqlInterpolatedAsync($"""
                 DELETE FROM public.role_permissions
                 WHERE role_id = {roleId}
-                  AND permission_id = {WellKnownPermissions.OrganizationsManageId}
+                  AND permission_id = {WellKnownDottedPermissions.OrganizationManageId}
                 """);
             affectedRows.ShouldBe(1);
         }
@@ -325,6 +325,7 @@ public sealed class AuthorizationCacheIntegrationTests
         context.AddRange(
             User.Create(userId, $"authorization-{userId:N}@example.com", "Authorization", "User", "hash"),
             Role.Create(roleId, $"Authorization role {roleId:N}", null),
+            RoleAllowedScopeType.Create(roleId, scopeType),
             RolePermission.Create(roleId, permissionId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
         await context.SaveChangesAsync();
@@ -354,8 +355,8 @@ public sealed class AuthorizationCacheIntegrationTests
 
     private static Guid GetPermissionId(string permission) => permission switch
     {
-        PermissionCodes.Organizations.Manage => WellKnownPermissions.OrganizationsManageId,
-        PermissionCodes.Warehouses.View => WellKnownPermissions.WarehousesViewId,
+        PermissionCodes.Organizations.Manage => WellKnownDottedPermissions.OrganizationManageId,
+        PermissionCodes.Warehouses.View => WellKnownDottedPermissions.WarehouseViewId,
         _ => throw new ArgumentOutOfRangeException(nameof(permission), permission, null)
     };
 

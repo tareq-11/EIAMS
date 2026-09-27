@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
 namespace Web.Api.Infrastructure;
@@ -9,8 +10,8 @@ public sealed record ApiResponse<T>(
     ApiResponseMeta Meta);
 
 public sealed record ApiPagination(
-    int Page,
-    [property: JsonPropertyName("page_size")] int PageSize,
+    [property: Range(1, int.MaxValue)] int Page,
+    [property: Range(1, int.MaxValue)] [property: JsonPropertyName("page_size")] int PageSize,
     [property: JsonPropertyName("total_items"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalItems,
     [property: JsonPropertyName("total_pages"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? TotalPages,
     [property: JsonPropertyName("has_previous_page")] bool HasPreviousPage = false,

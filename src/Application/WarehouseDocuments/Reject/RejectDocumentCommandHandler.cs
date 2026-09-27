@@ -27,7 +27,7 @@ internal sealed class RejectDocumentCommandHandler(
 
         bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
             userContext.UserId,
-            PermissionCodes.WarehouseDocuments.Review,
+            PermissionCodes.WarehouseDocuments.Reject,
             ScopeType.Warehouse,
             document.WarehouseId,
             cancellationToken);

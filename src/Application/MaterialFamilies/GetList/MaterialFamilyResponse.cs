@@ -10,7 +10,5 @@ public sealed class MaterialFamilyResponse
 
     public string Code { get; init; }
 
-    public Guid BaseUnitId { get; init; }
-
     public string Status { get; init; }
 }

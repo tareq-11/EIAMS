@@ -2,6 +2,7 @@ using Application.Abstractions.Audit;
 using Application.Abstractions.Authentication;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Users.GetSession;
 using Domain.AuditLogs;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
@@ -16,7 +17,8 @@ internal sealed class LoginUserCommandHandler(
     IPasswordHasher passwordHasher,
     ITokenProvider tokenProvider,
     IDateTimeProvider dateTimeProvider,
-    IAuditOperationContextAccessor auditContext) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
+    IAuditOperationContextAccessor auditContext,
+    IQueryHandler<GetUserSessionQuery, UserSessionResponse> sessionHandler) : ICommandHandler<LoginUserCommand, AccessTokensResponse>
 {
     // A syntactically valid PBKDF2-SHA512 hash used only to equalize the work performed for an
     // unknown account and a wrong password. It is not a credential and cannot authenticate a user.
@@ -28,12 +30,11 @@ internal sealed class LoginUserCommandHandler(
     {
         string username = User.NormalizeUsername(command.Username);
         long phaseStartedAt = LoginMetrics.Start();
-        // Primary lookup by canonical username. Email is intentionally retained as a fallback for
-        // the username-migration window only — once PB-002 backfill lands it is removed.
+        // Username is the sole authentication identifier. Email remains profile/contact data
+        // and is deliberately never consulted by this credential lookup.
         LoginCredentialSnapshot? credentials = await context.Users
             .AsNoTracking()
-            .Where(user => user.Username == username || user.Email == username)
-            .OrderBy(user => user.Username == username ? 0 : 1)
+            .Where(user => user.Username == username)
             .Select(user => new LoginCredentialSnapshot(user.Id, user.PasswordHash))
             .FirstOrDefaultAsync(cancellationToken);
         LoginMetrics.Record("user_lookup", phaseStartedAt);
@@ -99,6 +100,13 @@ internal sealed class LoginUserCommandHandler(
             LoginMetrics.Record("password_rehash", phaseStartedAt);
         }
 
+        Result<UserSessionResponse> sessionResult = await sessionHandler
+            .Handle(new GetUserSessionQuery(user.Id), cancellationToken);
+        if (sessionResult.IsFailure)
+        {
+            return Result.Failure<AccessTokensResponse>(sessionResult.Error);
+        }
+
         phaseStartedAt = LoginMetrics.Start();
         string accessToken = tokenProvider.Create(user);
         string refreshToken = tokenProvider.GenerateRefreshToken();
@@ -128,7 +136,7 @@ internal sealed class LoginUserCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
         LoginMetrics.Record("persistence", phaseStartedAt);
 
-        return new AccessTokensResponse(accessToken, refreshToken, user.Id);
+        return new AccessTokensResponse(accessToken, refreshToken, user.Id, sessionResult.Value);
     }
 
     private bool VerifyChangedPassword(string password, string passwordHash)

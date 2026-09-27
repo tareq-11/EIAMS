@@ -21,7 +21,6 @@ internal sealed class GetMaterialFamiliesQueryHandler(IApplicationDbContext cont
                 CategoryId = f.CategoryId,
                 Name = f.Name,
                 Code = f.Code,
-                BaseUnitId = f.BaseUnitId,
                 Status = f.Status.ToString()
             })
             .OrderBy(f => f.Name)

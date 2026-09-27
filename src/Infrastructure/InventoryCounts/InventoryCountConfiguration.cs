@@ -16,10 +16,11 @@ internal sealed class InventoryCountConfiguration : IEntityTypeConfiguration<Inv
             table.HasCheckConstraint("ck_inventory_counts_type_valid", "count_type IN ('Scheduled', 'Surprise', 'Cycle')");
             table.HasCheckConstraint("ck_inventory_counts_scope_valid", "scope_type IN ('EntireWarehouse', 'MaterialDomain', 'SelectedMaterials')");
             table.HasCheckConstraint("ck_inventory_counts_freeze_valid", "freeze_policy IN ('HardFreeze', 'SoftFreeze', 'NoFreeze')");
-            table.HasCheckConstraint("ck_inventory_counts_status_valid", "status IN ('Planned', 'InProgress', 'Completed', 'Closed')");
+            table.HasCheckConstraint("ck_inventory_counts_status_valid", "status IN ('Planned', 'InProgress', 'Completed', 'Closed', 'Aborted')");
             table.HasCheckConstraint("ck_inventory_counts_row_version_positive", "row_version > 0");
             table.HasCheckConstraint("ck_inventory_counts_scope_reference", "(scope_type = 'MaterialDomain' AND scope_material_domain_id IS NOT NULL) OR (scope_type <> 'MaterialDomain' AND scope_material_domain_id IS NULL)");
             table.HasCheckConstraint("ck_inventory_counts_timestamps", "(started_at_utc IS NULL OR started_at_utc >= planned_at_utc) AND (completed_at_utc IS NULL OR (started_at_utc IS NOT NULL AND completed_at_utc >= started_at_utc)) AND (closed_at_utc IS NULL OR (completed_at_utc IS NOT NULL AND closed_at_utc >= completed_at_utc))");
+            table.HasCheckConstraint("ck_inventory_counts_aborted_timestamp", "(status = 'Aborted' AND aborted_at_utc IS NOT NULL AND aborted_at_utc >= COALESCE(started_at_utc, planned_at_utc)) OR (status <> 'Aborted' AND aborted_at_utc IS NULL)");
         });
         builder.HasKey(item => item.Id);
         builder.Property(item => item.CountType).HasConversion<string>().HasMaxLength(20);

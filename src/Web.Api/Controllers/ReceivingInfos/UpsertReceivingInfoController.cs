@@ -15,7 +15,7 @@ public sealed class UpsertReceivingInfoController(ICommandHandler<UpsertReceivin
     : ControllerBase
 {
     public sealed record RequestBody(
-        [property: JsonRequired] string SupplierRef,
+        [property: JsonRequired] Guid SupplierPartyId,
         string? SupplierInvoiceRef,
         [property: JsonRequired] ReceivingType ReceivingType,
         [property: JsonRequired] int ExpectedRowVersion);
@@ -35,7 +35,7 @@ public sealed class UpsertReceivingInfoController(ICommandHandler<UpsertReceivin
     {
         var command = new UpsertReceivingInfoCommand(
             documentId,
-            request.SupplierRef,
+            request.SupplierPartyId,
             request.SupplierInvoiceRef,
             request.ReceivingType,
             request.ExpectedRowVersion);

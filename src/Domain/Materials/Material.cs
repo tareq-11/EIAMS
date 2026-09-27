@@ -19,15 +19,14 @@ public sealed class Material : Entity, IAuditableEntity
     public MaterialKind MaterialKind { get; private set; }
     public TrackingType TrackingType { get; private set; }
     public bool HasExpiry { get; private set; }
-    public bool RequiresAssetNumber { get; private set; }
     public string? Attributes { get; private set; }
     public MaterialStatus Status { get; private set; }
 
-    /// <summary>
-    /// True when each received base unit must become an individually numbered Asset.
-    /// Derived from MaterialKind == Asset according to Phase 4 classification rules.
-    /// </summary>
-    public bool IsAssetTracked => MaterialKind == MaterialKind.Asset || RequiresAssetNumber;
+    public int CatalogVersion { get; private set; }
+
+    public bool RequiresAssetNumber => MaterialKind == MaterialKind.Asset;
+
+    public bool IsAssetTracked => RequiresAssetNumber;
 
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
@@ -57,9 +56,9 @@ public sealed class Material : Entity, IAuditableEntity
             MaterialKind = materialKind,
             TrackingType = trackingType,
             HasExpiry = hasExpiry,
-            RequiresAssetNumber = materialKind == MaterialKind.Asset,
             Attributes = attributes,
-            Status = MaterialStatus.Active
+            Status = MaterialStatus.Active,
+            CatalogVersion = 1
         };
 
         material.Raise(new MaterialCreatedDomainEvent(material.Id, material.FamilyId));
@@ -75,13 +74,20 @@ public sealed class Material : Entity, IAuditableEntity
         bool hasExpiry,
         string? attributes)
     {
+        bool classificationChanged = MaterialKind != materialKind || TrackingType != trackingType;
+
         NameAr = nameAr;
         NameEn = nameEn;
         MaterialKind = materialKind;
         TrackingType = trackingType;
         HasExpiry = hasExpiry;
-        RequiresAssetNumber = materialKind == MaterialKind.Asset;
         Attributes = attributes;
+
+        if (classificationChanged)
+        {
+            CatalogVersion++;
+        }
+
         Raise(new MaterialUpdatedDomainEvent(Id));
     }
 

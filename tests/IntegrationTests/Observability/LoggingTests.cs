@@ -93,8 +93,10 @@ public sealed class LoggingTests : BaseIntegrationTest
         // Assert
         handled.ShouldBeTrue();
         responseBody.ShouldNotContain(secret);
+        responseBody.ShouldContain("An unexpected server error occurred.");
         LogEvent logEvent = sink.Events.ShouldHaveSingleItem();
-        logEvent.Exception.ShouldBeNull();
+        logEvent.Exception.ShouldBeOfType<InvalidOperationException>()
+            .Message.ShouldContain(secret);
         logEvent.RenderMessage(System.Globalization.CultureInfo.InvariantCulture).ShouldNotContain(secret);
     }
 

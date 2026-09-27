@@ -3,45 +3,49 @@ namespace Infrastructure.Authentication;
 internal sealed class BootstrapAdministratorOptions
 {
     internal const string SectionName = "BootstrapAdministrator";
-    internal const int TokenBytes = 32;
 
     public bool Enabled { get; init; }
 
-    public string Token { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
 
-    /// <summary>
-    /// Canonical username of the bootstrap administrator. When set together with
-    /// <see cref="SeedPassword"/>, a one-shot Administrator + Enterprise-scope user is seeded at
-    /// startup if and only if the database is empty. Intended for local development and CI only;
-    /// production tenants must provision their first administrator through the protected
-    /// <c>POST /admin/users</c> endpoint.
-    /// </summary>
-    public string? SeedUsername { get; init; }
+    public string Username { get; init; } = string.Empty;
 
-    public string? SeedPassword { get; init; }
+    public string FirstName { get; init; } = string.Empty;
 
-    public string? SeedEmail { get; init; }
+    public string LastName { get; init; } = string.Empty;
 
-    public string? SeedFirstName { get; init; }
+    public string Password { get; init; } = string.Empty;
 
-    public string? SeedLastName { get; init; }
-
-    internal static bool TryDecodeToken(string? value, out byte[] tokenBytes)
+    internal static bool IsValid(BootstrapAdministratorOptions options)
     {
-        tokenBytes = [];
-        if (string.IsNullOrWhiteSpace(value))
+        if (!options.Enabled)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Username) ||
+            string.IsNullOrWhiteSpace(options.FirstName) ||
+            string.IsNullOrWhiteSpace(options.LastName))
         {
             return false;
         }
 
-        try
-        {
-            tokenBytes = Convert.FromBase64String(value);
-            return tokenBytes.Length == TokenBytes;
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
+        string normalizedUsername = Domain.Users.User.NormalizeUsername(options.Username);
+        bool validEmail = !string.IsNullOrWhiteSpace(options.Email) &&
+                          options.Email.Length <= 256 &&
+                          options.Email.All(character => character <= '\u007F') &&
+                          new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(options.Email);
+        bool validPassword = !string.IsNullOrWhiteSpace(options.Password) &&
+                             options.Password.Length is >= 8 and <= 128 &&
+                             options.Password.Any(character => character is >= 'A' and <= 'Z') &&
+                             options.Password.Any(character => character is >= 'a' and <= 'z') &&
+                             options.Password.Any(character => character is >= '0' and <= '9') &&
+                             options.Password.Any(character => !char.IsLetterOrDigit(character));
+
+        return validEmail &&
+               Domain.Users.User.IsValidUsername(normalizedUsername) &&
+               options.FirstName.Length <= 200 &&
+               options.LastName.Length <= 200 &&
+               validPassword;
     }
 }

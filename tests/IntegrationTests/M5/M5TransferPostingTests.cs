@@ -99,7 +99,7 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
         M5Seed seed = await SeedAsync(includeDestinationTransferCapability: true);
         await CreateAndPostOpeningAsync(seed, 5m);
         SubmittedDocument transfer = await CreateSubmittedTransferAsync(seed, 2m);
-        await StartHardFreezeAsync(seed.DestinationWarehouseId, seed.UserId);
+        await StartHardFreezeAsync(seed.DestinationWarehouseId, seed.UserId, seed.MaterialId);
 
         // Act
         Result<Guid> result = await PostAsync(transfer.Id, transfer.RowVersion, seed.UserId);
@@ -263,7 +263,7 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
         dbContext.UnitsOfMeasure.Add(UnitOfMeasure.Create(unitId, $"Piece {suffix}", $"P{suffix}", "Count"));
         dbContext.MaterialDomains.Add(MaterialDomain.Create(domainId, $"Domain {suffix}", $"D{suffix}"));
         dbContext.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, $"Category {suffix}", $"C{suffix}"));
-        dbContext.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}", unitId));
+        dbContext.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, $"Family {suffix}", $"F{suffix}"));
         dbContext.Materials.Add(Material.Create(materialId, familyId, unitId, $"Material {suffix}", $"Material {suffix}", $"M{suffix}", MaterialKind.Consumable, TrackingType.Quantity, false, null));
         AddCapability(dbContext, sourceWarehouseId, domainId, OperationType.Transfer);
         if (includeDestinationTransferCapability)
@@ -372,7 +372,15 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         string suffix = Guid.NewGuid().ToString("N")[..10];
         var document = WarehouseDocument.CreateDraft(Guid.NewGuid(), sourceWarehouseId, type, $"{type}-{suffix}");
-        Result<DocumentLine> line = DocumentLine.Create(Guid.NewGuid(), document.Id, seed.MaterialId, DocumentLineType.Normal, quantity, seed.UnitId, quantity, null, null, null, openingType);
+        Material material = await dbContext.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+        DocumentLineProvenance provenance = DocumentLineProvenance.Create(
+            material.CatalogVersion,
+            material.MaterialKind,
+            material.TrackingType,
+            material.BaseUnitId).Value;
+        Result<DocumentLine> line = DocumentLine.Create(
+            Guid.NewGuid(), document.Id, seed.MaterialId, DocumentLineType.Normal, quantity, seed.UnitId,
+            quantity, null, null, null, openingType, provenance: provenance);
         line.IsSuccess.ShouldBeTrue();
         dbContext.WarehouseDocuments.Add(document);
         dbContext.DocumentLines.Add(line.Value);
@@ -416,7 +424,7 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
             : result.Value.DocumentId;
     }
 
-    private async Task StartHardFreezeAsync(Guid warehouseId, Guid userId)
+    private async Task StartHardFreezeAsync(Guid warehouseId, Guid userId, Guid materialId)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -429,8 +437,11 @@ public sealed class M5TransferPostingTests(IntegrationTestWebAppFactory factory)
             null,
             FreezePolicy.HardFreeze,
             DateTime.UtcNow).Value;
-        count.Start(DateTime.UtcNow.AddTicks(1)).IsSuccess.ShouldBeTrue();
+        context.InventoryCountLines.Add(InventoryCountLine.Create(
+            Guid.NewGuid(), count.Id, materialId, null, 0m).Value);
         context.InventoryCounts.Add(count);
+        await context.SaveChangesAsync();
+        count.Start(DateTime.UtcNow.AddTicks(1)).IsSuccess.ShouldBeTrue();
         await context.SaveChangesAsync();
     }
 

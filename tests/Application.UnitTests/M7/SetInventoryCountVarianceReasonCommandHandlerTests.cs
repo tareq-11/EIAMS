@@ -37,7 +37,7 @@ public sealed class SetInventoryCountVarianceReasonCommandHandlerTests : BaseHan
         userContext.UserId.Returns(userId);
         IScopeAuthorizationService authorization = Substitute.For<IScopeAuthorizationService>();
         authorization.HasPermissionInScopeAsync(
-                userId, PermissionCodes.InventoryCounts.Review, ScopeType.Warehouse,
+                userId, PermissionCodes.InventoryCounts.Complete, ScopeType.Warehouse,
                 count.WarehouseId, Arg.Any<CancellationToken>())
             .Returns(true);
         var handler = new SetInventoryCountVarianceReasonCommandHandler(context, userContext, authorization);

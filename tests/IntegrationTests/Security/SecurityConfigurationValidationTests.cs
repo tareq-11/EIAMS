@@ -45,6 +45,40 @@ public sealed class SecurityConfigurationValidationTests
             configuration.ValidateProductionSecurityConfiguration(new TestHostEnvironment("Development")));
     }
 
+    [Theory]
+    [InlineData("https://ui.example.test")]
+    [InlineData("*")]
+    public void NonTestEnvironments_Should_RejectCrossOriginBrowserAllowLists(string origin)
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AllowedHosts"] = "api.example.test",
+                ["Cors:AllowedOrigins:0"] = origin,
+                ["Authentication:RefreshTokenTransport:AllowedCookieOrigins:0"] = origin
+            })
+            .Build();
+
+        Should.Throw<InvalidOperationException>(() =>
+            configuration.ValidateProductionSecurityConfiguration(new TestHostEnvironment("Staging")))
+            .Message.ShouldContain("same-origin /api/v1 proxy");
+    }
+
+    [Fact]
+    public void Development_Should_RejectCrossOriginBrowserAllowList()
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Cors:AllowedOrigins:0"] = "http://localhost:5173"
+            })
+            .Build();
+
+        Should.Throw<InvalidOperationException>(() =>
+            configuration.ValidateProductionSecurityConfiguration(new TestHostEnvironment("Development")))
+            .Message.ShouldContain("same-origin /api/v1 proxy");
+    }
+
     private static IConfiguration BuildConfiguration(string allowedHosts) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

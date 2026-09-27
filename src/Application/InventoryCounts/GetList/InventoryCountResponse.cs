@@ -13,4 +13,5 @@ public sealed record InventoryCountResponse(
     DateTime PlannedAtUtc,
     DateTime? StartedAtUtc,
     DateTime? CompletedAtUtc,
-    DateTime? ClosedAtUtc);
+    DateTime? ClosedAtUtc,
+    DateTime? AbortedAtUtc);

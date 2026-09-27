@@ -8,6 +8,7 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Idempotency;
 using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Ledger;
+using Application.Abstractions.Materials;
 using Application.Abstractions.Numbering;
 using Application.Abstractions.Policies;
 using Application.Abstractions.PolymorphicReferences;
@@ -25,6 +26,7 @@ using Infrastructure.DocumentLifecycleEvents;
 using Infrastructure.InventoryCounts;
 using Infrastructure.Idempotency;
 using Infrastructure.Ledger;
+using Infrastructure.Materials;
 using Infrastructure.Numbering;
 using Infrastructure.Policies;
 using Infrastructure.PolymorphicReferences;
@@ -64,8 +66,6 @@ public static class DependencyInjection
     {
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
-        services.AddSingleton<IBootstrapAdministratorAuthorizer, BootstrapAdministratorAuthorizer>();
-
         services.AddSingleton<IAdministratorRecoveryAuthorizer, AdministratorRecoveryAuthorizer>();
 
         services.AddScoped<IAuditOperationContextAccessor, AuditOperationContextAccessor>();
@@ -97,6 +97,8 @@ public static class DependencyInjection
         services.AddScoped<IDocumentLock, ApplicationDocumentLock>();
 
         services.AddScoped<IInventoryLedgerWriter, InventoryLedgerWriter>();
+
+        services.AddScoped<IInventoryBalanceRebuilder, InventoryBalanceRebuilder>();
 
         services.AddScoped<IInventoryKeyLock, PostgresInventoryKeyLock>();
 
@@ -139,6 +141,8 @@ public static class DependencyInjection
         services.AddScoped<IAssetLifecycleGuard, AssetLifecycleGuard>();
 
         services.AddScoped<IWarehouseOperationLock, PostgresWarehouseOperationLock>();
+
+        services.AddScoped<IMaterialOperationLock, PostgresMaterialOperationLock>();
 
         services.AddScoped<IInventoryFreezePolicyService, InventoryFreezePolicyService>();
 
@@ -250,19 +254,9 @@ public static class DependencyInjection
         services.AddOptions<BootstrapAdministratorOptions>()
             .Bind(configuration.GetSection(BootstrapAdministratorOptions.SectionName))
             .Validate(
-                options => !options.Enabled ||
-                           BootstrapAdministratorOptions.TryDecodeToken(options.Token, out _) ||
-                           !string.IsNullOrWhiteSpace(options.SeedUsername) &&
-                           !string.IsNullOrWhiteSpace(options.SeedPassword),
-                "BootstrapAdministrator:Token must be Base64 for exactly {BootstrapAdministratorOptions.TokenBytes} random bytes when bootstrap is enabled and SeedUsername/SeedPassword are not configured.")
-            .Validate(
-                options => !options.Enabled ||
-                           !string.IsNullOrWhiteSpace(options.SeedUsername) &&
-                           !string.IsNullOrWhiteSpace(options.SeedPassword),
-                "BootstrapAdministrator:SeedUsername and SeedPassword must both be configured when bootstrap is enabled.")
+                BootstrapAdministratorOptions.IsValid,
+                "BootstrapAdministrator configuration is invalid. Enabled bootstrap requires a valid ASCII email, normalized username, names, and a strong password.")
             .ValidateOnStart();
-
-        services.AddHostedService<BootstrapAdministratorSeeder>();
 
         services.AddOptions<IdempotencyCleanupOptions>()
             .Bind(configuration.GetSection(IdempotencyCleanupOptions.SectionName))
@@ -299,9 +293,13 @@ public static class DependencyInjection
     private static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration)
     {
         string connectionString = configuration.GetConnectionString("Database")
-            ?? throw new InvalidOperationException(
+            ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException(
                 "Database connection string is not configured. " +
                 "Set 'ConnectionStrings:Database' in appsettings.json or user secrets.");
+        }
         DatabaseConnectionOptions databaseOptions = configuration
             .GetSection(DatabaseConnectionOptions.SectionName)
             .Get<DatabaseConnectionOptions>() ?? new DatabaseConnectionOptions();
@@ -454,9 +452,15 @@ public static class DependencyInjection
 
         services.AddSingleton<AuthorizationCacheCoalescingTracker>();
 
-        services.AddScoped<IScopeAuthorizationService, ScopeAuthorizationService>();
+        services.AddScoped<ScopeAuthorizationService>();
+        services.AddScoped<IScopeAuthorizationService>(provider => provider.GetRequiredService<ScopeAuthorizationService>());
+        services.AddScoped<IEffectivePermissionService>(provider => provider.GetRequiredService<ScopeAuthorizationService>());
+
+        services.AddHostedService<BootstrapAdministratorSeeder>();
+        services.AddHostedService<AuthorizationPolicyStartupValidator>();
 
         services.AddTransient<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddTransient<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
 
         services.AddTransient<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
 

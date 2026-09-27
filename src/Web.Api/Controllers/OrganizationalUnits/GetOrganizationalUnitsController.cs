@@ -20,9 +20,9 @@ public sealed class GetOrganizationalUnitsController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<OrganizationalUnitResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid? siteId,
-        Guid? parentId,
-        Status? status,
+        [FromQuery] Guid? siteId,
+        [FromQuery] Guid? parentId,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

@@ -178,6 +178,7 @@ internal sealed class CounterpartResolver(
     public async Task<PagedResult<CounterpartResolution>> SearchActiveAsync(
         Guid userId,
         string? search,
+        OperationType operation,
         PartyType? type,
         int page,
         int pageSize,
@@ -201,7 +202,10 @@ internal sealed class CounterpartResolver(
         Guid[] allowedOrganizationalUnitIds = access.OrganizationalUnitIds.ToArray();
         IQueryable<CounterpartSearchRow>? candidates = null;
 
-        if (type is null or PartyType.Employee)
+        bool includeInternal = operation != OperationType.Receiving;
+        bool includeExternal = operation != OperationType.Issue;
+
+        if (includeInternal && type is null or PartyType.Employee)
         {
             IQueryable<Employee> employeeQuery = context.Employees.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
@@ -227,7 +231,7 @@ internal sealed class CounterpartResolver(
             candidates = Append(candidates, employees);
         }
 
-        if (type is null or PartyType.OrganizationalUnit)
+        if (includeInternal && type is null or PartyType.OrganizationalUnit)
         {
             IQueryable<OrganizationalUnit> unitQuery = context.OrganizationalUnits.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
@@ -250,7 +254,7 @@ internal sealed class CounterpartResolver(
             candidates = Append(candidates, organizationalUnits);
         }
 
-        if (type is null or PartyType.Site)
+        if (includeInternal && type is null or PartyType.Site)
         {
             IQueryable<Site> siteQuery = context.Sites.AsNoTracking()
                 .Where(item => item.Status == Status.Active)
@@ -275,7 +279,7 @@ internal sealed class CounterpartResolver(
             candidates = Append(candidates, sites);
         }
 
-        if (type is null or PartyType.External)
+        if (includeExternal && type is null or PartyType.External)
         {
             IQueryable<ExternalParty> externalQuery = context.ExternalParties.AsNoTracking()
                 .Where(item => item.Status == Status.Active)

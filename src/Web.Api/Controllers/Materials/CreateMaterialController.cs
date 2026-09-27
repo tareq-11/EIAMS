@@ -19,8 +19,8 @@ public sealed class CreateMaterialController(ICommandHandler<CreateMaterialComma
         string NameAr,
         string? NameEn,
         string Code,
-        [property: JsonRequired] int MaterialKind,
-        [property: JsonRequired] int TrackingType,
+        [property: JsonRequired] MaterialKind MaterialKind,
+        [property: JsonRequired] TrackingType TrackingType,
         [property: JsonRequired] bool HasExpiry,
         string? Attributes);
 
@@ -35,8 +35,8 @@ public sealed class CreateMaterialController(ICommandHandler<CreateMaterialComma
             request.NameAr,
             request.NameEn,
             request.Code,
-            (MaterialKind)request.MaterialKind,
-            (TrackingType)request.TrackingType,
+            request.MaterialKind,
+            request.TrackingType,
             request.HasExpiry,
             request.Attributes);
 

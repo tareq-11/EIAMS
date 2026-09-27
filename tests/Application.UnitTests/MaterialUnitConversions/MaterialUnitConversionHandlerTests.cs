@@ -34,7 +34,7 @@ public sealed class MaterialUnitConversionHandlerTests : BaseHandlerTest
         context.MaterialCategories.Add(MaterialCategory.Create(categoryId, domainId, null, "Category", "CAT"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(baseUnitId, "Piece", "pc", "Count"));
         context.UnitsOfMeasure.Add(UnitOfMeasure.Create(sourceUnitId, "Box", "box", "Count"));
-        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, "Family", "FAM", baseUnitId));
+        context.MaterialFamilies.Add(MaterialFamily.Create(familyId, categoryId, "Family", "FAM"));
         context.Materials.Add(Material.Create(
             materialId,
             familyId,
@@ -166,10 +166,32 @@ public sealed class MaterialUnitConversionHandlerTests : BaseHandlerTest
             CreateUserContext(),
             CreateAuthorization(true));
 
-        var command = new RemoveMaterialUnitConversionCommand(conversion.Id);
+        var command = new RemoveMaterialUnitConversionCommand(materialId, conversion.Id);
 
         Result result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task RemoveMaterialUnitConversion_Should_NotCrossMaterialBoundary()
+    {
+        await using TestDbContext context = CreateDbContext();
+        (Guid materialId, Guid baseUnitId, Guid sourceUnitId) = await SeedMaterialAsync(context);
+
+        var conversion = MaterialUnitConversion.Create(
+            Guid.NewGuid(), materialId, sourceUnitId, baseUnitId, 12m);
+        context.MaterialUnitConversions.Add(conversion);
+        await context.SaveChangesAsync();
+
+        var handler = new RemoveMaterialUnitConversionCommandHandler(
+            context, CreateUserContext(), CreateAuthorization(true));
+
+        Result result = await handler.Handle(
+            new RemoveMaterialUnitConversionCommand(Guid.NewGuid(), conversion.Id),
+            CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        (await context.MaterialUnitConversions.FindAsync(conversion.Id)).ShouldNotBeNull();
     }
 }

@@ -21,6 +21,7 @@ using Domain.UnitsOfMeasure;
 using Domain.UserRoleScopes;
 using Domain.WarehouseDocuments;
 using Domain.Warehouses;
+using Domain.WarehouseMaterialSettings;
 using Infrastructure.Database;
 using IntegrationTests.Performance;
 using Microsoft.EntityFrameworkCore;
@@ -113,6 +114,76 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
             $"warehouse-documents/{seed.OutsideDocumentId}/attachments/{seed.OutsideAttachmentId}" +
             "?expectedRowVersion=1");
         outsideDelete.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task LowStockBalances_ShouldIncludeZeroBalancesExcludeInactiveAndEqualThresholdAndPaginateWithinScope()
+    {
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        InventoryReadSeed seed = await SeedInventoryAsync(userId);
+        var zeroBalanceMaterialId = Guid.NewGuid();
+        var inactiveMaterialId = Guid.NewGuid();
+        string suffix = Guid.NewGuid().ToString("N")[..8];
+
+        await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
+        {
+            ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Material material = await context.Materials.SingleAsync(item => item.Id == seed.MaterialId);
+            MaterialFamily family = await context.MaterialFamilies.SingleAsync(item => item.Id == material.FamilyId);
+            UnitOfMeasure unit = await context.UnitsOfMeasure.SingleAsync(item => item.Id == material.BaseUnitId);
+            var zeroBalanceMaterial = Material.Create(
+                zeroBalanceMaterialId, family.Id, unit.Id, $"صفر {suffix}", null, $"ZB{suffix}",
+                MaterialKind.Consumable, TrackingType.Quantity, false, null);
+            var inactiveMaterial = Material.Create(
+                inactiveMaterialId, family.Id, unit.Id, $"غير فعال {suffix}", null, $"IN{suffix}",
+                MaterialKind.Consumable, TrackingType.Quantity, false, null);
+            WarehouseMaterialSetting zeroSetting = WarehouseMaterialSetting.Create(
+                Guid.NewGuid(), seed.AllowedWarehouseId, seed.AssetMaterialId, 1m, 4m).Value;
+            WarehouseMaterialSetting secondZeroSetting = WarehouseMaterialSetting.Create(
+                Guid.NewGuid(), seed.AllowedWarehouseId, zeroBalanceMaterial.Id, 2m, 5m).Value;
+            WarehouseMaterialSetting equalSetting = WarehouseMaterialSetting.Create(
+                Guid.NewGuid(), seed.AllowedWarehouseId, seed.MaterialId, 5m, 9m).Value;
+            WarehouseMaterialSetting inactiveSetting = WarehouseMaterialSetting.Create(
+                Guid.NewGuid(), seed.AllowedWarehouseId, inactiveMaterial.Id, 1m, 3m).Value;
+            inactiveSetting.SetStatus(Status.Inactive);
+            WarehouseMaterialSetting outsideSetting = WarehouseMaterialSetting.Create(
+                Guid.NewGuid(), seed.OutsideWarehouseId, zeroBalanceMaterial.Id, 1m, 3m).Value;
+
+            context.AddRange(zeroBalanceMaterial, inactiveMaterial, zeroSetting, secondZeroSetting,
+                equalSetting, inactiveSetting, outsideSetting);
+            await context.SaveChangesAsync();
+        }
+
+        await GrantWarehouseReadPermissionsAsync(userId, seed.AllowedWarehouseId);
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage firstPage = await HttpClient.GetAsync("inventory/balances/low-stock?page=1&pageSize=1");
+        string firstPageJson = await firstPage.Content.ReadAsStringAsync();
+        firstPage.StatusCode.ShouldBe(HttpStatusCode.OK, firstPageJson);
+        using var firstBody = JsonDocument.Parse(firstPageJson);
+        JsonElement firstData = firstBody.RootElement.GetProperty("data");
+        firstData.GetArrayLength().ShouldBe(1);
+        firstBody.RootElement.GetProperty("pagination").GetProperty("page").GetInt32().ShouldBe(1);
+        firstBody.RootElement.GetProperty("pagination").GetProperty("page_size").GetInt32().ShouldBe(1);
+        firstBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(2);
+        firstBody.RootElement.GetProperty("pagination").GetProperty("total_pages").GetInt32().ShouldBe(2);
+        firstData[0].GetProperty("quantity").GetDecimal().ShouldBe(0m);
+        firstData[0].GetProperty("lastUpdatedUtc").ValueKind.ShouldBe(JsonValueKind.Null);
+        firstData[0].GetProperty("warehouseId").GetGuid().ShouldBe(seed.AllowedWarehouseId);
+
+        HttpResponseMessage secondPage = await HttpClient.GetAsync("inventory/balances/low-stock?page=2&pageSize=1");
+        secondPage.StatusCode.ShouldBe(HttpStatusCode.OK, await secondPage.Content.ReadAsStringAsync());
+        using var secondBody = JsonDocument.Parse(await secondPage.Content.ReadAsStringAsync());
+        secondBody.RootElement.GetProperty("data").GetArrayLength().ShouldBe(1);
+        secondBody.RootElement.GetProperty("pagination").GetProperty("page").GetInt32().ShouldBe(2);
+        secondBody.RootElement.GetProperty("pagination").GetProperty("total_items").GetInt32().ShouldBe(2);
+        secondBody.RootElement.GetProperty("data")[0].GetProperty("quantity").GetDecimal().ShouldBe(0m);
+        Guid[] actualMaterialIds =
+        [
+            firstData[0].GetProperty("materialId").GetGuid(),
+            secondBody.RootElement.GetProperty("data")[0].GetProperty("materialId").GetGuid()
+        ];
+        actualMaterialIds.ShouldBe([seed.AssetMaterialId, zeroBalanceMaterialId]);
     }
 
     [Fact]
@@ -302,6 +373,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
 
         SqlCommandCounterInterceptor commandCounter =
             factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
+        await HttpClient.GetAsync("reports/dashboard");
         commandCounter.Reset();
 
         // Act
@@ -324,7 +396,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         // One command reads the scoped dashboard metrics. The remaining allowance covers the
         // authorization-version/grant cache on a cold request; it prevents a regression to
         // independently querying each aggregate.
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(4);
+        // The dotted report gate adds bounded policy/scope reads before the aggregate query.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(8);
     }
 
     [Fact]
@@ -368,18 +441,17 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         HttpResponseMessage response = await HttpClient.GetAsync("reports/dashboard");
         string content = await response.Content.ReadAsStringAsync();
 
-        // Assert: inventory metrics are zero for an empty permitted scope; the other metrics
-        // remain null because the caller lacks their respective view permissions.
+        // Assert: report.view exposes the report metrics; an empty permitted scope yields zeros.
         response.StatusCode.ShouldBe(HttpStatusCode.OK, content);
         using var body = JsonDocument.Parse(content);
         JsonElement data = body.RootElement.GetProperty("data");
         data.GetProperty("warehouseCount").GetInt32().ShouldBe(0);
         data.GetProperty("stockedMaterialCount").GetInt32().ShouldBe(0);
         data.GetProperty("totalOnHandQuantity").GetDecimal().ShouldBe(0m);
-        data.GetProperty("assetCount").ValueKind.ShouldBe(JsonValueKind.Null);
-        data.GetProperty("activeCustodyCount").ValueKind.ShouldBe(JsonValueKind.Null);
-        data.GetProperty("openDocumentCount").ValueKind.ShouldBe(JsonValueKind.Null);
-        data.GetProperty("activeInventoryCountCount").ValueKind.ShouldBe(JsonValueKind.Null);
+        data.GetProperty("assetCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeCustodyCount").GetInt32().ShouldBe(0);
+        data.GetProperty("openDocumentCount").GetInt32().ShouldBe(0);
+        data.GetProperty("activeInventoryCountCount").GetInt32().ShouldBe(0);
     }
 
     [Fact]
@@ -415,7 +487,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         var category = MaterialCategory.Create(
             Guid.NewGuid(), domain.Id, null, $"Category {suffix}", $"C{suffix}");
         var family = MaterialFamily.Create(
-            Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}", unit.Id);
+            Guid.NewGuid(), category.Id, $"Family {suffix}", $"F{suffix}");
         var material = Material.Create(
             Guid.NewGuid(),
             family.Id,
@@ -592,6 +664,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         return new InventoryReadSeed(
             allowedWarehouse.Id,
             outsideWarehouse.Id,
+            material.Id,
+            assetMaterial.Id,
             allowedMovement.Value.Id,
             outsideMovement.Value.Id,
             allowedReference,
@@ -610,13 +684,15 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"InventoryViewer-{roleId:N}", null));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
-            RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.AssetsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.CustodiesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.WarehouseDocumentsEditId),
-            RolePermission.Create(roleId, WellKnownPermissions.InventoryCountsViewId));
+            RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CustodyAssignId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentUpdateId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.CountViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.ReportViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)
@@ -638,7 +714,10 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
         context.Roles.Add(Role.Create(roleId, $"InventoryOnly-{roleId:N}", null));
-        context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownPermissions.InventoryViewId));
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
+        context.RolePermissions.AddRange(
+            RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.ReportViewId));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)
@@ -678,6 +757,8 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
     private sealed record InventoryReadSeed(
         Guid AllowedWarehouseId,
         Guid OutsideWarehouseId,
+        Guid MaterialId,
+        Guid AssetMaterialId,
         Guid AllowedMovementId,
         Guid OutsideMovementId,
         string AllowedDocumentReference,

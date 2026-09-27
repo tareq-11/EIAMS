@@ -8,8 +8,11 @@ internal static class SecurityConfigurationExtensions
     {
         if (environment.IsDevelopment() || environment.IsEnvironment("Testing"))
         {
+            ValidateSameOriginBrowserConfiguration(configuration);
             return;
         }
+
+        ValidateSameOriginBrowserConfiguration(configuration);
 
         string? allowedHosts = configuration["AllowedHosts"];
 
@@ -25,6 +28,20 @@ internal static class SecurityConfigurationExtensions
         {
             throw new InvalidOperationException(
                 "Every AllowedHosts entry must be an explicit, valid production host name. Wildcards, schemes, paths, and empty entries are not allowed.");
+        }
+    }
+
+    private static void ValidateSameOriginBrowserConfiguration(IConfiguration configuration)
+    {
+        string[] allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+        string[] allowedCookieOrigins = configuration
+            .GetSection("Authentication:RefreshTokenTransport:AllowedCookieOrigins")
+            .Get<string[]>() ?? [];
+        if (allowedOrigins.Any(origin => !string.IsNullOrWhiteSpace(origin)) ||
+            allowedCookieOrigins.Any(origin => !string.IsNullOrWhiteSpace(origin)))
+        {
+            throw new InvalidOperationException(
+                "Cross-origin browser origins are not supported. Serve browser API requests through the UI's same-origin /api/v1 proxy and leave Cors:AllowedOrigins and Authentication:RefreshTokenTransport:AllowedCookieOrigins empty.");
         }
     }
 

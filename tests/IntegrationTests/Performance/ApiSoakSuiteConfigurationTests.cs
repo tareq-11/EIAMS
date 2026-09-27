@@ -111,7 +111,7 @@ public sealed class ApiSoakSuiteConfigurationTests
     {
         using var handler = new SoakResponseHandler();
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://localhost/api/v1/") };
-        using var adapter = new ApiLoadTestHttpAdapter(client, "admin@example.test", "not-logged");
+        using var adapter = new ApiLoadTestHttpAdapter(client, "admin-test-user", "not-logged");
         await adapter.ExecuteAsync(ApiLoadTestScenario.Login, CancellationToken.None);
         await adapter.ExecuteAsync(ApiLoadTestScenario.ReadList, CancellationToken.None);
         (await adapter.ExecuteAsync(ApiLoadTestScenario.Report, CancellationToken.None)).Succeeded.ShouldBeFalse();

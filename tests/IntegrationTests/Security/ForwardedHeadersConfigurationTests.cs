@@ -30,7 +30,9 @@ public sealed class ForwardedHeadersConfigurationTests
         ForwardedHeadersOptions options = BuildOptions(values);
 
         options.ForwardedHeaders.ShouldBe(
-            ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+            ForwardedHeaders.XForwardedFor |
+            ForwardedHeaders.XForwardedProto |
+            ForwardedHeaders.XForwardedHost);
         options.ForwardLimit.ShouldBe(1);
         options.KnownProxies.Single().ToString().ShouldBe("10.0.0.10");
     }

@@ -10,4 +10,5 @@ public sealed record UpdateMaterialCommand(
     MaterialKind MaterialKind,
     TrackingType TrackingType,
     bool HasExpiry,
-    string? Attributes) : ICommand;
+    string? Attributes,
+    int ExpectedCatalogVersion) : ICommand;

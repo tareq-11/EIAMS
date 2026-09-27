@@ -10,4 +10,4 @@ public sealed record UploadDocumentAttachmentCommand(
     string OriginalFilename,
     string MimeType,
     long ContentLength,
-    int ExpectedRowVersion) : ICommand<Guid>;
+    int ExpectedRowVersion) : ICommand<AttachmentMutationResponse>;

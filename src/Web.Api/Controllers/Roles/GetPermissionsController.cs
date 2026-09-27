@@ -20,7 +20,7 @@ public sealed class GetPermissionsController(
     [ProducesResponseType<ApiResponse<IReadOnlyList<PermissionResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid roleId,
+        [FromRoute] Guid roleId,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

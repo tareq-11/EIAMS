@@ -54,13 +54,13 @@ public sealed class M9DatabaseGuardTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task CustodyTrigger_Should_RejectUnsupportedExternalHolder()
+    public async Task CustodyTrigger_Should_RejectUnknownHolderDiscriminator()
     {
         // Arrange
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var custodyId = Guid.NewGuid();
-        const string externalType = "External";
+        const string unknownType = "UnknownParty";
         const string operationalKind = "Operational";
         const string activeStatus = "Active";
 
@@ -72,7 +72,7 @@ public sealed class M9DatabaseGuardTests : BaseIntegrationTest
                     (id, asset_id, holder_type, holder_id, custody_kind, issue_document_id,
                      status, from_utc, row_version, created_at_utc)
                 VALUES
-                    ({custodyId}, {Guid.NewGuid()}, {externalType}, {Guid.NewGuid()}, {operationalKind},
+                    ({custodyId}, {Guid.NewGuid()}, {unknownType}, {Guid.NewGuid()}, {operationalKind},
                      {Guid.NewGuid()}, {activeStatus}, {DateTime.UtcNow}, {1}, {DateTime.UtcNow})
                 """));
 
@@ -80,6 +80,31 @@ public sealed class M9DatabaseGuardTests : BaseIntegrationTest
         exception.SqlState.ShouldBe(PostgresErrorCodes.CheckViolation);
         exception.ConstraintName.ShouldBe("trg_validate_custody_holder");
         (await context.Custodies.AnyAsync(item => item.Id == custodyId)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task TrackedMaterialUnitTrigger_Should_RejectMissingHolderTarget()
+    {
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var unitId = Guid.NewGuid();
+        const string employeeType = "Employee";
+        const string personalKind = "Personal";
+        const string issuedStatus = "Issued";
+
+        PostgresException exception = await Should.ThrowAsync<PostgresException>(() =>
+            context.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO public.tracked_material_units
+                    (id, material_id, serial_number, warehouse_id, holder_type, holder_id,
+                     custody_kind, issue_document_id, status, from_utc, row_version, created_at_utc)
+                VALUES
+                    ({unitId}, {Guid.NewGuid()}, {"M9-INVALID-HOLDER"}, {Guid.NewGuid()}, {employeeType}, {Guid.NewGuid()},
+                     {personalKind}, {Guid.NewGuid()}, {issuedStatus}, {DateTime.UtcNow}, {1}, {DateTime.UtcNow})
+                """));
+
+        exception.SqlState.ShouldBe(PostgresErrorCodes.CheckViolation);
+        exception.ConstraintName.ShouldBe("trg_validate_tracked_unit_holder");
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using Application.Users;
+using Domain.Common;
 using FluentValidation;
 
 namespace Application.Users.Create;
@@ -6,6 +8,7 @@ internal sealed class CreateUserCommandValidator : AbstractValidator<CreateUserC
 {
     public CreateUserCommandValidator()
     {
+        UserNameRules.Apply(RuleFor(command => command.Username));
         RuleFor(command => command.FirstName).NotEmpty().MaximumLength(200);
         RuleFor(command => command.LastName).NotEmpty().MaximumLength(200);
         RuleFor(command => command.Email)
@@ -22,5 +25,10 @@ internal sealed class CreateUserCommandValidator : AbstractValidator<CreateUserC
             .Matches("[a-z]")
             .Matches("[0-9]")
             .Matches("[^a-zA-Z0-9]");
+        RuleFor(command => command.RoleId).NotEmpty();
+        RuleFor(command => command.ScopeType).IsInEnum();
+        RuleFor(command => command.ScopeId)
+            .NotNull()
+            .When(command => command.ScopeType is UserAssignmentScopeType.Site or UserAssignmentScopeType.Warehouse);
     }
 }

@@ -12,10 +12,6 @@ public static class MaterialFamilyErrors
         "MaterialFamilies.CategoryNotFound",
         $"The material category with the Id = '{categoryId}' was not found");
 
-    public static Error BaseUnitNotFound(Guid baseUnitId) => Error.NotFound(
-        "MaterialFamilies.BaseUnitNotFound",
-        $"The unit of measure with the Id = '{baseUnitId}' was not found");
-
     public static readonly Error Forbidden = Error.Forbidden(
         "MaterialFamilies.Forbidden",
         "You are not authorized to manage material families.");

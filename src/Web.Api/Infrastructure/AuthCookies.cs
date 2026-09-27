@@ -12,7 +12,8 @@ internal static class AuthCookies
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
-            Secure = context.Request.IsHttps,
+            Secure = context.Request.IsHttps ||
+                context.RequestServices.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().IsProduction(),
             SameSite = SameSiteMode.Strict,
             Path = CookiePath,
             Expires = DateTimeOffset.UtcNow.AddDays(expirationDays)
@@ -36,7 +37,8 @@ internal static class AuthCookies
         context.Response.Cookies.Delete(name, new CookieOptions
         {
             HttpOnly = true,
-            Secure = context.Request.IsHttps,
+            Secure = context.Request.IsHttps ||
+                context.RequestServices.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().IsProduction(),
             SameSite = SameSiteMode.Strict,
             Path = path
         });

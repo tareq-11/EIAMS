@@ -1,6 +1,7 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Users.Create;
+using Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;
 using Web.Api.Infrastructure;
@@ -10,15 +11,22 @@ namespace Web.Api.Controllers.Users;
 [ApiController]
 [Route("admin/users")]
 [Tags(Tags.Users)]
-public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid> handler) : ControllerBase
+public sealed class CreateUserController(ICommandHandler<CreateUserCommand, CreateUserResponse> handler) : ControllerBase
 {
-    public sealed record RequestBody(string Email, string FirstName, string LastName, string Password);
-    public sealed record ResponseBody(Guid Id);
+    public sealed record RequestBody(
+        string Email,
+        string Username,
+        string FirstName,
+        string LastName,
+        string Password,
+        [property: JsonRequired] Guid RoleId,
+        [property: JsonRequired] UserAssignmentScopeType ScopeType,
+        Guid? ScopeId);
 
     [HttpPost]
     [RequestSizeLimit(AuthRequestLimits.MaximumBodySize)]
-    [HasPermission(PermissionCodes.Users.Access)]
-    [ProducesResponseType<ApiResponse<ResponseBody>>(StatusCodes.Status201Created)]
+    [HasPermission(PermissionCodes.Users.Manage)]
+    [ProducesResponseType<ApiResponse<CreateUserResponse>>(StatusCodes.Status201Created)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]
@@ -28,13 +36,17 @@ public sealed class CreateUserController(ICommandHandler<CreateUserCommand, Guid
     {
         var command = new CreateUserCommand(
             request.Email,
+            request.Username,
             request.FirstName,
             request.LastName,
-            request.Password);
+            request.Password,
+            request.RoleId,
+            request.ScopeType,
+            request.ScopeId);
 
-        Result<Guid> result = await handler.Handle(command, cancellationToken);
+        Result<CreateUserResponse> result = await handler.Handle(command, cancellationToken);
         return result.Match(
-            id => ApiResults.Created(HttpContext, $"/api/v1/admin/users/{id}", new ResponseBody(id)),
+            value => ApiResults.Created(HttpContext, $"/api/v1/admin/users/{value.Id}", value),
             failure => CustomResults.Problem(failure, HttpContext));
     }
 }

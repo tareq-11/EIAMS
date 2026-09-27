@@ -15,7 +15,7 @@ public sealed class GetDashboardReportController(
     IQueryHandler<GetDashboardReportQuery, DashboardReportResponse> handler) : ControllerBase
 {
     [HttpGet]
-    [HasPermission(PermissionCodes.Inventory.View)]
+    [HasPermission(PermissionCodes.Reports.View)]
     [ProducesResponseType<ApiResponse<DashboardReportResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status403Forbidden)]

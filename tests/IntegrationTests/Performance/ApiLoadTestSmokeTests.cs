@@ -1,5 +1,8 @@
-using System.Net.Http;
-using Microsoft.AspNetCore.Mvc.Testing;
+using Application.Abstractions.Authorization;
+using Domain.Permissions;
+using Domain.Roles;
+using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit.Abstractions;
@@ -19,12 +22,33 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
             ?? throw new InvalidOperationException("Integration test database name is required for synthetic seeding.");
         await SyntheticDatasetSeeder.SeedAsync(suite.DatasetProfile,
             new SyntheticDatasetSeedOptions(factory.DatabaseConnectionString, databaseName, "Test", suite.Seed));
+        await GrantBenchmarkAdministratorPermissionsAsync();
         SyntheticDatasetManifest manifest = SyntheticDatasetManifestFactory.Create(suite.DatasetProfile, suite.Seed);
 
         foreach (ApiLoadTestRunDefinition run in suite.Plan.Runs)
         {
             await ExecuteRunAsync(suite, manifest, run);
         }
+    }
+
+    private async Task GrantBenchmarkAdministratorPermissionsAsync()
+    {
+        // This explicit benchmark probes read and write routes; broaden only its disposable
+        // integration administrator, never the production bootstrap role.
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Guid[] dottedPermissionIds = await context.Permissions.AsNoTracking()
+            .Where(permission => PermissionVocabulary.DottedV1Codes.Contains(permission.Code))
+            .Select(permission => permission.Id)
+            .ToArrayAsync();
+        HashSet<Guid> existingPermissionIds = await context.RolePermissions.AsNoTracking()
+            .Where(grant => grant.RoleId == WellKnownRoles.AdministratorId)
+            .Select(grant => grant.PermissionId)
+            .ToHashSetAsync();
+        context.RolePermissions.AddRange(dottedPermissionIds
+            .Where(permissionId => !existingPermissionIds.Contains(permissionId))
+            .Select(permissionId => RolePermission.Create(WellKnownRoles.AdministratorId, permissionId)));
+        await context.SaveChangesAsync();
     }
 
     private async Task ExecuteRunAsync(ApiLoadSuiteConfiguration suite, SyntheticDatasetManifest manifest, ApiLoadTestRunDefinition run)
@@ -57,7 +81,7 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
             runFactory.UseKestrel(0);
             using HttpClient client = runFactory.CreateClient();
             client.BaseAddress = new Uri(client.BaseAddress!, "api/v1/");
-            using var adapter = new ApiLoadTestHttpAdapter(client, IntegrationTestWebAppFactory.AdministratorEmail,
+            using var adapter = new ApiLoadTestHttpAdapter(client, IntegrationTestWebAppFactory.AdministratorUsername,
                 IntegrationTestWebAppFactory.AdministratorPassword, fixture);
             await adapter.AuthenticateAsync(CancellationToken.None); // setup excluded from phase metrics
             var executor = new ApiLoadTestExecutor(new StopwatchApiLoadTestClock(), adapter.ExecuteAsync,
@@ -65,7 +89,9 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
             execution = await executor.ExecuteAsync(run,
                 async (phase, token) =>
                 {
-                    commandCollector.Reset(); poolCollector.Reset(); adapter.ResetMetrics();
+                    commandCollector.Reset();
+                    poolCollector.Reset();
+                    adapter.ResetMetrics();
                     await lockWaitSampler.StartAsync(token);
                 },
                 async (phase, _) =>
@@ -73,13 +99,19 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
                     PostgreSqlLockWaitSnapshot locks = await lockWaitSampler.StopAsync();
                     if (phase == ApiLoadTestPhaseKind.Warmup)
                     {
-                        warmupSql = commandCollector.Snapshot(); warmupPool = poolCollector.Snapshot(); warmupLocks = locks;
-                        warmupMetrics = adapter.GetMetrics(); warmupScenarios = adapter.GetScenarioMetrics();
+                        warmupSql = commandCollector.Snapshot();
+                        warmupPool = poolCollector.Snapshot();
+                        warmupLocks = locks;
+                        warmupMetrics = adapter.GetMetrics();
+                        warmupScenarios = adapter.GetScenarioMetrics();
                     }
                     else
                     {
-                        measurementSql = commandCollector.Snapshot(); measurementPool = poolCollector.Snapshot(); measurementLocks = locks;
-                        measurementMetrics = adapter.GetMetrics(); measurementScenarios = adapter.GetScenarioMetrics();
+                        measurementSql = commandCollector.Snapshot();
+                        measurementPool = poolCollector.Snapshot();
+                        measurementLocks = locks;
+                        measurementMetrics = adapter.GetMetrics();
+                        measurementScenarios = adapter.GetScenarioMetrics();
                     }
                 });
             EnsureSuccessfulRun(warmupMetrics!, warmupScenarios!, measurementMetrics!, measurementScenarios!, execution);
@@ -112,23 +144,34 @@ public sealed class ApiLoadTestSmokeTests(IntegrationTestWebAppFactory factory, 
         {
             var artifact = new
             {
-                Status = failure is null ? "passed" : "failed", FailureKind = failure?.GetType().Name,
+                Status = failure is null ? "passed" : "failed",
+                FailureKind = failure?.GetType().Name,
                 WorkloadClass = PerformanceWorkloadContracts.NormalExpectedTraffic,
                 ExecutionProfile = new
                 {
-                    SuiteProfile = suite.Profile.ToString(), Run = run.RunNumber, Mode = run.Mode.ToString(), run.ClientConcurrency,
-                    run.ArrivalRatePerSecond, WarmupSeconds = run.Warmup.Duration.TotalSeconds, MeasurementSeconds = run.Measurement.Duration.TotalSeconds,
-                    suite.MaximumStartedRequestsPerPhase, suite.MaximumPostRequestsPerRun
+                    SuiteProfile = suite.Profile.ToString(),
+                    Run = run.RunNumber,
+                    Mode = run.Mode.ToString(),
+                    run.ClientConcurrency,
+                    run.ArrivalRatePerSecond,
+                    WarmupSeconds = run.Warmup.Duration.TotalSeconds,
+                    MeasurementSeconds = run.Measurement.Duration.TotalSeconds,
+                    suite.MaximumStartedRequestsPerPhase,
+                    suite.MaximumPostRequestsPerRun
                 },
                 Dataset = new { Profile = suite.DatasetProfile.ToString(), suite.Seed },
                 WorkerProfile = ApiBenchmarkWorkerProfiles.GetMetadata(suite.WorkerProfile),
                 Environment = new
                 {
-                    Sdk = Environment.Version.ToString(), Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-                    OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription, Transport = "Kestrel loopback HTTP", Tls = "not_used"
+                    Sdk = Environment.Version.ToString(),
+                    Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                    OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+                    Transport = "Kestrel loopback HTTP",
+                    Tls = "not_used"
                 },
                 HttpMetricsByPhase = new { Warmup = warmupMetrics, Measurement = measurementMetrics },
-                ScenarioMetricsByPhase = new { Warmup = warmupScenarios, Measurement = measurementScenarios }, Execution = execution,
+                ScenarioMetricsByPhase = new { Warmup = warmupScenarios, Measurement = measurementScenarios },
+                Execution = execution,
                 SqlCommandDurationByPhase = new { Warmup = warmupSql, Measurement = measurementSql },
                 NpgsqlPoolStateByPhase = new { Warmup = warmupPool, Measurement = measurementPool },
                 PostgreSqlSampledLockWaitOccupancyByPhase = new { Warmup = warmupLocks, Measurement = measurementLocks },
@@ -171,8 +214,12 @@ internal static class ApiLoadSuiteAcceptance
         foreach (ApiLoadTestPhaseExecutionSummary phase in new[] { execution.Warmup, execution.Measurement })
         {
             phase.CancellationRequested.ShouldBeFalse();
-            phase.FaultedCount.ShouldBe(0); phase.CancelledCount.ShouldBe(0); phase.DroppedSaturationCount.ShouldBe(0);
-            phase.InFlightAtSummaryCount.ShouldBe(0); phase.UnfinishedAfterGraceCount.ShouldBe(0); phase.SafetyCapExceeded.ShouldBeFalse();
+            phase.FaultedCount.ShouldBe(0);
+            phase.CancelledCount.ShouldBe(0);
+            phase.DroppedSaturationCount.ShouldBe(0);
+            phase.InFlightAtSummaryCount.ShouldBe(0);
+            phase.UnfinishedAfterGraceCount.ShouldBe(0);
+            phase.SafetyCapExceeded.ShouldBeFalse();
         }
     }
 }

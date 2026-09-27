@@ -1,7 +1,7 @@
 using Application.Abstractions.Authorization;
 using Domain.Common;
-using Domain.Organizations;
 using Domain.OrganizationalUnits;
+using Domain.Organizations;
 using Domain.Permissions;
 using Domain.Roles;
 using Domain.Sites;
@@ -26,7 +26,7 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task OrganizationalUnitScope_ExpandsOnlyDescendants_UsingBoundedQueriesAndOneArrayParameter()
+    public async Task SiteAssignment_ExpandsBusinessResourcesInSite_UsingBoundedQueriesAndOneArrayParameter()
     {
         HierarchySeed seed = await SeedHierarchyAsync(depth: 2, includeOutsideSibling: true);
         SqlCommandCounterInterceptor commandCounter = factory.Services.GetRequiredService<SqlCommandCounterInterceptor>();
@@ -45,19 +45,20 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[0]);
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[1]);
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[2]);
-        scope.WarehouseIds.ShouldNotContain(seed.OutsideWarehouseId!.Value);
+        scope.WarehouseIds.ShouldContain(seed.OutsideWarehouseId!.Value);
 
-        // Cold authorization is version + grants + recursive descendants + warehouses: no per-level query.
-        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(4);
+        // Cold authorization is version + policy marker + grants + recursive descendants + warehouses:
+        // no per-level query.
+        commandCounter.CommandCount.ShouldBeLessThanOrEqualTo(5);
         IReadOnlyList<string> commands = commandCounter.GetCommandTexts();
-        commands.Count(command => command.Contains("WITH RECURSIVE", StringComparison.OrdinalIgnoreCase)).ShouldBe(1);
-        commands.Any(command => command.Contains("= ANY", StringComparison.OrdinalIgnoreCase)).ShouldBeTrue();
+        // Site assignment is already bounded by SiteId; recursive SQL is only needed
+        // for the removed OrganizationalUnit user-assignment scope.
+        commands.Count(command => command.Contains("WITH RECURSIVE", StringComparison.OrdinalIgnoreCase)).ShouldBe(0);
     }
 
     [Theory]
     [InlineData(ScopeType.Enterprise)]
     [InlineData(ScopeType.Site)]
-    [InlineData(ScopeType.OrganizationalUnit)]
     [InlineData(ScopeType.Warehouse)]
     public async Task WarehousePermissionScope_ExpandsEachSingleAssignmentWithoutCrossScopeLeakage(ScopeType scopeType)
     {
@@ -89,14 +90,7 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[0]);
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[1]);
         scope.WarehouseIds.ShouldContain(seed.ScopedWarehouseIds[2]);
-        if (scopeType == ScopeType.OrganizationalUnit)
-        {
-            scope.WarehouseIds.ShouldNotContain(seed.OutsideWarehouseId!.Value);
-        }
-        else
-        {
-            scope.WarehouseIds.ShouldContain(seed.OutsideWarehouseId!.Value);
-        }
+        scope.WarehouseIds.ShouldContain(seed.OutsideWarehouseId!.Value);
     }
 
     [Fact]
@@ -126,10 +120,10 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
             timeout.Token);
 
         scope.HasEnterpriseAccess.ShouldBeFalse();
-        scope.OrganizationalUnitIds.Count.ShouldBe(2);
+        scope.OrganizationalUnitIds.Count.ShouldBe(3);
         scope.OrganizationalUnitIds.ShouldContain(seed.ScopedUnitIds[0]);
         scope.OrganizationalUnitIds.ShouldContain(seed.ScopedUnitIds[1]);
-        scope.OrganizationalUnitIds.ShouldNotContain(seed.OutsideUnitId!.Value);
+        scope.OrganizationalUnitIds.ShouldContain(seed.OutsideUnitId!.Value);
     }
 
     [Fact]
@@ -147,9 +141,9 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
             PermissionCodes.OrganizationalUnits.View,
             CancellationToken.None);
 
-        scope.OrganizationalUnitIds.Count.ShouldBe(65); // root plus 64 descendants.
+        scope.OrganizationalUnitIds.Count.ShouldBe(66); // site root plus 65 descendants.
         scope.OrganizationalUnitIds.ShouldContain(seed.ScopedUnitIds[64]);
-        scope.OrganizationalUnitIds.ShouldNotContain(seed.ScopedUnitIds[65]);
+        scope.OrganizationalUnitIds.ShouldContain(seed.ScopedUnitIds[65]);
     }
 
     [Fact]
@@ -170,7 +164,7 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
     private async Task<HierarchySeed> SeedHierarchyAsync(
         int depth,
         bool includeOutsideSibling,
-        ScopeType scopeType = ScopeType.OrganizationalUnit)
+        ScopeType scopeType = ScopeType.Site)
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -217,15 +211,15 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
         {
             ScopeType.Enterprise => null,
             ScopeType.Site => site.Id,
-            ScopeType.OrganizationalUnit => scopedUnits[0].Id,
             ScopeType.Warehouse => scopedWarehouses[0].Id,
             _ => throw new ArgumentOutOfRangeException(nameof(scopeType), scopeType, null)
         };
         context.AddRange(
             user,
             role,
-            RolePermission.Create(roleId, WellKnownPermissions.WarehousesViewId),
-            RolePermission.Create(roleId, WellKnownPermissions.OrganizationalUnitsViewId),
+            RoleAllowedScopeType.Create(roleId, scopeType),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId),
+            RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationViewId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
         await context.SaveChangesAsync(CancellationToken.None);
 

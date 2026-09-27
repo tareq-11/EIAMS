@@ -67,6 +67,7 @@ internal sealed class UpdateUserCommandHandler(
         }
 
         string email = User.NormalizeEmail(command.Email);
+        string username = User.NormalizeUsername(command.Username);
         bool emailInUse = await context.Users.AnyAsync(
             item => item.Id != command.UserId && item.Email == email,
             cancellationToken);
@@ -76,8 +77,13 @@ internal sealed class UpdateUserCommandHandler(
             return Result.Failure(UserErrors.EmailNotUnique);
         }
 
+        if (await context.Users.AnyAsync(item => item.Id != command.UserId && item.Username == username, cancellationToken))
+        {
+            return Result.Failure(UserErrors.UsernameNotUnique);
+        }
+
         bool becomingSuspended = user.Status != UserStatus.Suspended && command.Status == UserStatus.Suspended;
-        user.UpdateProfile(email, command.FirstName, command.LastName);
+        user.UpdateProfile(email, username, command.FirstName, command.LastName);
         user.SetStatus(command.Status);
 
         if (becomingSuspended)

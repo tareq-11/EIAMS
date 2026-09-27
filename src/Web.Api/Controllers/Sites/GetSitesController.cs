@@ -20,8 +20,8 @@ public sealed class GetSitesController(IQueryHandler<GetSitesQuery, PagedResult<
     [ProducesResponseType<ApiResponse<IReadOnlyList<SiteResponse>>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status400BadRequest)]
     public async Task<IResult> Handle(
-        Guid? organizationId,
-        Status? status,
+        [FromQuery] Guid? organizationId,
+        [FromQuery] Status? status,
         [FromQuery] PaginationQueryParameters pagination,
         CancellationToken cancellationToken)
     {

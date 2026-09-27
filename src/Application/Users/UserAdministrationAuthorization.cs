@@ -14,7 +14,7 @@ internal static class UserAdministrationAuthorization
     {
         bool hasPermission = await scopeAuthorizationService.HasPermissionAsync(
             actorUserId,
-            PermissionCodes.Users.Access,
+            PermissionCodes.Users.Manage,
             cancellationToken);
 
         UserAuthorizationAssignment? assignment = await scopeAuthorizationService.GetUserAssignmentAsync(

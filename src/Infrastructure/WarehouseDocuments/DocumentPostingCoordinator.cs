@@ -4,6 +4,7 @@ using Application.Abstractions.Data;
 using Application.Abstractions.InventoryCounts;
 using Application.Abstractions.Idempotency;
 using Application.Abstractions.Ledger;
+using Application.Abstractions.Materials;
 using Application.Abstractions.Posting;
 using Application.DocumentLines;
 using Domain.Common;
@@ -23,6 +24,7 @@ internal sealed class DocumentPostingCoordinator(
     IDocumentLock documentLock,
     IDocumentPostingScopeResolver postingScopeResolver,
     IWarehouseOperationLock warehouseOperationLock,
+    IMaterialOperationLock materialLock,
     IInventoryFreezePolicyService freezePolicyService,
     IIdempotencyService idempotencyService,
     IInventoryLedgerWriter ledgerWriter,
@@ -148,13 +150,15 @@ internal sealed class DocumentPostingCoordinator(
         }
 
         await warehouseOperationLock.AcquireAsync(scopesResult.Value, cancellationToken);
-        InventoryFreezeEvaluation freezeEvaluation = await freezePolicyService.EvaluateAsync(
-            scopesResult.Value,
+
+        // Posting interprets the live catalog for every line, so lock the same material rows a
+        // classification edit locks before validating. A submitted document already counts as
+        // operational use, so a concurrent classification edit is refused either way; the lock makes
+        // that ordering explicit instead of relying on the editor having observed this document's
+        // state, and it also serializes two posts that read a different catalog revision.
+        await materialLock.AcquireAsync(
+            lines.Select(line => line.MaterialId).Distinct(),
             cancellationToken);
-        if (freezeEvaluation.BlockingError is not null)
-        {
-            return Result.Failure<PostingOutcome>(freezeEvaluation.BlockingError);
-        }
 
         Result linesValidationResult = await DocumentLineSubmissionValidator.ValidateAsync(
             context,
@@ -211,6 +215,19 @@ internal sealed class DocumentPostingCoordinator(
             {
                 return Result.Failure<PostingOutcome>(sideEffectsValidationResult.Error);
             }
+        }
+
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<Guid>> affectedMaterialsByWarehouse = plan.Movements
+            .GroupBy(movement => movement.WarehouseId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyCollection<Guid>)group.Select(movement => movement.MaterialId).Distinct().ToArray());
+        InventoryFreezeEvaluation freezeEvaluation = await freezePolicyService.EvaluateExactAsync(
+            affectedMaterialsByWarehouse,
+            cancellationToken);
+        if (freezeEvaluation.BlockingError is not null)
+        {
+            return Result.Failure<PostingOutcome>(freezeEvaluation.BlockingError);
         }
 
         Result ledgerResult = await ledgerWriter.AppendAsync(plan.Movements, postedBy, postedAtUtc, cancellationToken);

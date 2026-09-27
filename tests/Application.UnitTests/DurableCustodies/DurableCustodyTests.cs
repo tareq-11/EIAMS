@@ -1,4 +1,5 @@
 using Domain.Common;
+using Domain.DurableCustodies;
 using Domain.DurableCustodyAllocations;
 using Domain.TrackedMaterialUnits;
 using SharedKernel;
@@ -7,6 +8,22 @@ namespace Application.UnitTests.DurableCustodies;
 
 public sealed class DurableCustodyTests
 {
+    [Theory]
+    [InlineData(CustodySubjectType.TrackedUnit, DurableCustodyAction.Issued)]
+    [InlineData(CustodySubjectType.MaterialQuantity, DurableCustodyAction.Transferred)]
+    public void DurableCustodyHistory_Should_KeepSubjectAndActionTyped(
+        CustodySubjectType subjectType,
+        DurableCustodyAction action)
+    {
+        var history = DurableCustodyHistory.Record(
+            Guid.NewGuid(), subjectType, Guid.NewGuid(), action,
+            null, null, PartyType.Site, Guid.NewGuid(), 1m, Guid.NewGuid(),
+            DateTime.UtcNow, Guid.NewGuid());
+
+        history.SubjectType.ShouldBe(subjectType);
+        history.Action.ShouldBe(action);
+    }
+
     [Fact]
     public void DurableCustodyAllocation_Open_Should_Succeed_WithValidInputs()
     {

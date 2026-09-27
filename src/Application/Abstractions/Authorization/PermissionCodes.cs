@@ -9,119 +9,128 @@ public static class PermissionCodes
 {
     public static class Users
     {
-        public const string Access = "users:access";
+        public const string Access = "admin.user.view";
+        public const string Manage = "admin.user.manage";
     }
 
     public static class Organizations
     {
-        public const string View = "organizations:view";
-        public const string Manage = "organizations:manage";
+        public const string View = "organization.view";
+        public const string Manage = "organization.manage";
     }
 
     public static class Sites
     {
-        public const string View = "sites:view";
-        public const string Manage = "sites:manage";
+        public const string View = "organization.view";
+        public const string Manage = "organization.manage";
     }
 
     public static class OrganizationalUnits
     {
-        public const string View = "org-units:view";
-        public const string Manage = "org-units:manage";
+        public const string View = "organization.view";
+        public const string Manage = "organization.manage";
     }
 
     public static class Employees
     {
-        public const string View = "employees:view";
-        public const string Manage = "employees:manage";
+        public const string View = "organization.view";
+        public const string Manage = "organization.manage";
     }
 
     public static class Roles
     {
-        public const string View = "roles:view";
-        public const string Manage = "roles:manage";
+        public const string View = "admin.role.view";
+        public const string Manage = "admin.role.manage";
     }
 
     public static class UnitsOfMeasure
     {
-        public const string View = "units-of-measure:view";
-        public const string Manage = "units-of-measure:manage";
+        public const string View = "catalog.view";
+        public const string Manage = "catalog.manage";
     }
 
     public static class MaterialDomains
     {
-        public const string Manage = "material-domains:manage";
+        public const string Manage = "catalog.manage";
     }
 
     public static class MaterialCategories
     {
-        public const string Manage = "material-categories:manage";
+        public const string Manage = "catalog.manage";
     }
 
     public static class MaterialFamilies
     {
-        public const string Manage = "material-families:manage";
+        public const string Manage = "catalog.manage";
     }
 
     public static class Materials
     {
-        public const string View = "materials:view";
-        public const string Manage = "materials:manage";
+        public const string View = "catalog.view";
+        public const string Manage = "catalog.manage";
     }
 
     public static class Warehouses
     {
-        public const string View = "warehouses:view";
-        public const string Manage = "warehouses:manage";
+        public const string View = "warehouse.view";
+        public const string Manage = "warehouse.manage";
     }
 
     public static class Inventory
     {
-        public const string View = "inventory:view";
+        public const string View = "inventory.view";
     }
 
     public static class Assets
     {
-        public const string View = "assets:view";
+        public const string View = "asset.view";
     }
 
     public static class Custodies
     {
-        public const string View = "custody:view";
-        public const string Manage = "custody:manage";
+        public const string View = "asset.view";
+        public const string Manage = "custody.assign";
     }
 
     public static class WarehouseCapabilities
     {
-        public const string Manage = "warehouse-capabilities:manage";
+        public const string Manage = "warehouse.manage";
     }
 
     public static class WarehouseMaterialSettings
     {
-        public const string Manage = "warehouse-material-settings:manage";
+        public const string Manage = "warehouse.manage";
     }
 
     public static class WarehouseDocuments
     {
-        public const string View = "warehouse-documents:view";
-        public const string Create = "warehouse-documents:create";
-        public const string Edit = "warehouse-documents:edit";
-        public const string Submit = "warehouse-documents:submit";
-        public const string Cancel = "warehouse-documents:cancel";
-        public const string Review = "warehouse-documents:review";
-        public const string Reverse = "warehouse-documents:reverse";
+        public const string View = "document.view";
+        public const string Create = "document.create";
+        public const string Edit = "document.update";
+        public const string Submit = "document.submit";
+        public const string Cancel = "document.cancel";
+        public const string Reverse = "document.reverse";
+        public const string Post = "document.post";
+        public const string Reject = "document.reject";
+        public const string Revise = "document.revise";
     }
 
     public static class InventoryCounts
     {
-        public const string View = "inventory-counts:view";
-        public const string Plan = "inventory-counts:plan";
-        public const string EnterActual = "inventory-counts:enter-actual";
-        public const string Review = "inventory-counts:review";
+        public const string View = "count.view";
+        public const string Plan = "count.plan";
+        public const string EnterActual = "count.enter";
+        public const string Complete = "count.complete";
+        public const string Close = "count.close";
     }
 
     public static class AuditLogs
     {
-        public const string View = "audit-logs:view";
+        public const string View = "audit.view";
+    }
+
+    public static class Reports
+    {
+        public const string View = "report.view";
     }
 }

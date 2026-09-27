@@ -60,14 +60,14 @@ internal sealed class GetWarehouseDocumentPolicyQueryHandler(
         bool canEdit = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Edit, cancellationToken);
         bool canSubmit = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Submit, cancellationToken);
         bool canCancel = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Cancel, cancellationToken);
-        bool canReview = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Review, cancellationToken);
-        bool canCreate = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Create, cancellationToken);
+        bool canPost = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Post, cancellationToken);
+        bool canReject = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Reject, cancellationToken);
         bool canReverse = await HasPermissionAsync(document, PermissionCodes.WarehouseDocuments.Reverse, cancellationToken);
 
         AddSimpleAction(actions, Edit, document.DocumentStatus == DocumentStatus.Draft, canEdit);
         AddSimpleAction(actions, UploadAttachment, document.DocumentStatus == DocumentStatus.Draft, canEdit);
         AddSimpleAction(actions, DeleteAttachment, document.DocumentStatus == DocumentStatus.Draft, canEdit, confirmation: true);
-        AddSimpleAction(actions, Reject, document.DocumentStatus == DocumentStatus.Submitted, canReview, confirmation: true, reasonRequired: true);
+        AddSimpleAction(actions, Reject, document.DocumentStatus == DocumentStatus.Submitted, canReject, confirmation: true, reasonRequired: true);
         AddSimpleAction(actions, Revise, document.DocumentStatus == DocumentStatus.Rejected, canEdit, reasonRequired: true);
         AddSimpleAction(
             actions,
@@ -116,7 +116,7 @@ internal sealed class GetWarehouseDocumentPolicyQueryHandler(
                 cancellationToken);
 
         bool postCandidate = document.DocumentStatus == DocumentStatus.Submitted &&
-                             canReview &&
+                             canPost &&
                              (document.ReversalOfDocumentId is null || canReverse);
         if (postCandidate)
         {
@@ -130,8 +130,8 @@ internal sealed class GetWarehouseDocumentPolicyQueryHandler(
         bool reverseCandidate = document.DocumentStatus == DocumentStatus.Posted &&
                                 document.ReversalOfDocumentId is null &&
                                 !reversalAlreadyExists &&
-                                canCreate && canReverse;
-        AddSimpleAction(actions, Reverse, reverseCandidate, permissionSatisfied: canCreate && canReverse, confirmation: true, reasonRequired: true);
+                                canReverse;
+        AddSimpleAction(actions, Reverse, reverseCandidate, permissionSatisfied: canReverse, confirmation: true, reasonRequired: true);
 
         return new WarehouseDocumentPolicyResponse(
             document.Id,
@@ -183,7 +183,7 @@ internal sealed class GetWarehouseDocumentPolicyQueryHandler(
         {
             bool authorized = await scopeAuthorizationService.HasPermissionInScopeAsync(
                 userContext.UserId,
-                PermissionCodes.WarehouseDocuments.Review,
+                PermissionCodes.WarehouseDocuments.Post,
                 ScopeType.Warehouse,
                 warehouseId,
                 cancellationToken);
@@ -212,7 +212,7 @@ internal sealed class GetWarehouseDocumentPolicyQueryHandler(
             }
         }
 
-        InventoryFreezeEvaluation freeze = await freezePolicyService.EvaluateAsync(scopeResult.Value, cancellationToken);
+        InventoryFreezeEvaluation freeze = await freezePolicyService.EvaluateProvisionalAsync(scopeResult.Value, cancellationToken);
         if (freeze.BlockingError is not null)
         {
             AddBlocker(blockers, Post, freeze.BlockingError);

@@ -9,7 +9,10 @@ internal sealed class GrantUserRoleScopeCommandValidator : AbstractValidator<Gra
     {
         RuleFor(c => c.UserId).NotEmpty();
         RuleFor(c => c.RoleId).NotEmpty();
-        RuleFor(c => c.ScopeType).IsInEnum();
+        RuleFor(c => c.ScopeType)
+            .IsInEnum()
+            .Must(UserAssignmentScopeTypes.IsAllowed)
+            .WithMessage("OrganizationalUnit is not an allowed user assignment scope.");
 
         RuleFor(c => c.ScopeId)
             .Null()
@@ -19,6 +22,6 @@ internal sealed class GrantUserRoleScopeCommandValidator : AbstractValidator<Gra
         RuleFor(c => c.ScopeId)
             .NotNull()
             .When(c => c.ScopeType != ScopeType.Enterprise)
-            .WithMessage("A scope id is required for Site, OrganizationalUnit, and Warehouse assignments.");
+            .WithMessage("A scope id is required for Site and Warehouse assignments.");
     }
 }

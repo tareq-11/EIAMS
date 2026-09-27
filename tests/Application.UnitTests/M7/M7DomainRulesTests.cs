@@ -61,6 +61,32 @@ public sealed class M7DomainRulesTests
         count.Status.ShouldBe(InventoryCountStatus.Planned);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InventoryCount_Should_AbortPlannedOrInProgress_AndRemainTerminal(bool startFirst)
+    {
+        DateTime plannedAt = DateTime.UtcNow;
+        InventoryCount count = InventoryCount.Plan(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            InventoryCountType.Surprise, InventoryCountScopeType.EntireWarehouse,
+            null, FreezePolicy.HardFreeze, plannedAt).Value;
+        if (startFirst)
+        {
+            count.Start(plannedAt.AddMinutes(1)).IsSuccess.ShouldBeTrue();
+        }
+
+        Result result = count.Abort(plannedAt.AddMinutes(2));
+
+        result.IsSuccess.ShouldBeTrue();
+        count.Status.ShouldBe(InventoryCountStatus.Aborted);
+        count.AbortedAtUtc.ShouldBe(plannedAt.AddMinutes(2));
+        count.RowVersion.ShouldBe(startFirst ? 3 : 2);
+        count.Start(plannedAt.AddMinutes(3)).IsFailure.ShouldBeTrue();
+        count.Close(plannedAt.AddMinutes(3)).IsFailure.ShouldBeTrue();
+        count.Abort(plannedAt.AddMinutes(3)).IsFailure.ShouldBeTrue();
+        count.Status.ShouldBe(InventoryCountStatus.Aborted);
+    }
+
     [Fact]
     public void InventoryCountLine_Should_ComputeSignedDifference()
     {
