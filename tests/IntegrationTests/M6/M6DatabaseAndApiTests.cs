@@ -673,7 +673,7 @@ public sealed class M6DatabaseAndApiTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"M6 role {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"M6 role {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),

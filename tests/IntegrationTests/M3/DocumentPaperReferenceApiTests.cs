@@ -138,7 +138,7 @@ public sealed class DocumentPaperReferenceApiTests : BaseIntegrationTest
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var roleId = Guid.NewGuid();
-        dbContext.Roles.Add(Domain.Roles.Role.Create(roleId, $"M3 editor {roleId:N}", null));
+        dbContext.Roles.Add(Domain.Roles.Role.Create(roleId, $"M3 editor {roleId:N}", "دور اختباري", null));
         dbContext.RoleAllowedScopeTypes.Add(Domain.Roles.RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         dbContext.RolePermissions.AddRange(
             Domain.Roles.RolePermission.Create(roleId, Domain.Permissions.WellKnownDottedPermissions.DocumentUpdateId),

@@ -115,12 +115,13 @@ public sealed class IdentityAndOrganizationRulesTests
     [Fact]
     public void Role_UpdateDetails_Should_RaiseUpdatedEvent()
     {
-        var role = Role.Create(Guid.NewGuid(), "Reader", "Can read");
+        var role = Role.Create(Guid.NewGuid(), "Reader", "قارئ", "Can read");
         role.ClearDomainEvents();
 
-        role.UpdateDetails("Manager", "Can manage");
+        role.UpdateDetails("Manager", "مدير", "Can manage");
 
         role.Name.ShouldBe("Manager");
+        role.NameAr.ShouldBe("مدير");
         role.Description.ShouldBe("Can manage");
         role.DomainEvents.ShouldContain(domainEvent => domainEvent is RoleUpdatedDomainEvent);
     }

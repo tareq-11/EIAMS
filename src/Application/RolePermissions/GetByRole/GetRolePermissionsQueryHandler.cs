@@ -27,6 +27,8 @@ internal sealed class GetRolePermissionsQueryHandler(IApplicationDbContext conte
                 {
                     Id = permission.Id,
                     Code = permission.Code,
+                    NameAr = permission.NameAr,
+                    DescriptionAr = permission.DescriptionAr,
                     Description = permission.Description
                 })
             .OrderBy(p => p.Code)

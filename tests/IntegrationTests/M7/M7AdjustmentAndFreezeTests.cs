@@ -796,7 +796,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"M7 count planner {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"M7 count planner {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.CountPlanId));
         await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
@@ -847,7 +847,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"M7 freeze viewer {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"M7 freeze viewer {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.CountViewId),
@@ -867,7 +867,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"M7 reversal {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"M7 reversal {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
@@ -883,7 +883,7 @@ public sealed class M7AdjustmentAndFreezeTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"M7 adjustment {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"M7 adjustment {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),

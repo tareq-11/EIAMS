@@ -443,7 +443,7 @@ public sealed class DurableCustodyIntegrationTests : BaseIntegrationTest
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var roleId = Guid.NewGuid();
-        dbContext.Roles.Add(Role.Create(roleId, $"Durable custody {roleId:N}", null));
+        dbContext.Roles.Add(Role.Create(roleId, $"Durable custody {roleId:N}", "دور اختباري", null));
         dbContext.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         dbContext.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.AssetViewId),

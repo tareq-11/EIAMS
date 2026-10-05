@@ -324,7 +324,7 @@ public sealed class AuthorizationCacheIntegrationTests
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         context.AddRange(
             User.Create(userId, $"authorization-{userId:N}@example.com", "Authorization", "User", "hash"),
-            Role.Create(roleId, $"Authorization role {roleId:N}", null),
+            Role.Create(roleId, $"Authorization role {roleId:N}", "دور اختباري", null),
             RoleAllowedScopeType.Create(roleId, scopeType),
             RolePermission.Create(roleId, permissionId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));

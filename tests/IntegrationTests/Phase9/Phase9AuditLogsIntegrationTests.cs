@@ -248,7 +248,7 @@ public sealed class Phase9AuditLogsIntegrationTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"Audit admin {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"Audit admin {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.AuditViewId));
         await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
@@ -309,7 +309,7 @@ public sealed class Phase9AuditLogsIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"WarehouseAuditViewer-{roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"WarehouseAuditViewer-{roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.AuditViewId));
 

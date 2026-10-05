@@ -1,6 +1,7 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
 using Application.Abstractions.Pagination;
+using Application.Roles;
 using Application.Roles.GetList;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;

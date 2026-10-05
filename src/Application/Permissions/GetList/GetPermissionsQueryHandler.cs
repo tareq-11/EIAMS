@@ -17,7 +17,14 @@ internal sealed class GetPermissionsQueryHandler(IApplicationDbContext context)
             {
                 Id = p.Id,
                 Code = p.Code,
-                Description = p.Description
+                NameAr = p.NameAr,
+                DescriptionAr = p.DescriptionAr,
+                Description = p.Description,
+                AllowedScopeTypes = context.PermissionAllowedScopeTypes
+                    .Where(item => item.PermissionId == p.Id)
+                    .OrderBy(item => item.ScopeType)
+                    .Select(item => item.ScopeType.ToString())
+                    .ToArray()
             })
             .OrderBy(p => p.Code)
             .ThenBy(p => p.Id)

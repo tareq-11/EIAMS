@@ -65,8 +65,8 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         var user = User.Create(userId, "ahmad@example.com", "Ahmad", "Ali", "hash");
         user.LinkToEmployee(employeeId);
 
-        var role = Role.Create(roleId, "DirectorateManager", "Manager of Directorate");
-        var permission = Permission.Create(permissionId, "document.create", "Create warehouse documents");
+        var role = Role.Create(roleId, "DirectorateManager", "مدير المديرية", "Manager of Directorate");
+        var permission = Permission.Create(permissionId, "document.create", "إنشاء السند", "إنشاء مسودات سندات المستودعات وإضافة بنودها.", "Create warehouse documents");
         var rolePermission = RolePermission.Create(roleId, permissionId);
         var assignment = UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Site, siteId);
 
@@ -97,6 +97,7 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
 
         result.Value.Role.Id.ShouldBe(roleId);
         result.Value.Role.Name.ShouldBe("DirectorateManager");
+        result.Value.Role.NameAr.ShouldBe("مدير المديرية");
 
         result.Value.Scope.ScopeType.ShouldBe(UserAssignmentScopeType.Site);
         result.Value.Scope.ScopeId.ShouldBe(siteId);
@@ -113,7 +114,7 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         var roleId = Guid.NewGuid();
         var unitId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "legacy-user@example.com", "Legacy", "Scope", "hash"));
-        context.Roles.Add(Role.Create(roleId, "Legacy role", null));
+        context.Roles.Add(Role.Create(roleId, "Legacy role", "دور قديم", null));
         context.OrganizationalUnits.Add(OrganizationalUnit.Create(
             unitId, Guid.NewGuid(), null, "Legacy unit", "Directorate"));
         context.UserRoleScopes.Add(UserRoleScope.Create(
@@ -138,8 +139,8 @@ public sealed class GetUserSessionQueryHandlerTests : BaseHandlerTest
         var secondRoleId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "multiple@example.com", "Multiple", "Assignments", "hash"));
         context.Roles.AddRange(
-            Role.Create(firstRoleId, "First role", null),
-            Role.Create(secondRoleId, "Second role", null));
+            Role.Create(firstRoleId, "First role", "الدور الأول", null),
+            Role.Create(secondRoleId, "Second role", "الدور الثاني", null));
         context.UserRoleScopes.AddRange(
             UserRoleScope.Create(Guid.NewGuid(), userId, firstRoleId, ScopeType.Enterprise, null),
             UserRoleScope.Create(Guid.NewGuid(), userId, secondRoleId, ScopeType.Enterprise, null));

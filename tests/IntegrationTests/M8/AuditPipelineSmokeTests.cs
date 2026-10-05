@@ -71,7 +71,7 @@ public sealed class AuditPipelineSmokeTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"Role-{roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"Role-{roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationManageId));
         await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();

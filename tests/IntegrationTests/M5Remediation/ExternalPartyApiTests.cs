@@ -33,7 +33,7 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
             var roleId = Guid.NewGuid();
-            context.Roles.Add(Role.Create(roleId, $"External party admin {roleId:N}", null));
+            context.Roles.Add(Role.Create(roleId, $"External party admin {roleId:N}", "دور اختباري", null));
             context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
             context.RolePermissions.AddRange(
                 RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationManageId),
@@ -145,7 +145,7 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
             var roleId = Guid.NewGuid();
-            context.Roles.Add(Role.Create(roleId, $"Counterpart reader {roleId:N}", null));
+            context.Roles.Add(Role.Create(roleId, $"Counterpart reader {roleId:N}", "دور اختباري", null));
             context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
             context.RolePermissions.AddRange(
                 RolePermission.Create(roleId, WellKnownDottedPermissions.OrganizationManageId),
@@ -206,7 +206,7 @@ public sealed class ExternalPartyApiTests : BaseIntegrationTest
             context.Employees.Add(foreignEmployee);
 
             var roleId = Guid.NewGuid();
-            context.Roles.Add(Role.Create(roleId, $"Scoped counterpart reader {roleId:N}", null));
+            context.Roles.Add(Role.Create(roleId, $"Scoped counterpart reader {roleId:N}", "دور اختباري", null));
             context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Site));
             context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentViewId));
             context.UserRoleScopes.Add(UserRoleScope.Create(

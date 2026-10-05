@@ -206,7 +206,7 @@ public sealed class HierarchicalScopeQueryIntegrationTests : BaseIntegrationTest
         var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
         var user = User.Create(userId, $"scope-{suffix:N}@test.com", "Scope", "User", "hash");
-        var role = Role.Create(roleId, $"Scope role {suffix:N}", "Scope query integration role");
+        var role = Role.Create(roleId, $"Scope role {suffix:N}", "دور اختباري", "Scope query integration role");
         Guid? scopeId = scopeType switch
         {
             ScopeType.Enterprise => null,

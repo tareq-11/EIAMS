@@ -148,6 +148,8 @@ public sealed class MigrationSafetyTests(IntegrationTestWebAppFactory factory)
             await context.Database.MigrateAsync("20260922012720_AddUserRoleScopeRowVersion");
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync();
+            // This test migrates from the schema that predates the cutover, where permissions has no
+            // name_ar column yet, so the insert must use the pre-cutover column list.
             await ExecuteAsync(connection, $"INSERT INTO public.permissions (id, code, description) VALUES ('{permissionId}', 'unknown.permission', 'test-only unknown permission')");
 
             await Should.ThrowAsync<PostgresException>(() => context.Database.MigrateAsync());

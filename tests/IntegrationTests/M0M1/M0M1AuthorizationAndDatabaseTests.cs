@@ -180,7 +180,7 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
     }
 
     [Fact]
-    public async Task RolePermissionEndpoints_Should_AssignThenRemovePermission()
+    public async Task RolePermissionEndpoint_Should_ReplaceTheCompleteSetInOneCall()
     {
         // Arrange
         (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
@@ -190,28 +190,96 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
             null,
             WellKnownDottedPermissions.AdminRoleManageId,
             WellKnownDottedPermissions.AdminRoleViewId);
-        Guid roleId = await SeedRoleAsync();
+        Guid roleId = await SeedAssignableRoleAsync();
         Authenticate(tokens.AccessToken);
 
-        // Act
-        HttpResponseMessage assignResponse = await HttpClient.PostAsJsonAsync(
+        // Act: replace with a set that both grants and revokes, since replacement is wholesale.
+        HttpResponseMessage replaceResponse = await HttpClient.PutAsJsonAsync(
             $"admin/roles/{roleId}/permissions",
-            new { permissionId = WellKnownDottedPermissions.CatalogManageId });
+            new
+            {
+                permissionCodes = RolePermissionReplacementCodes.CatalogViewAndManage,
+                expectedRowVersion = 1
+            });
         HttpResponseMessage listedResponse = await HttpClient.GetAsync($"admin/roles/{roleId}/permissions");
-        HttpResponseMessage removeResponse = await HttpClient.DeleteAsync(
-            $"admin/roles/{roleId}/permissions/{WellKnownDottedPermissions.CatalogManageId}");
 
         // Assert
-        assignResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        replaceResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         listedResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         PagedApiEnvelope<PermissionItem>? listed = await listedResponse.Content.ReadFromJsonAsync<PagedApiEnvelope<PermissionItem>>();
         listed.ShouldNotBeNull();
-        listed.Data.ShouldContain(item => item.Id == WellKnownDottedPermissions.CatalogManageId);
-        removeResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        listed.Data.ShouldContain(item => item.Code == "catalog.manage");
+        listed.Data.ShouldContain(item => item.Code == "catalog.view");
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await context.RolePermissions.AnyAsync(item =>
-            item.RoleId == roleId && item.PermissionId == WellKnownDottedPermissions.CatalogManageId)).ShouldBeFalse();
+            item.RoleId == roleId && item.PermissionId == WellKnownDottedPermissions.CatalogManageId)).ShouldBeTrue();
+        (await context.RolePermissions.AnyAsync(item =>
+            item.RoleId == roleId && item.PermissionId == WellKnownDottedPermissions.CatalogViewId)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task RolePermissionEndpoint_Should_RevokeEverything_WhenReplacedWithAnEmptySet()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantPermissionsAsync(
+            userId,
+            ScopeType.Enterprise,
+            null,
+            WellKnownDottedPermissions.AdminRoleManageId,
+            WellKnownDottedPermissions.AdminRoleViewId);
+        Guid roleId = await SeedAssignableRoleAsync();
+        Authenticate(tokens.AccessToken);
+
+        (await HttpClient.PutAsJsonAsync(
+            $"admin/roles/{roleId}/permissions",
+            new
+            {
+                permissionCodes = RolePermissionReplacementCodes.CatalogManage,
+                expectedRowVersion = 1
+            })).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Act
+        HttpResponseMessage clearedResponse = await HttpClient.PutAsJsonAsync(
+            $"admin/roles/{roleId}/permissions",
+            new { permissionCodes = RolePermissionReplacementCodes.None, expectedRowVersion = 2 });
+
+        // Assert
+        clearedResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.RolePermissions.AnyAsync(item => item.RoleId == roleId)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task RetiredOneAtATimeRolePermissionEndpoints_Should_NotBeExposed()
+    {
+        // RESOLUTION-027 S23 retires the public one-at-a-time assign/remove endpoints in favour of
+        // wholesale replacement. A 405 (route exists, verb not allowed) or 404 both satisfy this; what
+        // must not happen is a successful grant or revoke through the old surface.
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantPermissionsAsync(
+            userId,
+            ScopeType.Enterprise,
+            null,
+            WellKnownDottedPermissions.AdminRoleManageId,
+            WellKnownDottedPermissions.AdminRoleViewId);
+        Guid roleId = await SeedAssignableRoleAsync();
+        Authenticate(tokens.AccessToken);
+
+        HttpResponseMessage assignResponse = await HttpClient.PostAsJsonAsync(
+            $"admin/roles/{roleId}/permissions",
+            new { permissionId = WellKnownDottedPermissions.CatalogManageId });
+        HttpResponseMessage removeResponse = await HttpClient.DeleteAsync(
+            $"admin/roles/{roleId}/permissions/{WellKnownDottedPermissions.CatalogManageId}");
+
+        assignResponse.IsSuccessStatusCode.ShouldBeFalse();
+        removeResponse.IsSuccessStatusCode.ShouldBeFalse();
+
+        await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await context.RolePermissions.AnyAsync(item => item.RoleId == roleId)).ShouldBeFalse();
     }
 
     [Fact]
@@ -428,17 +496,25 @@ public sealed class M0M1AuthorizationAndDatabaseTests : BaseIntegrationTest
         await context.SaveChangesAsync();
     }
 
-    private async Task<Guid> SeedRoleAsync()
+private static async Task<Guid> SeedRoleAsync(ApplicationDbContext context)
+    {
+        var roleId = Guid.NewGuid();
+        context.Roles.Add(Role.Create(roleId, $"Role-{roleId:N}", "دور اختباري", null));
+        await context.SaveChangesAsync();
+        return roleId;
+    }
+
+    /// <summary>
+    /// A role that can actually be assigned somewhere. A role with no allowed scope types can never
+    /// make any permission effective, so wholesale replacement correctly refuses every code for it;
+    /// permission-replacement fixtures therefore need an assignable role.
+    /// </summary>
+    private async Task<Guid> SeedAssignableRoleAsync()
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        return await SeedRoleAsync(context);
-    }
-
-    private static async Task<Guid> SeedRoleAsync(ApplicationDbContext context)
-    {
-        var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"Role-{roleId:N}", null));
+        Guid roleId = await SeedRoleAsync(context);
+        context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         await context.SaveChangesAsync();
         return roleId;
     }

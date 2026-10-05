@@ -378,7 +378,7 @@ public sealed class SecurityHardeningTests : BaseIntegrationTest
             .Select(user => user.Id)
             .ToListAsync();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"Production fixture no-permission role {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"Production fixture no-permission role {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         List<Guid> assignmentIds = [];
         foreach (Guid userId in userIds)

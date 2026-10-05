@@ -47,7 +47,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         var roleId = Guid.NewGuid();
         context.AddRange(
             User.Create(userId, $"boundary-{userId:N}@example.test", "Boundary", "Scope", "hash"),
-            Role.Create(roleId, $"Valid {scopeType} boundary role", null),
+            Role.Create(roleId, $"Valid {scopeType} boundary role", "دور اختباري", null),
             RoleAllowedScopeType.Create(roleId, scopeType),
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, scopeType, scopeId));
@@ -75,10 +75,10 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         string dormantCode = $"document.revise.{userId:N}";
         context.AddRange(
             User.Create(userId, $"session-{userId:N}@example.test", "Session", "Parity", "hash"),
-            Role.Create(roleId, "Session parity role", null),
+            Role.Create(roleId, "Session parity role", "دور توافق الجلسة", null),
             RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse),
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),
-            Permission.Create(dormantPermissionId, dormantCode, "Dormant dotted permission"),
+            Permission.Create(dormantPermissionId, dormantCode, "صلاحية خاملة", "صلاحية نقطية خاملة للاختبار.", "Dormant dotted permission"),
             RolePermission.Create(roleId, dormantPermissionId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, Guid.NewGuid()));
         await context.SaveChangesAsync();
@@ -106,7 +106,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         var invalidRoleId = Guid.NewGuid();
         context.AddRange(
             User.Create(invalidUserId, $"invalid-{invalidUserId:N}@example.test", "Invalid", "Scope", "hash"),
-            Role.Create(invalidRoleId, "Invalid scope role", null),
+            Role.Create(invalidRoleId, "Invalid scope role", "دور نطاق غير صالح", null),
             RolePermission.Create(invalidRoleId, WellKnownDottedPermissions.DocumentCreateId),
             UserRoleScope.Create(Guid.NewGuid(), invalidUserId, invalidRoleId, ScopeType.Warehouse, Guid.NewGuid()));
         await context.SaveChangesAsync();
@@ -120,10 +120,10 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         string dormantCode = $"document.revise.{validUserId:N}";
         context.AddRange(
             User.Create(validUserId, $"valid-{validUserId:N}@example.test", "Valid", "Scope", "hash"),
-            Role.Create(validRoleId, "Valid warehouse role", null),
+            Role.Create(validRoleId, "Valid warehouse role", "دور مستودع صالح", null),
             RoleAllowedScopeType.Create(validRoleId, ScopeType.Warehouse),
             RolePermission.Create(validRoleId, WellKnownDottedPermissions.DocumentCreateId),
-            Permission.Create(dormantPermissionId, dormantCode, "Dormant dotted permission"),
+            Permission.Create(dormantPermissionId, dormantCode, "صلاحية خاملة", "صلاحية نقطية خاملة للاختبار.", "Dormant dotted permission"),
             RolePermission.Create(validRoleId, dormantPermissionId),
             UserRoleScope.Create(Guid.NewGuid(), validUserId, validRoleId, ScopeType.Warehouse, Guid.NewGuid()));
         await context.SaveChangesAsync();
@@ -347,7 +347,7 @@ public sealed class PermissionMappingPhase1IntegrationTests(IntegrationTestWebAp
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         IEffectivePermissionService effective = scope.ServiceProvider.GetRequiredService<IEffectivePermissionService>();
         var roleId = Guid.NewGuid();
-        context.Add(Role.Create(roleId, $"Dotted revise boundary {roleId:N}", null));
+        context.Add(Role.Create(roleId, $"Dotted revise boundary {roleId:N}", "دور اختباري", null));
         context.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentReviseId));
         ScopeType[] assignmentScopes = [ScopeType.Enterprise, ScopeType.Site, ScopeType.Warehouse];
         foreach (ScopeType scopeType in assignmentScopes)

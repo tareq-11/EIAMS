@@ -456,6 +456,10 @@ public static class DependencyInjection
         services.AddScoped<IScopeAuthorizationService>(provider => provider.GetRequiredService<ScopeAuthorizationService>());
         services.AddScoped<IEffectivePermissionService>(provider => provider.GetRequiredService<ScopeAuthorizationService>());
 
+        // Role administration resolves submitted permission codes against the marker-selected
+        // catalog, so grant validation stays consistent with how effective permissions are computed.
+        services.AddScoped<IActivePermissionCatalog, DbActivePermissionCatalog>();
+
         services.AddHostedService<BootstrapAdministratorSeeder>();
         services.AddHostedService<AuthorizationPolicyStartupValidator>();
 

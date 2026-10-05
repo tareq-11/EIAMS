@@ -38,7 +38,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         var userId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "Test", "User", "hash"));
-        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "مدير النظام", "Admin role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
         await context.SaveChangesAsync();
 
@@ -63,8 +63,8 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         var userId = Guid.NewGuid();
         var replacementRoleId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "versioned@example.com", "Versioned", "User", "hash"));
-        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
-        context.Roles.Add(Role.Create(replacementRoleId, "Viewer", "Viewer role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "مدير النظام", "Admin role"));
+        context.Roles.Add(Role.Create(replacementRoleId, "Viewer", "مشاهد", "Viewer role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(replacementRoleId, ScopeType.Enterprise));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, WellKnownRoles.AdministratorId, ScopeType.Enterprise, null));
@@ -97,8 +97,8 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         var orgUnitId = Guid.NewGuid();
 
         context.Users.Add(User.Create(userId, "user@example.com", "Test", "User", "hash"));
-        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
-        context.Roles.Add(Role.Create(WellKnownRoles.WarehouseManagerId, "Manager", "Manager role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "مدير النظام", "Admin role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.WarehouseManagerId, "Manager", "مدير المستودع", "Manager role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseManagerId, ScopeType.Warehouse));
         context.Sites.Add(Site.Create(siteId, Guid.NewGuid(), "Main Site", "SITE1", null));
@@ -141,8 +141,8 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         var userId = Guid.NewGuid();
         var replacementRoleId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "last-admin@example.com", "Last", "Administrator", "hash"));
-        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "Admin role"));
-        context.Roles.Add(Role.Create(replacementRoleId, "Viewer", "Replacement role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.AdministratorId, "Admin", "مدير النظام", "Admin role"));
+        context.Roles.Add(Role.Create(replacementRoleId, "Viewer", "مشاهد", "Replacement role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.AdministratorId, ScopeType.Enterprise));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(replacementRoleId, ScopeType.Enterprise));
         context.UserRoleScopes.Add(UserRoleScope.Create(
@@ -168,7 +168,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         var userId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "Test", "User", "hash"));
-        context.Roles.Add(Role.Create(WellKnownRoles.WarehouseKeeperId, "Keeper", "Keeper role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.WarehouseKeeperId, "Keeper", "أمين المستودع", "Keeper role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse));
         await context.SaveChangesAsync();
 
@@ -188,7 +188,7 @@ public sealed class ReplaceUserRoleScopeCommandHandlerTests : BaseHandlerTest
         var userId = Guid.NewGuid();
         var missingWarehouseId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "Test", "User", "hash"));
-        context.Roles.Add(Role.Create(WellKnownRoles.WarehouseKeeperId, "Keeper", "Keeper role"));
+        context.Roles.Add(Role.Create(WellKnownRoles.WarehouseKeeperId, "Keeper", "أمين المستودع", "Keeper role"));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(WellKnownRoles.WarehouseKeeperId, ScopeType.Warehouse));
         await context.SaveChangesAsync();
 

@@ -78,6 +78,7 @@ public sealed class ApiResponseContractTests(IntegrationTestWebAppFactory factor
             """
             {
               "name": "Warehouse Manager",
+              "nameAr": "مدير المستودع",
               "description": "Manages one warehouse",
               "allowedScopeTypes": "Warehouse"
             }

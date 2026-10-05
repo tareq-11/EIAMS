@@ -225,7 +225,7 @@ public sealed class RefreshTokenCommandHandlerTests : BaseHandlerTest
         Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse> handler = Substitute.For<Application.Abstractions.Messaging.IQueryHandler<GetUserSessionQuery, UserSessionResponse>>();
         handler.Handle(Arg.Any<GetUserSessionQuery>(), Arg.Any<CancellationToken>()).Returns(new UserSessionResponse(
             new UserSessionUserDto(Guid.NewGuid(), "test@example.com", "Test", "User", null, null),
-            new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
+            new UserSessionRoleDto(Guid.NewGuid(), "Administrator", "مدير النظام", null),
             new UserSessionScopeDto(Domain.Common.UserAssignmentScopeType.Enterprise, null, "Enterprise"), []));
         return handler;
     }

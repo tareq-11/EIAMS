@@ -112,7 +112,7 @@ public sealed class M5TransferAuthorizationTests : BaseIntegrationTest
     {
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var role = Role.Create(Guid.NewGuid(), $"M5 transfer review {Guid.NewGuid():N}", null);
+        var role = Role.Create(Guid.NewGuid(), $"M5 transfer review {Guid.NewGuid():N}", "دور اختباري", null);
         dbContext.Roles.Add(role);
         dbContext.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(role.Id, ScopeType.Warehouse));
         dbContext.RolePermissions.Add(RolePermission.Create(role.Id, WellKnownDottedPermissions.DocumentPostId));

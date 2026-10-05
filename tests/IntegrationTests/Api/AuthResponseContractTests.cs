@@ -24,7 +24,7 @@ public sealed class AuthResponseContractTests
         string token = $"eyJhbGciOiJub25lIn0.{payload}.signature";
         var session = new UserSessionResponse(
             new UserSessionUserDto(Guid.NewGuid(), "user@example.com", "Test", "User", null, null),
-            new UserSessionRoleDto(Guid.NewGuid(), "Administrator", null),
+            new UserSessionRoleDto(Guid.NewGuid(), "Administrator", "مدير النظام", null),
             new UserSessionScopeDto(UserAssignmentScopeType.Enterprise, null, "Enterprise"), []);
         var transport = new RefreshTokenTransport();
 

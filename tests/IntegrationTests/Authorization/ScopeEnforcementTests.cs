@@ -75,7 +75,7 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var role = Role.Create(roleId, $"Read only {roleId:N}", "Warehouse read-only integration role");
+            var role = Role.Create(roleId, $"Read only {roleId:N}", "دور اختباري", "Warehouse read-only integration role");
             var warehouseGrant = RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId);
             var inventoryGrant = RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId);
             var allowedScope = RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse);
@@ -166,7 +166,7 @@ public sealed class ScopeEnforcementTests : BaseIntegrationTest
         await using (AsyncServiceScope scope = factory.Services.CreateAsyncScope())
         {
             ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var role = Role.Create(roleId, $"Roles reader {roleId:N}", "Roles read-only integration role");
+            var role = Role.Create(roleId, $"Roles reader {roleId:N}", "دور اختباري", "Roles read-only integration role");
             var permission = RolePermission.Create(roleId, WellKnownDottedPermissions.AdminRoleViewId);
             var allowedScope = RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise);
             var userScope = UserRoleScope.Create(

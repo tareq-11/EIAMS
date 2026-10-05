@@ -427,3 +427,23 @@ contracts/*
 !contracts/baseline/phase0-baseline.json
 !contracts/openapi/
 !contracts/openapi/README.md
+
+# ---------------------------------------------------------------------------
+# Local secrets. Never commit these; supply values via user-secrets or env.
+#   dotnet user-secrets --project src/Web.Api set "ConnectionStrings:Database" "..."
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# IDE metadata. dataSources.xml embeds a live database password.
+.idea/
+.vs/
+.vscode/
+
+# Local certificate/key material
+*.pem
+*.key
+secrets*.json
+secrets*.yaml

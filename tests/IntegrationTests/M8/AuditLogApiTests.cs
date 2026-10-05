@@ -177,7 +177,7 @@ public sealed class AuditLogApiTests : BaseIntegrationTest
         var roleId = Guid.NewGuid();
 
         await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
-        context.Roles.Add(Role.Create(roleId, $"AuditViewer-{roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"AuditViewer-{roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.AuditViewId));
         context.UserRoleScopes.Add(UserRoleScope.Create(

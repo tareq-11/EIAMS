@@ -304,7 +304,7 @@ public sealed class CompleteWarehouseDocumentDraftApiTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"Complete draft role {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"Complete draft role {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId));
         if (includeEditAndView)

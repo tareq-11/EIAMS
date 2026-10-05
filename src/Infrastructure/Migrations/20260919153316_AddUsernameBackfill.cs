@@ -10,52 +10,41 @@ namespace Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "username",
-                schema: "public",
-                table: "users",
-                type: "character varying(100)",
-                maxLength: 100,
-                nullable: true);
+            // 20260918224519_AddUserUsername already introduced public.users.username with the
+            // email-derived backfill, the NOT NULL tightening, and the unique index. This migration
+            // was merged alongside it and must therefore be idempotent: on a database that applied
+            // both, the column, constraint, and index already exist and only the second backfill
+            // pass has any effect.
+            migrationBuilder.Sql("""
+                ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username character varying(100);
+                """);
 
+            // Only rows that AddUserUsername could not derive a name for are backfilled here.
             migrationBuilder.Sql("""
                 UPDATE public.users
                 SET username = 'legacy-' || replace(id::text, '-', '')
                 WHERE username IS NULL OR btrim(username) = '';
                 """);
 
-            migrationBuilder.AlterColumn<string>(
-                name: "username",
-                schema: "public",
-                table: "users",
-                type: "character varying(100)",
-                maxLength: 100,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "character varying(100)",
-                oldMaxLength: 100,
-                oldNullable: true);
+            migrationBuilder.Sql("""
+                ALTER TABLE public.users ALTER COLUMN username SET NOT NULL;
+                """);
 
-            migrationBuilder.CreateIndex(
-                name: "ix_users_username",
-                schema: "public",
-                table: "users",
-                column: "username",
-                unique: true);
+            migrationBuilder.Sql("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON public.users (username);
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "ix_users_username",
-                schema: "public",
-                table: "users");
+            migrationBuilder.Sql("""
+                DROP INDEX IF EXISTS public.ix_users_username;
+                """);
 
-            migrationBuilder.DropColumn(
-                name: "username",
-                schema: "public",
-                table: "users");
+            migrationBuilder.Sql("""
+                ALTER TABLE public.users DROP COLUMN IF EXISTS username;
+                """);
         }
     }
 }

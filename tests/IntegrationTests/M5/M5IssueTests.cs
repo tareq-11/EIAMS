@@ -417,7 +417,7 @@ public sealed class M5IssueTests : BaseIntegrationTest
             .Where(scopeItem => scopeItem.UserId == userId)
             .ToListAsync();
         context.UserRoleScopes.RemoveRange(existingGrants);
-        context.Roles.Add(Role.Create(roleId, $"M5 Issue {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"M5 Issue {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentCreateId),

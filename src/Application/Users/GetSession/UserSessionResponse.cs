@@ -26,9 +26,16 @@ public sealed record UserSessionUserDto(
 public sealed record UserSessionRoleDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("nameAr")] string NameAr,
     [property: JsonPropertyName("description")] string? Description);
 
 public sealed record UserSessionScopeDto(
+    // This response is emitted through Results.Ok, which serializes with the minimal-API
+    // JsonOptions rather than the MVC options the global JsonStringEnumConverter is
+    // registered on. Without an explicit converter the enum was written as its numeric
+    // value (0) while the OpenAPI document declares {"type":"string","enum":["Enterprise",
+    // "Site","Warehouse"]}, so generated clients expected a string and received a number.
+    [property: JsonConverter(typeof(JsonStringEnumConverter<UserAssignmentScopeType>))]
     [property: JsonPropertyName("scopeType")] UserAssignmentScopeType ScopeType,
     [property: JsonPropertyName("scopeId")] Guid? ScopeId,
     [property: JsonPropertyName("scopeName")] string ScopeName);

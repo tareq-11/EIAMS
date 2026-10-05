@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
+using Application.Roles;
 using Domain.Roles;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -17,7 +18,18 @@ internal sealed class GetRoleByIdQueryHandler(IApplicationDbContext context)
             {
                 Id = r.Id,
                 Name = r.Name,
+                NameAr = r.NameAr,
                 Description = r.Description,
+                RowVersion = r.RowVersion,
+                PermissionCodes = context.RolePermissions
+                    .Where(item => item.RoleId == r.Id)
+                    .Join(
+                        context.Permissions,
+                        item => item.PermissionId,
+                        permission => permission.Id,
+                        (_, permission) => permission.Code)
+                    .OrderBy(code => code)
+                    .ToArray(),
                 AllowedScopeTypes = context.RoleAllowedScopeTypes
                     .Where(item => item.RoleId == r.Id)
                     .OrderBy(item => item.ScopeType)

@@ -207,7 +207,7 @@ internal static class SyntheticDatasetSeeder
         await SaveBoundedAsync(
             context.Roles,
             manifest.RoleIds.Select((roleId, index) =>
-                Role.Create(roleId, $"SYN_{prefix}_{index + 1}", "Synthetic benchmark role.")),
+                Role.Create(roleId, $"SYN_{prefix}_{index + 1}", "دور اختباري", "Synthetic benchmark role.")),
             context,
             batchSize,
             cancellationToken);

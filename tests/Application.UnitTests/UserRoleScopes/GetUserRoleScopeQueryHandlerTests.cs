@@ -33,7 +33,7 @@ public sealed class GetUserRoleScopeQueryHandlerTests : BaseHandlerTest
         await using TestDbContext context = CreateDbContext();
         var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
-        var role = Role.Create(roleId, "Administrator", "System Admin");
+        var role = Role.Create(roleId, "Administrator", "مدير النظام", "System Admin");
         var user = User.Create(userId, "admin@example.com", "Admin", "User", "hash");
         var assignment = UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Enterprise, null);
 
@@ -61,7 +61,7 @@ public sealed class GetUserRoleScopeQueryHandlerTests : BaseHandlerTest
         var targetUserId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
 
-        var role = Role.Create(roleId, "Staff", "Staff");
+        var role = Role.Create(roleId, "Staff", "موظف", "Staff");
         var user = User.Create(targetUserId, "target@example.com", "Target", "User", "hash");
         var assignment = UserRoleScope.Create(Guid.NewGuid(), targetUserId, roleId, ScopeType.Enterprise, null);
 

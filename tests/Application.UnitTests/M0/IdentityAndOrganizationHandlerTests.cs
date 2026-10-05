@@ -173,7 +173,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         var roleId = Guid.NewGuid();
         var missingSiteId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "User", "One", "hash"));
-        context.Roles.Add(Role.Create(roleId, "Reader", null));
+        context.Roles.Add(Role.Create(roleId, "Reader", "قارئ", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Site));
         await context.SaveChangesAsync();
 
@@ -194,7 +194,7 @@ public sealed class IdentityAndOrganizationHandlerTests : BaseHandlerTest
         var userId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
         context.Users.Add(User.Create(userId, "user@example.com", "User", "One", "hash"));
-        context.Roles.Add(Role.Create(roleId, "Reader", null));
+        context.Roles.Add(Role.Create(roleId, "Reader", "قارئ", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Enterprise));
         await context.SaveChangesAsync();
 

@@ -683,7 +683,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"InventoryViewer-{roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"InventoryViewer-{roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
@@ -713,7 +713,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"InventoryOnly-{roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"InventoryOnly-{roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.AddRange(
             RolePermission.Create(roleId, WellKnownDottedPermissions.InventoryViewId),
@@ -738,7 +738,7 @@ public sealed class InventoryReadApiIntegrationTests : BaseIntegrationTest
         await using AsyncServiceScope scope = factory.Services.CreateAsyncScope();
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"NoInventoryAccess-{roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"NoInventoryAccess-{roleId:N}", "دور اختباري", null));
 
         UserRoleScope? assignment = await context.UserRoleScopes.SingleOrDefaultAsync(item => item.UserId == userId);
         if (assignment is null)

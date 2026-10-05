@@ -85,7 +85,7 @@ public sealed class RbacV1PreflightSafetyTests
         var unknownPermissionId = Guid.NewGuid();
         try
         {
-            await ExecuteSqlAsync(connection, $"INSERT INTO public.permissions (id, code, description) VALUES ('{legacyPermissionId}', 'users:access', 'preflight test legacy'), ('{unknownPermissionId}', 'unknown.preflight', 'preflight test unknown')");
+            await ExecuteSqlAsync(connection, $"INSERT INTO public.permissions (id, code, name_ar, description) VALUES ('{legacyPermissionId}', 'users:access', 'صلاحية قديمة', 'preflight test legacy'), ('{unknownPermissionId}', 'unknown.preflight', 'صلاحية غير معروفة', 'preflight test unknown')");
             await ExecuteSqlAsync(connection, $"INSERT INTO public.role_permissions (permission_id, role_id) VALUES ('{legacyPermissionId}', '00000000-0000-0000-0000-000000000001')");
             await ExecuteSqlAsync(connection, $"INSERT INTO public.permission_allowed_scope_types (permission_id, scope_type) VALUES ('{legacyPermissionId}', 'Enterprise')");
 

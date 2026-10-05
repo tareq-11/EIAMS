@@ -30,6 +30,13 @@ public sealed class BootstrapAndAdministratorSafetyTests
     private static readonly string RecoveryToken = Convert.ToBase64String(new byte[32]);
     private static readonly string[] EnterpriseScope = ["Enterprise"];
 
+    /// <summary>
+    /// <c>admin.role.manage</c> is valid at Enterprise, so it is a grant the Administrator role would
+    /// accept if it were not immutable. Used to prove the replacement surface refuses the role itself,
+    /// not because of anything about this particular code.
+    /// </summary>
+    private static readonly string[] AdminRoleManageCode = ["admin.role.manage"];
+
     [Fact]
     public async Task Recovery_Should_CreateOnlyOneNewAdministrator_RevokeRefreshTokens_AndAuditTheOperation()
     {
@@ -250,13 +257,22 @@ public sealed class BootstrapAndAdministratorSafetyTests
                 new
                 {
                     name = "Changed Administrator",
+                    nameAr = "مدير النظام المعدل",
                     description = "unsafe",
+                    expectedRowVersion = 1,
                     allowedScopeTypes = EnterpriseScope
                 })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
-            (await client.DeleteAsync(
-                $"admin/roles/{WellKnownRoles.AdministratorId}/permissions/{WellKnownDottedPermissions.AdminRoleManageId}"))
-                .StatusCode.ShouldBe(HttpStatusCode.Conflict);
+            // The one-at-a-time DELETE grant endpoint is retired (RESOLUTION-027 S23). The protection it
+            // asserted is now expressed through the surviving wholesale replacement surface, which must
+            // still refuse the built-in Administrator role.
+            (await client.PutAsJsonAsync(
+                $"admin/roles/{WellKnownRoles.AdministratorId}/permissions",
+                new
+                {
+                    permissionCodes = AdminRoleManageCode,
+                    expectedRowVersion = 1
+                })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
         }
         finally
         {

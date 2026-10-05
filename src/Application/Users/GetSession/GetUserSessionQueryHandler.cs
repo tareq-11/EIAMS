@@ -106,6 +106,7 @@ internal sealed class GetUserSessionQueryHandler(
             new UserSessionRoleDto(
                 assignment.Role.Id,
                 assignment.Role.Name,
+                assignment.Role.NameAr,
                 assignment.Role.Description),
             new UserSessionScopeDto(
                 assignment.Assignment.ScopeType.ToAssignmentScopeType(),

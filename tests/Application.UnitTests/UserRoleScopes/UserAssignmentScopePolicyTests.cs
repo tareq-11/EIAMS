@@ -34,11 +34,11 @@ public sealed class UserAssignmentScopePolicyTests
             .IsValid;
         replaceValidation.ShouldBeFalse();
         bool createValidation = new CreateRoleCommandValidator().Validate(
-            new CreateRoleCommand("Role", null, [ScopeType.OrganizationalUnit]))
+            new CreateRoleCommand("Role", "دور", null, [], [ScopeType.OrganizationalUnit]))
             .IsValid;
         createValidation.ShouldBeFalse();
         bool updateValidation = new UpdateRoleCommandValidator().Validate(
-            new UpdateRoleCommand(roleId, "Role", null, [ScopeType.OrganizationalUnit]))
+            new UpdateRoleCommand(roleId, "Role", "دور", null, 1, [ScopeType.OrganizationalUnit]))
             .IsValid;
         updateValidation.ShouldBeFalse();
     }

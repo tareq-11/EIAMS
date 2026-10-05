@@ -1,5 +1,6 @@
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Messaging;
+using Application.Roles;
 using Application.Roles.GetById;
 using Microsoft.AspNetCore.Mvc;
 using SharedKernel;

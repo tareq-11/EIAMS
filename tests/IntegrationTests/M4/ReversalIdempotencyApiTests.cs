@@ -81,7 +81,7 @@ public sealed class ReversalIdempotencyApiTests : BaseIntegrationTest
         ApplicationDbContext context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await context.UserRoleScopes.Where(assignment => assignment.UserId == userId).ExecuteDeleteAsync();
         var roleId = Guid.NewGuid();
-        context.Roles.Add(Role.Create(roleId, $"4D reversal {roleId:N}", null));
+        context.Roles.Add(Role.Create(roleId, $"4D reversal {roleId:N}", "دور اختباري", null));
         context.RoleAllowedScopeTypes.Add(RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse));
         context.RolePermissions.Add(RolePermission.Create(roleId, WellKnownDottedPermissions.DocumentReverseId));
         context.UserRoleScopes.Add(UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));

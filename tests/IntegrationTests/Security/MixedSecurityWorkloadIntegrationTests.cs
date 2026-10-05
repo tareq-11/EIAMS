@@ -148,7 +148,7 @@ public sealed class MixedSecurityWorkloadIntegrationTests : BaseIntegrationTest
         var roleId = Guid.NewGuid();
         await context.UserRoleScopes.Where(item => item.UserId == userId).ExecuteDeleteAsync();
         context.AddRange(
-            Role.Create(roleId, $"Mixed workload {roleId:N}", null),
+            Role.Create(roleId, $"Mixed workload {roleId:N}", "دور اختباري", null),
             RoleAllowedScopeType.Create(roleId, ScopeType.Warehouse),
             RolePermission.Create(roleId, WellKnownDottedPermissions.WarehouseViewId),
             UserRoleScope.Create(Guid.NewGuid(), userId, roleId, ScopeType.Warehouse, warehouseId));

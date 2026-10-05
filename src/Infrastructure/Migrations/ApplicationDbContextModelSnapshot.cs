@@ -2476,6 +2476,17 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<string>("DescriptionAr")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description_ar");
+
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name_ar");
+
                     b.HasKey("Id")
                         .HasName("pk_permissions");
 
@@ -2483,410 +2494,243 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_permissions_code");
 
-                    b.ToTable("permissions", "public");
+                    b.ToTable("permissions", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_permissions_name_ar_not_blank", "length(btrim(name_ar)) > 0");
+                        });
 
                     b.HasData(
                         new
                         {
-                            Id = new Guid("00000000-0000-0000-0000-000000000101"),
-                            Code = "users:access",
-                            Description = "Access another user's profile."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000102"),
-                            Code = "organizations:manage",
-                            Description = "Create, update, and change the status of organizations."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000103"),
-                            Code = "sites:manage",
-                            Description = "Create, update, and change the status of sites."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000104"),
-                            Code = "org-units:manage",
-                            Description = "Create, update, and change the status of organizational units."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000105"),
-                            Code = "employees:manage",
-                            Description = "Create, update, and change the status of employees."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000106"),
-                            Code = "roles:manage",
-                            Description = "Manage roles, role permissions, and user role scope grants."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000107"),
-                            Code = "units-of-measure:manage",
-                            Description = "Create and update units of measure."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000108"),
-                            Code = "material-domains:manage",
-                            Description = "Create, update, and change the status of material domains."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000109"),
-                            Code = "material-categories:manage",
-                            Description = "Create, update, and change the status of material categories."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000110"),
-                            Code = "material-families:manage",
-                            Description = "Create, update, and change the status of material families."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000111"),
-                            Code = "materials:manage",
-                            Description = "Create, update, and change the status of materials and their unit conversions."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000112"),
-                            Code = "warehouses:manage",
-                            Description = "Create, update, and change the status of warehouses."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000113"),
-                            Code = "warehouse-capabilities:manage",
-                            Description = "Grant, revoke, and configure the operations of warehouse capabilities."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000114"),
-                            Code = "warehouse-material-settings:manage",
-                            Description = "Create, update, and change the status of warehouse material settings."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000115"),
-                            Code = "warehouse-documents:view",
-                            Description = "View warehouse documents, lines, attachments, and the ledger."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000116"),
-                            Code = "warehouse-documents:create",
-                            Description = "Create warehouse documents."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000117"),
-                            Code = "warehouse-documents:edit",
-                            Description = "Edit a Draft warehouse document: lines, paper reference, and attachments."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000118"),
-                            Code = "warehouse-documents:submit",
-                            Description = "Submit a Draft warehouse document for review."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000119"),
-                            Code = "warehouse-documents:cancel",
-                            Description = "Cancel a warehouse document before it is posted."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000120"),
-                            Code = "warehouse-documents:review",
-                            Description = "Post or reject a submitted warehouse document."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000121"),
-                            Code = "warehouse-documents:reverse",
-                            Description = "Authorize posting a reversal of a posted warehouse document."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000122"),
-                            Code = "inventory-counts:view",
-                            Description = "View warehouse inventory counts and freeze status."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000123"),
-                            Code = "inventory-counts:plan",
-                            Description = "Plan inventory counts and capture snapshots."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000124"),
-                            Code = "inventory-counts:enter-actual",
-                            Description = "Enter actual quantities during inventory counts."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000125"),
-                            Code = "inventory-counts:review",
-                            Description = "Start, complete, explain, and close inventory counts."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000126"),
-                            Code = "audit-logs:view",
-                            Description = "View the immutable audit trail of system activity."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000127"),
-                            Code = "organizations:view",
-                            Description = "View organizations."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000128"),
-                            Code = "sites:view",
-                            Description = "View sites."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000129"),
-                            Code = "org-units:view",
-                            Description = "View organizational units."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000130"),
-                            Code = "employees:view",
-                            Description = "View employees."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000131"),
-                            Code = "roles:view",
-                            Description = "View roles and permissions."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000132"),
-                            Code = "units-of-measure:view",
-                            Description = "View units of measure."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000133"),
-                            Code = "materials:view",
-                            Description = "View the material catalog and unit conversions."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000134"),
-                            Code = "warehouses:view",
-                            Description = "View warehouses, capabilities, and material settings."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000135"),
-                            Code = "inventory:view",
-                            Description = "View inventory balances and stock movements."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000136"),
-                            Code = "assets:view",
-                            Description = "View asset status."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000137"),
-                            Code = "custody:view",
-                            Description = "View custody state and history."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000138"),
-                            Code = "custody:manage",
-                            Description = "Assign and manage asset custody."
-                        },
-                        new
-                        {
                             Id = new Guid("00000000-0000-0000-0000-000000000201"),
                             Code = "asset.view",
-                            Description = "View assets."
+                            Description = "View assets.",
+                            DescriptionAr = "عرض سجل الأصول وحالتها الحالية.",
+                            NameAr = "عرض الأصول"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000202"),
                             Code = "audit.view",
-                            Description = "View audit history."
+                            Description = "View audit history.",
+                            DescriptionAr = "عرض سجلات التدقيق وتفاصيل التغييرات على السجلات.",
+                            NameAr = "عرض سجل التدقيق"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000203"),
                             Code = "custody.assign",
-                            Description = "Assign personal custody."
+                            Description = "Assign personal custody.",
+                            DescriptionAr = "إسناد الأصول إلى حائزها وسحبها منه.",
+                            NameAr = "إسناد الحيازة"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000204"),
                             Code = "organization.view",
-                            Description = "View organization structure."
+                            Description = "View organization structure.",
+                            DescriptionAr = "عرض المنشآت والمواقع التابعة لها.",
+                            NameAr = "عرض المنشآت"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000205"),
                             Code = "organization.manage",
-                            Description = "Manage organization structure."
+                            Description = "Manage organization structure.",
+                            DescriptionAr = "إنشاء المنشآت وتعديل بياناتها وحالتها.",
+                            NameAr = "إدارة المنشآت"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000206"),
                             Code = "admin.role.view",
-                            Description = "View roles and permissions."
+                            Description = "View roles and permissions.",
+                            DescriptionAr = "عرض الأدوار وصلاحياتها دون تعديل.",
+                            NameAr = "عرض الأدوار"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000207"),
                             Code = "admin.role.manage",
-                            Description = "Manage roles and permissions."
+                            Description = "Manage roles and permissions.",
+                            DescriptionAr = "إنشاء الأدوار وتعديل بياناتها واستبدال صلاحياتها.",
+                            NameAr = "إدارة الأدوار"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000208"),
                             Code = "catalog.manage",
-                            Description = "Manage the material catalog."
+                            Description = "Manage the material catalog.",
+                            DescriptionAr = "إدارة النطاقات والفئات والعائلات والمواد ووحدات القياس.",
+                            NameAr = "إدارة الفهرس"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000209"),
                             Code = "catalog.view",
-                            Description = "View the material catalog."
+                            Description = "View the material catalog.",
+                            DescriptionAr = "عرض فهرس المواد والوحدات دون تعديل.",
+                            NameAr = "عرض الفهرس"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000210"),
                             Code = "warehouse.manage",
-                            Description = "Manage warehouses and capabilities."
+                            Description = "Manage warehouses and capabilities.",
+                            DescriptionAr = "إنشاء المستودعات وتعديل بياناتها وقدراتها.",
+                            NameAr = "إدارة المستودعات"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000211"),
                             Code = "warehouse.view",
-                            Description = "View warehouses and settings."
+                            Description = "View warehouses and settings.",
+                            DescriptionAr = "عرض المستودعات وقدراتها وإعدادات المواد فيها.",
+                            NameAr = "عرض المستودعات"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000212"),
                             Code = "inventory.view",
-                            Description = "View inventory."
+                            Description = "View inventory.",
+                            DescriptionAr = "عرض أرصدة المخزون وحركاته.",
+                            NameAr = "عرض المخزون"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000213"),
                             Code = "document.view",
-                            Description = "View warehouse documents."
+                            Description = "View warehouse documents.",
+                            DescriptionAr = "عرض سندات المستودعات وتفاصيلها.",
+                            NameAr = "عرض السندات"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000214"),
                             Code = "document.create",
-                            Description = "Create warehouse documents."
+                            Description = "Create warehouse documents.",
+                            DescriptionAr = "إنشاء مسودات سندات المستودعات وإضافة بنودها.",
+                            NameAr = "إنشاء السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000215"),
                             Code = "document.update",
-                            Description = "Update warehouse documents."
+                            Description = "Update warehouse documents.",
+                            DescriptionAr = "تعديل بيانات السند قبل اعتماده.",
+                            NameAr = "تعديل السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000216"),
                             Code = "document.submit",
-                            Description = "Submit warehouse documents."
+                            Description = "Submit warehouse documents.",
+                            DescriptionAr = "إرسال السند للترحيل بعد اكتماله.",
+                            NameAr = "إرسال السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000217"),
                             Code = "document.post",
-                            Description = "Post warehouse documents."
+                            Description = "Post warehouse documents.",
+                            DescriptionAr = "ترحيل السند وتسجيل أثره على المخزون.",
+                            NameAr = "ترحيل السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000218"),
                             Code = "document.reject",
-                            Description = "Reject warehouse documents."
+                            Description = "Reject warehouse documents.",
+                            DescriptionAr = "رفض السند وإعادته إلى المسودة.",
+                            NameAr = "رفض السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000219"),
                             Code = "document.cancel",
-                            Description = "Cancel warehouse documents."
+                            Description = "Cancel warehouse documents.",
+                            DescriptionAr = "إلغاء السند قبل اعتماده.",
+                            NameAr = "إلغاء السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000220"),
                             Code = "document.reverse",
-                            Description = "Reverse warehouse documents."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000221"),
-                            Code = "count.view",
-                            Description = "View inventory counts."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000222"),
-                            Code = "count.plan",
-                            Description = "Plan inventory counts."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000223"),
-                            Code = "count.enter",
-                            Description = "Enter count actuals."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000224"),
-                            Code = "count.complete",
-                            Description = "Complete inventory counts."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000225"),
-                            Code = "count.close",
-                            Description = "Close inventory counts."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000226"),
-                            Code = "admin.user.view",
-                            Description = "View users."
-                        },
-                        new
-                        {
-                            Id = new Guid("00000000-0000-0000-0000-000000000227"),
-                            Code = "admin.user.manage",
-                            Description = "Manage users."
+                            Description = "Reverse warehouse documents.",
+                            DescriptionAr = "عكس أثر سند تم ترحيله.",
+                            NameAr = "عكس السند"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000228"),
                             Code = "document.revise",
-                            Description = "Revise rejected warehouse documents."
+                            Description = "Revise rejected warehouse documents.",
+                            DescriptionAr = "تعديل السند الذي طُلبت مراجعته.",
+                            NameAr = "مراجعة السند"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000221"),
+                            Code = "count.view",
+                            Description = "View inventory counts.",
+                            DescriptionAr = "عرض الجرد الحالي وجلساته ونتائجه.",
+                            NameAr = "عرض الجرد"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000222"),
+                            Code = "count.plan",
+                            Description = "Plan inventory counts.",
+                            DescriptionAr = "إنشاء جلسة جرد وتحديد نطاقها.",
+                            NameAr = "التخطيط للجرد"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000223"),
+                            Code = "count.enter",
+                            Description = "Enter count actuals.",
+                            DescriptionAr = "إدخال الأعداد الفعلية أثناء الجرد.",
+                            NameAr = "إدخال الجرد"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000224"),
+                            Code = "count.complete",
+                            Description = "Complete inventory counts.",
+                            DescriptionAr = "اعتماد نتائج الجرد بعد إدخال جميع الأعداد الفعلية.",
+                            NameAr = "إتمام الجرد"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000225"),
+                            Code = "count.close",
+                            Description = "Close inventory counts.",
+                            DescriptionAr = "إقفال جلسة الجرد واعتماد نتائجها.",
+                            NameAr = "إقفال الجرد"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000226"),
+                            Code = "admin.user.view",
+                            Description = "View users.",
+                            DescriptionAr = "عرض بيانات المستخدمين وإسنادياتهم دون تعديل.",
+                            NameAr = "عرض المستخدمين"
+                        },
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000227"),
+                            Code = "admin.user.manage",
+                            Description = "Manage users.",
+                            DescriptionAr = "إنشاء المستخدمين وتعديل بياناتهم وإسناد أدوارهم ونطاقاتهم.",
+                            NameAr = "إدارة المستخدمين"
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000229"),
                             Code = "report.view",
-                            Description = "View operational reports."
+                            Description = "View operational reports.",
+                            DescriptionAr = "عرض التقارير ولوحات المؤشرات.",
+                            NameAr = "عرض التقارير"
                         });
                 });
 
@@ -4118,6 +3962,17 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<string>("NameAr")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name_ar");
+
+                    b.Property<int>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("row_version");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at_utc");
@@ -4133,7 +3988,12 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_roles_name");
 
-                    b.ToTable("roles", "public");
+                    b.ToTable("roles", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_roles_name_ar_not_blank", "length(btrim(name_ar)) > 0");
+
+                            t.HasCheckConstraint("ck_roles_row_version_positive", "row_version > 0");
+                        });
 
                     b.HasData(
                         new
@@ -4141,28 +4001,36 @@ namespace Infrastructure.Migrations
                             Id = new Guid("00000000-0000-0000-0000-000000000001"),
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Enterprise structural administration. Created only by explicit startup bootstrap configuration.",
-                            Name = "SYSTEM_ADMIN"
+                            Name = "SYSTEM_ADMIN",
+                            NameAr = "مدير النظام",
+                            RowVersion = 1
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000002"),
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Creates and submits warehouse documents (D-WF-01). Permissions reserved for M3+.",
-                            Name = "WH_KEEPER"
+                            Name = "WH_KEEPER",
+                            NameAr = "أمين المستودع",
+                            RowVersion = 1
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000003"),
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Posts and reverses warehouse documents (D-WF-01). Permissions reserved for M3+.",
-                            Name = "WH_MGR"
+                            Name = "WH_MGR",
+                            NameAr = "مدير المستودع",
+                            RowVersion = 1
                         },
                         new
                         {
                             Id = new Guid("00000000-0000-0000-0000-000000000004"),
                             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Read-only audit and operational reporting role.",
-                            Name = "AUDITOR"
+                            Name = "AUDITOR",
+                            NameAr = "مدقق",
+                            RowVersion = 1
                         });
                 });
 
