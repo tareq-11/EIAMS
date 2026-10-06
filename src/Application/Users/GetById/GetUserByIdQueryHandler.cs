@@ -39,11 +39,13 @@ internal sealed class GetUserByIdQueryHandler(
                     FirstName = account.FirstName,
                     LastName = account.LastName,
                     Email = account.Email,
+                    Username = account.Username,
                     EmployeeId = account.EmployeeId,
                     EmployeeName = employee == null ? null : employee.FullName,
                     Status = account.Status.ToString(),
                     LastLoginUtc = account.LastLoginUtc,
-                    CreatedAtUtc = account.CreatedAtUtc
+                    CreatedAtUtc = account.CreatedAtUtc,
+                    RowVersion = account.RowVersion
                 })
             .SingleOrDefaultAsync(cancellationToken);
 #pragma warning restore IDE0031

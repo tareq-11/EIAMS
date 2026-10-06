@@ -76,6 +76,7 @@ internal sealed class GetUsersQueryHandler(
             .Select(item => new UserAdministrationResponse(
                 item.User.Id,
                 item.User.Email,
+                item.User.Username,
                 item.User.FirstName,
                 item.User.LastName,
                 item.User.EmployeeId,
@@ -83,6 +84,7 @@ internal sealed class GetUsersQueryHandler(
                 item.User.Status.ToString(),
                 item.User.LastLoginUtc,
                 item.User.CreatedAtUtc,
+                item.User.RowVersion,
                 item.Assignment == null ? null : item.Assignment.RoleId,
                 item.Role == null ? null : item.Role.Name,
                 item.Assignment == null ? null : item.Assignment.ScopeType.ToString(),

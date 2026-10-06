@@ -16,6 +16,18 @@ public sealed class User : Entity, IAuditableEntity
     public UserStatus Status { get; private set; }
     public DateTime? LastLoginUtc { get; private set; }
 
+    /// <summary>
+    /// Optimistic-concurrency version of the account aggregate.
+    /// <para>
+    /// Advances on every change to the profile or the status, so a client cannot save
+    /// metadata against a version that predates a suspension (or the reverse). The user
+    /// aggregate previously had no token at all, which made it the one versioned
+    /// aggregate in the system where the last write silently won - the same defect the
+    /// roles and role-scope assignment aggregates had already fixed.
+    /// </para>
+    /// </summary>
+    public int RowVersion { get; private set; } = 1;
+
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? UpdatedAtUtc { get; set; }
     public Guid? CreatedBy { get; set; }
@@ -34,7 +46,8 @@ public sealed class User : Entity, IAuditableEntity
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
             PasswordHash = passwordHash,
-            Status = UserStatus.Active
+            Status = UserStatus.Active,
+            RowVersion = 1
         };
 
         user.Raise(new UserRegisteredDomainEvent(user.Id));
@@ -60,11 +73,13 @@ public sealed class User : Entity, IAuditableEntity
         Username = NormalizeUsername(username);
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
+        RowVersion++;
     }
 
     public void SetStatus(UserStatus status)
     {
         Status = status;
+        RowVersion++;
     }
 
     public void RecordSuccessfulLogin(DateTime occurredAtUtc)

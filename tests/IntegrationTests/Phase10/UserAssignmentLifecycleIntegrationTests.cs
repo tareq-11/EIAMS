@@ -284,7 +284,22 @@ public sealed class UserAssignmentLifecycleIntegrationTests : BaseIntegrationTes
     }
 
     private sealed record CreateUserData(Guid Id, AssignmentData Assignment);
-    private sealed record AssignmentData(Guid Id, Guid RoleId, UserAssignmentScopeType ScopeType, Guid? ScopeId, int RowVersion);
+
+    /// <summary>
+    /// The assignment as it appears on the wire.
+    /// <para>
+    /// <paramref name="ScopeType"/> is a STRING, not the enum: the API serialises
+    /// <c>UserAssignmentScopeType</c> through an explicit
+    /// <c>JsonStringEnumConverter</c> because these responses are emitted via
+    /// <c>Results.Ok</c>, which uses the minimal-API <c>JsonOptions</c> rather than
+    /// the MVC options the global converter is registered on. Reading it as a bare
+    /// enum here deserialised the name "Enterprise" through the default numeric
+    /// <c>EnumConverter</c> and threw, which is what pinned the wire to a number.
+    /// Asserting on the name is also the stronger check: it fails if the converter is
+    /// ever dropped again.
+    /// </para>
+    /// </summary>
+    private sealed record AssignmentData(Guid Id, Guid RoleId, string ScopeType, Guid? ScopeId, int RowVersion);
     private sealed record ErrorData(string Code, JsonElement Details);
     private sealed record ErrorEnvelope(bool Success, ErrorData Error);
 }

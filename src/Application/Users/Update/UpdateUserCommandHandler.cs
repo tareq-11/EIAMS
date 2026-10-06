@@ -2,8 +2,6 @@ using Application.Abstractions.Authentication;
 using Application.Abstractions.Authorization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Messaging;
-using Application.UserRoleScopes;
-using Domain.UserRoleScopes;
 using Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
@@ -15,14 +13,12 @@ internal sealed class UpdateUserCommandHandler(
     IApplicationTransaction transaction,
     IApplicationLock applicationLock,
     IUserContext userContext,
-    IScopeAuthorizationService scopeAuthorizationService,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<UpdateUserCommand>
+    IScopeAuthorizationService scopeAuthorizationService) : ICommandHandler<UpdateUserCommand>
 {
     public Task<Result> Handle(UpdateUserCommand command, CancellationToken cancellationToken) =>
         transaction.ExecuteAsync(
             async ct =>
             {
-                await applicationLock.AcquireAsync(AdministratorAssignmentSafety.LockKey, ct);
                 await applicationLock.AcquireAsync(UserSessionLock.ForUser(command.UserId), ct);
                 return await UpdateAsync(command, ct);
             },
@@ -51,23 +47,15 @@ internal sealed class UpdateUserCommandHandler(
             return Result.Failure(UserErrors.NotFound(command.UserId));
         }
 
-        if (command.Status == UserStatus.Suspended && command.UserId == userContext.UserId)
+        if (user.RowVersion != command.ExpectedRowVersion)
         {
-            return Result.Failure(UserErrors.SelfSuspensionNotAllowed);
-        }
-
-        if (command.Status == UserStatus.Suspended &&
-            user.Status == UserStatus.Active &&
-            await AdministratorAssignmentSafety.IsLastActiveEnterpriseAdministratorAsync(
-                context,
-                user.Id,
-                cancellationToken))
-        {
-            return Result.Failure(UserRoleScopeErrors.CannotRemoveLastEnterpriseAdministrator);
+            return Result.Failure(UserErrors.RowVersionMismatch(
+                command.UserId,
+                command.ExpectedRowVersion,
+                user.RowVersion));
         }
 
         string email = User.NormalizeEmail(command.Email);
-        string username = User.NormalizeUsername(command.Username);
         bool emailInUse = await context.Users.AnyAsync(
             item => item.Id != command.UserId && item.Email == email,
             cancellationToken);
@@ -77,26 +65,9 @@ internal sealed class UpdateUserCommandHandler(
             return Result.Failure(UserErrors.EmailNotUnique);
         }
 
-        if (await context.Users.AnyAsync(item => item.Id != command.UserId && item.Username == username, cancellationToken))
-        {
-            return Result.Failure(UserErrors.UsernameNotUnique);
-        }
-
-        bool becomingSuspended = user.Status != UserStatus.Suspended && command.Status == UserStatus.Suspended;
-        user.UpdateProfile(email, username, command.FirstName, command.LastName);
-        user.SetStatus(command.Status);
-
-        if (becomingSuspended)
-        {
-            List<RefreshToken> activeTokens = await context.RefreshTokens
-                .Where(token => token.UserId == user.Id && token.RevokedOnUtc == null)
-                .ToListAsync(cancellationToken);
-
-            foreach (RefreshToken token in activeTokens)
-            {
-                token.Revoke(dateTimeProvider.UtcNow);
-            }
-        }
+        // `username` is intentionally not assigned here: the login is immutable after
+        // creation, so this operation cannot silently rename an account.
+        user.UpdateProfile(email, user.Username, command.FirstName, command.LastName);
 
         await context.SaveChangesAsync(cancellationToken);
         return Result.Success();

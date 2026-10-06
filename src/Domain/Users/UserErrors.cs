@@ -24,6 +24,22 @@ public static class UserErrors
         "Users.EmailNotUnique",
         "The provided email is not unique");
 
+    /// <summary>
+    /// A stale <c>expectedRowVersion</c>. Reported as a conflict so the client reloads
+    /// the authoritative account and re-applies the change deliberately, rather than
+    /// overwriting a concurrent edit or a suspension.
+    /// </summary>
+    public static Error RowVersionMismatch(Guid userId, int expectedRowVersion, int currentRowVersion) =>
+        Error.Conflict(
+            "Users.RowVersionMismatch",
+            "The user account was modified by another request",
+            new
+            {
+                user_id = userId,
+                expected_row_version = expectedRowVersion,
+                current_row_version = currentRowVersion
+            });
+
     public static readonly Error UsernameNotUnique = Error.Conflict(
         "Users.UsernameNotUnique",
         "The provided username is already in use.");

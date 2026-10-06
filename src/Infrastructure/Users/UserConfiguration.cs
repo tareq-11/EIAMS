@@ -35,6 +35,16 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(u => new { u.Status, u.Email });
 
+        // Concurrent writers are reported instead of silently overwriting each other.
+        // The application handlers additionally compare the client's expected version
+        // and return 409 before the save, so the token is belt and braces.
+        builder.Property(u => u.RowVersion).IsConcurrencyToken();
+
+        builder.ToTable(table =>
+            table.HasCheckConstraint(
+                "ck_users_row_version_positive",
+                "row_version > 0"));
+
         builder.HasOne<Employee>().WithMany().HasForeignKey(u => u.EmployeeId);
     }
 }

@@ -6,6 +6,12 @@ public sealed record UserResponse
 
     public string Email { get; init; }
 
+    /// <summary>
+    /// The account's login identifier. Served on reads for the same reason it is
+    /// served on the directory row: the UI must be able to display it.
+    /// </summary>
+    public string Username { get; init; }
+
     public string FirstName { get; init; }
 
     public string LastName { get; init; }
@@ -19,4 +25,10 @@ public sealed record UserResponse
     public DateTime? LastLoginUtc { get; init; }
 
     public DateTime CreatedAtUtc { get; init; }
+
+    /// <summary>
+    /// Concurrency token to submit as <c>expectedRowVersion</c> on the next write.
+    /// Advances on every profile or status change.
+    /// </summary>
+    public int RowVersion { get; init; }
 }
