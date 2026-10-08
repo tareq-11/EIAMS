@@ -10211,6 +10211,166 @@
         }
       }
     },
+    "/api/v1/admin/users/{userId}/status": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "Users_SetUserStatus_PUT_api_v1_admin_users_userId_status",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.Users.SetUserStatusController-RequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.Users.SetUserStatusController-RequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/Web.Api.Controllers.Users.SetUserStatusController-RequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiResponse\u00601[[Web.Api.Infrastructure.EmptyResponse, Web.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Web.Api.Infrastructure.ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/warehouses/{warehouseId}/capabilities": {
       "get": {
         "tags": [
@@ -19754,7 +19914,9 @@
           "firstName",
           "id",
           "lastName",
-          "status"
+          "rowVersion",
+          "status",
+          "username"
         ],
         "type": "object",
         "properties": {
@@ -19763,6 +19925,9 @@
             "format": "uuid"
           },
           "email": {
+            "type": "string"
+          },
+          "username": {
             "type": "string"
           },
           "firstName": {
@@ -19791,6 +19956,10 @@
           "createdAtUtc": {
             "type": "string",
             "format": "date-time"
+          },
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -19802,7 +19971,9 @@
           "firstName",
           "id",
           "lastName",
-          "status"
+          "rowVersion",
+          "status",
+          "username"
         ],
         "type": "object",
         "properties": {
@@ -19811,6 +19982,9 @@
             "format": "uuid"
           },
           "email": {
+            "type": "string"
+          },
+          "username": {
             "type": "string"
           },
           "firstName": {
@@ -19839,6 +20013,10 @@
           "createdAtUtc": {
             "type": "string",
             "format": "date-time"
+          },
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32"
           },
           "roleId": {
             "type": "string",
@@ -22681,20 +22859,33 @@
         },
         "additionalProperties": false
       },
+      "Web.Api.Controllers.Users.SetUserStatusController-RequestBody": {
+        "required": [
+          "expectedRowVersion",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/Domain.Users.UserStatus"
+          },
+          "expectedRowVersion": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "Web.Api.Controllers.Users.UpdateUserController-RequestBody": {
         "required": [
           "email",
+          "expectedRowVersion",
           "firstName",
-          "lastName",
-          "status",
-          "username"
+          "lastName"
         ],
         "type": "object",
         "properties": {
           "email": {
-            "type": "string"
-          },
-          "username": {
             "type": "string"
           },
           "firstName": {
@@ -22703,8 +22894,9 @@
           "lastName": {
             "type": "string"
           },
-          "status": {
-            "$ref": "#/components/schemas/Domain.Users.UserStatus"
+          "expectedRowVersion": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -22769,8 +22961,7 @@
             "format": "uuid"
           },
           "documentType": {
-            "type": "integer",
-            "format": "int32"
+            "$ref": "#/components/schemas/Domain.Common.DocumentType"
           }
         },
         "additionalProperties": false

@@ -43,7 +43,7 @@ public sealed class DraftCreationAtomicityTests : BaseIntegrationTest
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouse-documents", new
         {
             warehouseId,
-            documentType = (int)DocumentType.Receiving
+            documentType = "Receiving"
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.Created);

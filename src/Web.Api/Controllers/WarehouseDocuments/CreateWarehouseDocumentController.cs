@@ -14,7 +14,7 @@ namespace Web.Api.Controllers.WarehouseDocuments;
 public sealed class CreateWarehouseDocumentController(ICommandHandler<CreateWarehouseDocumentCommand, Guid> handler)
     : ControllerBase
 {
-    public sealed record RequestBody([property: JsonRequired] Guid WarehouseId, [property: JsonRequired] int DocumentType);
+    public sealed record RequestBody([property: JsonRequired] Guid WarehouseId, [property: JsonRequired] DocumentType DocumentType);
 
     [HttpPost]
     [HasPermission(PermissionCodes.WarehouseDocuments.Create)]
@@ -25,7 +25,7 @@ public sealed class CreateWarehouseDocumentController(ICommandHandler<CreateWare
     [ProducesResponseType<ApiErrorResponse>(StatusCodes.Status404NotFound)]
     public async Task<IResult> Handle(RequestBody request, CancellationToken cancellationToken)
     {
-        var command = new CreateWarehouseDocumentCommand(request.WarehouseId, (DocumentType)request.DocumentType);
+        var command = new CreateWarehouseDocumentCommand(request.WarehouseId, request.DocumentType);
 
         Result<Guid> result = await handler.Handle(command, cancellationToken);
 
