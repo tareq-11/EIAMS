@@ -66,7 +66,7 @@ public sealed class WarehouseCapabilityScopeEnforcementTests : BaseIntegrationTe
         Guid domainId = await SeedMaterialDomainAsync();
 
         // Assert the premise: an Enterprise assignment really does receive the code.
-        ReadSessionPermissionCodes().ShouldContain("warehouse.manage");
+        (await ReadSessionPermissionCodesAsync()).ShouldContain("warehouse.manage");
 
         // Act
         HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouse-capabilities", new
@@ -127,7 +127,7 @@ public sealed class WarehouseCapabilityScopeEnforcementTests : BaseIntegrationTe
             // warehouse.manage has no Warehouse row, so the grant is filtered out of the session
             // before any handler runs. This is why the frontend's has('warehouse.manage') is already
             // correct and needs no scope check of its own.
-            ReadSessionPermissionCodes().ShouldNotContain("warehouse.manage");
+            (await ReadSessionPermissionCodesAsync()).ShouldNotContain("warehouse.manage");
 
             // Act
             HttpResponseMessage response = await HttpClient.PostAsJsonAsync("warehouse-capabilities", new
@@ -243,11 +243,20 @@ public sealed class WarehouseCapabilityScopeEnforcementTests : BaseIntegrationTe
 
     private static readonly Guid AdministratorRoleId = new("00000000-0000-0000-0000-000000000001");
 
-    private string[] ReadSessionPermissionCodes()
+    /// <summary>
+    /// Reads the codes the SERVER actually served to this session.
+    /// </summary>
+    /// <remarks>
+    /// Asserting on the response rather than on the role fixture is the point of these tests. The
+    /// session is built by the same scope-filtered grant query that the handlers consult, so
+    /// "does the role carry the permission" and "does the client ever see the code" are different
+    /// questions, and only the second one decides whether a control is rendered.
+    /// </remarks>
+    private async Task<string[]> ReadSessionPermissionCodesAsync()
     {
-        using HttpResponseMessage response = HttpClient.GetAsync("auth/session").GetAwaiter().GetResult();
+        using HttpResponseMessage response = await HttpClient.GetAsync("auth/session");
         response.EnsureSuccessStatusCode();
-        using var document = JsonDocument.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return document.RootElement.GetProperty("data").GetProperty("permissionCodes")
             .EnumerateArray()
             .Select(value => value.GetString() ?? string.Empty)
