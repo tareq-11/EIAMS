@@ -20152,6 +20152,7 @@
           "materialDomainCode",
           "materialDomainId",
           "materialDomainName",
+          "operations",
           "status",
           "warehouseId"
         ],
@@ -20177,6 +20178,12 @@
           },
           "status": {
             "type": "string"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
