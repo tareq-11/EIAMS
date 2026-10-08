@@ -173,6 +173,131 @@ public sealed class WarehouseAndCapabilityApiTests : BaseIntegrationTest
     }
 
     [Fact]
+    public async Task ListCapabilities_Should_ReturnEachCapabilityWithItsGrantedOperations_InDeclarationOrder()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantEnterpriseAdministratorAsync(userId);
+        Authenticate(tokens.AccessToken);
+        Guid warehouseId = await CreateWarehouseAsync(await SeedWarehouseParentAsync());
+        Guid domainId = await SeedMaterialDomainAsync();
+
+        HttpResponseMessage grantResponse = await HttpClient.PostAsJsonAsync("warehouse-capabilities", new
+        {
+            warehouseId,
+            materialDomainId = domainId
+        });
+        Guid capabilityId = await ReadResourceIdAsync(grantResponse);
+
+        // Deliberately added out of declaration order. The projection promises the
+        // OperationType declaration order, so an alphabetical (string-column) sort or an
+        // unordered sequence group would fail here rather than pass by luck.
+        foreach (OperationType operation in new[] { OperationType.Transfer, OperationType.Receiving })
+        {
+            HttpResponseMessage operationResponse = await HttpClient.PostAsJsonAsync(
+                $"warehouse-capabilities/{capabilityId}/operations",
+                new { operationType = (int)operation });
+            operationResponse.StatusCode.ShouldBe(HttpStatusCode.Created);
+        }
+
+        // Act
+        HttpResponseMessage getResponse = await HttpClient.GetAsync(
+            $"warehouses/{warehouseId}/capabilities?page=1&pageSize=20");
+
+        // Assert
+        getResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using JsonDocument body = await ReadJsonAsync(getResponse);
+        JsonElement capability = body.RootElement.GetProperty("data")[0];
+        capability.GetProperty("id").GetGuid().ShouldBe(capabilityId);
+
+        // Assert the exact set AND the order. Asserting only Count or only containment
+        // would still pass against the pre-change behaviour if the array were empty and
+        // the assertion were weak; enumerating the values is what makes this non-vacuous.
+        capability.GetProperty("operations")
+            .EnumerateArray()
+            .Select(value => value.GetString())
+            .ShouldBe(["Receiving", "Transfer"]);
+    }
+
+    [Fact]
+    public async Task ListCapabilities_Should_ReturnEmptyOperations_AndNotNull_WhenCapabilityHasNoOperations()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantEnterpriseAdministratorAsync(userId);
+        Authenticate(tokens.AccessToken);
+        Guid warehouseId = await CreateWarehouseAsync(await SeedWarehouseParentAsync());
+        Guid domainId = await SeedMaterialDomainAsync();
+
+        await HttpClient.PostAsJsonAsync("warehouse-capabilities", new
+        {
+            warehouseId,
+            materialDomainId = domainId
+        });
+
+        // Act
+        HttpResponseMessage getResponse = await HttpClient.GetAsync(
+            $"warehouses/{warehouseId}/capabilities?page=1&pageSize=20");
+
+        // Assert
+        getResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using JsonDocument body = await ReadJsonAsync(getResponse);
+        JsonElement operations = body.RootElement.GetProperty("data")[0].GetProperty("operations");
+
+        // A capability with no operation rows must serialise as [] rather than null, because
+        // clients bind this array directly. JsonValueKind distinguishes the two and a
+        // .GetArrayLength() on null would throw rather than assert.
+        operations.ValueKind.ShouldBe(JsonValueKind.Array);
+        operations.GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ListCapabilities_Should_AttachOperationsForEveryPageAndKeepPageSizeIndependentOfOperationCount()
+    {
+        // Arrange
+        (Guid userId, AccessTokens tokens) = await RegisterAndLoginAsync();
+        await GrantEnterpriseAdministratorAsync(userId);
+        Authenticate(tokens.AccessToken);
+        Guid warehouseId = await CreateWarehouseAsync(await SeedWarehouseParentAsync());
+        Guid domainId = await SeedMaterialDomainAsync();
+
+        HttpResponseMessage grantResponse = await HttpClient.PostAsJsonAsync("warehouse-capabilities", new
+        {
+            warehouseId,
+            materialDomainId = domainId
+        });
+        Guid capabilityId = await ReadResourceIdAsync(grantResponse);
+
+        foreach (OperationType operation in Enum.GetValues<OperationType>())
+        {
+            await HttpClient.PostAsJsonAsync(
+                $"warehouse-capabilities/{capabilityId}/operations",
+                new { operationType = (int)operation });
+        }
+
+        // Act - one row on the page, carrying every operation
+        HttpResponseMessage getResponse = await HttpClient.GetAsync(
+            $"warehouses/{warehouseId}/capabilities?page=1&pageSize=20");
+
+        // Assert
+        getResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using JsonDocument body = await ReadJsonAsync(getResponse);
+
+        // The capability count is 1 even though the operation child table has 6 rows for it.
+        // If the projection joined operations into the paged query instead of running a
+        // second phase, this would read 6 and pagination would repeat and skip capabilities.
+        body.RootElement.GetProperty("data").GetArrayLength().ShouldBe(1);
+        body.RootElement.GetProperty("pagination").GetProperty("total_count").GetInt32().ShouldBe(1);
+
+        // Every OperationType, in declaration order - Adjustment included, since it is a
+        // real granted value and a projection that filtered or alphabetised would drop it.
+        body.RootElement.GetProperty("data")[0].GetProperty("operations")
+            .EnumerateArray()
+            .Select(value => value.GetString())
+            .ShouldBe(["Receiving", "Issue", "Transfer", "Count", "Return", "Adjustment"]);
+    }
+
+    [Fact]
     public async Task GrantCapability_Should_ReturnConflict_WhenCapabilityAlreadyExists()
     {
         // Arrange
