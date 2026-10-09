@@ -255,6 +255,94 @@ public sealed class UserAssignmentLifecycleIntegrationTests : BaseIntegrationTes
         (await HttpClient.DeleteAsync($"admin/user-role-scopes/{Guid.NewGuid()}")).IsSuccessStatusCode.ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task ForbiddenScope_Should_ReturnForbidden_And_Not_A_Result()
+    {
+        // The negative half of scope enforcement on the assignment surface.
+        //
+        // WHY AN AUDITOR, given every structural `*.manage` permission is seeded
+        // Enterprise-only and the escalation branch is therefore unreachable: an
+        // Auditor is allowed at Enterprise scope (RoleAllowedScopeType) and holds
+        // ONLY `*.view` permissions — no `roles.manage`, no `users.manage`. So it
+        // has a perfectly valid D-SRS-01 singular assignment at the widest scope
+        // and still must not read or rewrite anyone's role.
+        //
+        // This is the case the frontend actually depends on. The session carries a
+        // singular role and permissionCodes, and the admin pages gate on them; if
+        // a non-administrator could read or write an assignment the UI would have
+        // to hide those controls by a rule the server does not enforce.
+        //
+        // `ScopeEnforcementTests` already pins the POSITIVE half of this pair — a
+        // user holding `admin.role.view` at Enterprise gets 200. Only the refusal
+        // was missing, which is the half a regression would break.
+        await AuthenticateAsAdministratorAsync();
+        string email = UniqueEmail();
+        string username = UsernameFor(email);
+
+        HttpResponseMessage created = await HttpClient.PostAsJsonAsync("admin/users", new
+        {
+            email,
+            username,
+            firstName = "Scope",
+            lastName = "Denied",
+            password = "Password123!",
+            roleId = WellKnownRoles.AuditorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null
+        });
+        created.StatusCode.ShouldBe(HttpStatusCode.Created);
+        ApiEnvelope<CreateUserData>? createdBody = await created.Content.ReadFromJsonAsync<ApiEnvelope<CreateUserData>>();
+        Guid auditorId = createdBody!.Data.Id;
+
+        AccessTokens auditorTokens = await LoginAsync(username);
+        Authenticate(auditorTokens.AccessToken);
+
+        HttpResponseMessage read = await HttpClient.GetAsync($"admin/users/{auditorId}/role-scope");
+        HttpResponseMessage write = await HttpClient.PutAsJsonAsync($"admin/users/{auditorId}/role-scope", new
+        {
+            roleId = WellKnownRoles.AdministratorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null,
+            expectedRowVersion = 1
+        });
+        HttpResponseMessage createUser = await HttpClient.PostAsJsonAsync("admin/users", new
+        {
+            email = UniqueEmail(),
+            username = UsernameFor(UniqueEmail()),
+            firstName = "Scope",
+            lastName = "Escalation",
+            password = "Password123!",
+            roleId = WellKnownRoles.AdministratorId,
+            scopeType = "Enterprise",
+            scopeId = (Guid?)null
+        });
+
+        (HttpResponseMessage Response, string Url)[] attempts =
+        [
+            (read, $"GET admin/users/{auditorId}/role-scope"),
+            (write, $"PUT admin/users/{auditorId}/role-scope"),
+            (createUser, "POST admin/users")
+        ];
+
+        foreach ((HttpResponseMessage response, string url) in attempts)
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.Forbidden, $"forbidden-scope refusal was expected for {url}");
+            ErrorEnvelope? error = await response.Content.ReadFromJsonAsync<ErrorEnvelope>();
+            // Generic by design: the `[HasPermission]` policy rejects before any
+            // handler runs, so a capability-specific code would be unreachable and
+            // asserting one would encode fiction.
+            error!.Error.Code.ShouldBe("AUTHORIZATION_FORBIDDEN", $"for {url}");
+        }
+
+        // The refusal must not have mutated anything.
+        await using AsyncServiceScope verifyScope = factory.Services.CreateAsyncScope();
+        ApplicationDbContext verify = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        (await verify.UserRoleScopes.CountAsync(assignment => assignment.UserId == auditorId))
+            .ShouldBe(1);
+        (await verify.UserRoleScopes.SingleAsync(assignment => assignment.UserId == auditorId))
+            .RoleId.ShouldBe(WellKnownRoles.AuditorId);
+    }
+
     private async Task<HttpResponseMessage> ReplaceAsync(Guid userId, Guid roleId) =>
         await HttpClient.PutAsJsonAsync($"admin/users/{userId}/role-scope", new
         {
